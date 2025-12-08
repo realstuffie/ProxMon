@@ -62,7 +62,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 ### From Source
 
     # Clone the repository
-    git clone https://github.com/YOUR_USERNAME/plasma-proxmox-monitor.git
+    git clone https://github.com/realstuffie/plasma-proxmox-monitor.git
     cd plasma-proxmox-monitor
 
     # Install the plasmoid
