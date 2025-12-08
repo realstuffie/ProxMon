@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+  <!-- Top face (transparent) -->
+  <polygon fill="rgba(255,255,255,0.2)" points="12,3 21,7.5 12,12 3,7.5"/>
+  
+  <!-- Left face (solid white) -->
+  <polygon fill="#FFFFFF" points="3,7.5 12,12 12,21 3,16.5"/>
+  
+  <!-- Right face (transparent) -->
+  <polygon fill="rgba(255,255,255,0.2)" points="21,7.5 21,16.5 12,21 12,12"/>
+  
+  <!-- Thick white edges -->
+  <polyline 
+    fill="none" 
+    stroke="#FFFFFF" 
+    stroke-width="2" 
+    stroke-linejoin="round"
+    stroke-linecap="round"
+    points="3,16.5 3,7.5 12,3 21,7.5 21,16.5 12,21 3,16.5"
+  />
+  <line stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" x1="12" y1="12" x2="12" y2="21"/>
+  <line stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" x1="3" y1="7.5" x2="12" y2="12"/>
+  <line stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" x1="21" y1="7.5" x2="12" y2="12"/>
+</svg>

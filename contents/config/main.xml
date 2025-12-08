@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0">
+    <kcfgfile name="plasma-org.kde.plasma.proxmox"/>
+    <group name="General">
+        <entry name="proxmoxHost" type="String">
+            <default></default>
+        </entry>
+        <entry name="proxmoxPort" type="Int">
+            <default>8006</default>
+        </entry>
+        <entry name="apiTokenId" type="String">
+            <default></default>
+        </entry>
+        <entry name="apiTokenSecret" type="String">
+            <default></default>
+        </entry>
+        <entry name="refreshInterval" type="Int">
+            <default>30</default>
+        </entry>
+        <entry name="ignoreSsl" type="Bool">
+            <default>true</default>
+        </entry>
+    </group>
+</kcfg>
