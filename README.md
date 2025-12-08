@@ -26,6 +26,31 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - 🎨 Dark theme support
 - 🔒 SSL support (with option to skip verification)
 
+### Screenshots
+
+<p align="center">
+  <img src="screenshots/widget-expanded.png" alt="Expanded View" width="400">
+  <br>
+  <em>Expanded view showing nodes, VMs, and containers</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/widget-panel.png" alt="Panel View" width="200">
+  <br>
+  <em>Compact panel view showing CPU usage</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/settings.png" alt="Settings" width="400">
+  <br>
+  <em>Configuration dialog</em>
+</p>
+
+
+
+
+
+
 ## Requirements
 
 - KDE Plasma 6
