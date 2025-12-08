@@ -35,7 +35,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 </p>
 
 <p align="center">
-  <img src="screenshots/widget-panel.png" alt="Panel View" width="200">
+  <img src="screenshots/widget-pannel.png" alt="Panel View" width="200">
   <br>
   <em>Compact panel view showing CPU usage</em>
 </p>
