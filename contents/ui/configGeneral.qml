@@ -17,6 +17,13 @@ Item {
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
 
+    // Required properties for Plasma
+    property bool cfg_expanding: false
+    property int cfg_length: 0
+    property bool cfg_expandingDefault: false
+    property int cfg_lengthDefault: 0
+
+    // Sorting properties (shared with configBehavior.qml)
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
 
@@ -26,8 +33,8 @@ Item {
     property string cfg_apiTokenSecretDefault: ""
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
-    property string title: "Connection"
 
+    // REMOVED: property string title: "Connection" - This is a FINAL property
 
     Plasma5Support.DataSource {
         id: saveExec
