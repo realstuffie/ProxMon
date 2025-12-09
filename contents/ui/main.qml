@@ -14,6 +14,7 @@ PlasmoidItem {
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
+    property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
 
     property var proxmoxData: null
     property var vmData: []
@@ -24,8 +25,8 @@ PlasmoidItem {
     property bool configured: proxmoxHost !== "" && apiTokenSecret !== ""
     property bool defaultsLoaded: false
     property string currentNode: ""
+    
 
-    // Hidden developer mode - triple-click footer to toggle
     property bool devMode: false
     property int footerClickCount: 0
     property var footerClickTimer: null
