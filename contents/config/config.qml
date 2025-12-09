@@ -7,4 +7,9 @@ ConfigModel {
         icon: "network-server"
         source: "../ui/configGeneral.qml"
     }
+ConfigCategory {
+        name: "Behavior"
+        icon: "configure"
+        source: "../ui/configBehavior.qml"
+    }
 }
