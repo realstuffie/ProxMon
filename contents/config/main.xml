@@ -20,5 +20,8 @@
         <entry name="ignoreSsl" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="defaultSorting" type="String">
+            <default>status</default>
+        </entry>
     </group>
 </kcfg>
