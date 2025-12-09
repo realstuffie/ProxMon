@@ -25,7 +25,8 @@ PlasmoidItem {
     property bool configured: proxmoxHost !== "" && apiTokenSecret !== ""
     property bool defaultsLoaded: false
     property string currentNode: ""
-    
+    property var sortedVmData: sortByStatus(vmData)
+    property var sortedLxcData: sortByStatus(lxcData)
 
     property bool devMode: false
     property int footerClickCount: 0
@@ -78,6 +79,7 @@ PlasmoidItem {
         return 100 + index
     }
 
+
     function handleFooterClick() {
         footerClickCount++
         if (footerClickCount >= 3) {
@@ -90,6 +92,40 @@ PlasmoidItem {
         footerClickTimer = Qt.createQmlObject('import QtQuick; Timer { interval: 1000; onTriggered: footerClickCount = 0 }', root)
         footerClickTimer.start()
     }
+
+    function sortByStatus(data) {
+    if (!data || data.length === 0) return []
+    
+    return data.slice().sort(function(a, b) {
+        switch (defaultSorting) {
+            case "status":
+                var aRunning = (a.status === "running") ? 0 : 1;
+                var bRunning = (b.status === "running") ? 0 : 1;
+                if (aRunning !== bRunning) {
+                    return aRunning - bRunning;
+                }
+                return a.name.localeCompare(b.name);
+            
+            case "name":
+                return a.name.localeCompare(b.name);
+            
+            case "nameDesc":
+                return b.name.localeCompare(a.name);
+            
+            case "id":
+                return a.vmid - b.vmid;
+            
+            case "idDesc":
+                return b.vmid - a.vmid;
+            
+            default:
+                var aRun = (a.status === "running") ? 0 : 1;
+                var bRun = (b.status === "running") ? 0 : 1;
+                if (aRun !== bRun) return aRun - bRun;
+                return a.name.localeCompare(b.name);
+        }
+    });
+}
 
     Component.onCompleted: {
         if (!configured) {
@@ -431,7 +467,7 @@ PlasmoidItem {
                 }
 
                 Repeater {
-                    model: vmData
+                    model: sortedVmData
 
                     delegate: Rectangle {
                         Layout.fillWidth: true
