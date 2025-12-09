@@ -17,6 +17,9 @@ Item {
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
 
+    property string cfg_defaultSorting: "status"
+    property string cfg_defaultSortingDefault: "status"
+
     property string cfg_proxmoxHostDefault: ""
     property int cfg_proxmoxPortDefault: 8006
     property string cfg_apiTokenIdDefault: ""
@@ -24,6 +27,7 @@ Item {
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
     property string title: "Connection"
+
 
     Plasma5Support.DataSource {
         id: saveExec
