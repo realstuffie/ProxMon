@@ -62,16 +62,16 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### From Source
 
-    # Clone the repository
-    git clone https://github.com/realstuffie/plasma-proxmox-monitor.git
-    cd plasma-proxmox-monitor
+# Clone the repository
+git clone https://github.com/realstuffie/ProxMon.git
+cd ProxMon
 
-    # Install the plasmoid
-    kpackagetool6 -t Plasma/Applet -i .
+# Install the plasmoid
+kpackagetool6 -t Plasma/Applet -i .
 
-    # Install icons
-    mkdir -p ~/.local/share/icons/hicolor/scalable/apps/
-    cp icons/*.svg ~/.local/share/icons/hicolor/scalable/apps/
+# Install icons
+mkdir -p ~/.local/share/icons/hicolor/scalable/apps/
+cp icons/*.svg ~/.local/share/icons/hicolor/scalable/apps/
 
 ### Manual Installation
 
