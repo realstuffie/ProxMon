@@ -9,6 +9,7 @@ Item {
     
     width: parent?.width ?? 400
     height: parent?.height ?? 400
+    property string title: "Connection"
 
     property alias cfg_proxmoxHost: hostField.text
     property alias cfg_proxmoxPort: portField.value
