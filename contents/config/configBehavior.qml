@@ -41,19 +41,20 @@ Item {
             QQC2.ComboBox {
                 id: sortingCombo
                 Layout.fillWidth: true
-                model: [
-                    { text: "Status (Running first)", value: "status" },
-                    { text: "Name (A-Z)", value: "name" },
-                    { text: "Name (Z-A)", value: "nameDesc" },
-                    { text: "ID (Ascending)", value: "id" },
-                    { text: "ID (Descending)", value: "idDesc" }
-                ]
+                
+                model: ListModel {
+                    id: sortingModel
+                    ListElement { text: "Status (Running first)"; value: "status" }
+                    ListElement { text: "Name (A-Z)"; value: "name" }
+                    ListElement { text: "Name (Z-A)"; value: "nameDesc" }
+                    ListElement { text: "ID (Ascending)"; value: "id" }
+                    ListElement { text: "ID (Descending)"; value: "idDesc" }
+                }
                 textRole: "text"
-                valueRole: "value"
                 
                 Component.onCompleted: {
-                    for (var i = 0; i < model.length; i++) {
-                        if (model[i].value === cfg_defaultSorting) {
+                    for (var i = 0; i < sortingModel.count; i++) {
+                        if (sortingModel.get(i).value === cfg_defaultSorting) {
                             currentIndex = i
                             break
                         }
@@ -62,7 +63,7 @@ Item {
                 
                 onCurrentIndexChanged: {
                     if (currentIndex >= 0) {
-                        cfg_defaultSorting = model[currentIndex].value
+                        cfg_defaultSorting = sortingModel.get(currentIndex).value
                     }
                 }
             }
