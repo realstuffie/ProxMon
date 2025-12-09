@@ -8,7 +8,7 @@ Item {
     
     width: parent?.width ?? 400
     height: parent?.height ?? 400
-
+    property string title: "Behavior"
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
     
