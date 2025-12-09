@@ -8,6 +8,7 @@ Item {
     
     width: parent?.width ?? 400
     height: parent?.height ?? 400
+    
     property string title: "Behavior"
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
@@ -17,6 +18,10 @@ Item {
     property int cfg_length: 0
     property bool cfg_expandingDefault: false
     property int cfg_lengthDefault: 0
+
+    Component.onCompleted: {
+        console.log("configBehavior.qml loaded!")
+    }
 
     ColumnLayout {
         anchors.fill: parent
