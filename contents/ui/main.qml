@@ -23,12 +23,17 @@ PlasmoidItem {
     property string lastUpdate: ""
     property bool configured: proxmoxHost !== "" && apiTokenSecret !== ""
     property bool defaultsLoaded: false
-    property string currentNode: ""
     property var sortedVmData: sortByStatus(vmData)
     property var sortedLxcData: sortByStatus(lxcData)
     property bool devMode: false
     property int footerClickCount: 0
     property var footerClickTimer: null
+
+    // Multi-node support
+    property var nodeList: []
+    property var pendingNodeRequests: 0
+    property var tempVmData: []
+    property var tempLxcData: []
 
     // Anonymization data
     readonly property var anonNodeNames: ["server-01", "server-02", "server-03", "pve-node", "cluster-main"]
@@ -83,7 +88,6 @@ PlasmoidItem {
             footerClickCount = 0
             console.log("Developer mode: " + (devMode ? "ENABLED" : "DISABLED"))
         }
-        // Reset counter after 1 second
         if (footerClickTimer) footerClickTimer.destroy()
         footerClickTimer = Qt.createQmlObject('import QtQuick; Timer { interval: 1000; onTriggered: footerClickCount = 0 }', root)
         footerClickTimer.start()
@@ -115,6 +119,22 @@ PlasmoidItem {
                     return a.name.localeCompare(b.name);
             }
         });
+    }
+
+    // Get node name from API URL
+    function getNodeFromSource(source) {
+        var match = source.match(/\/nodes\/([^\/]+)\//)
+        return match ? match[1] : ""
+    }
+
+    // Check if all node requests are complete
+    function checkRequestsComplete() {
+        if (pendingNodeRequests <= 0) {
+            vmData = tempVmData.slice()
+            lxcData = tempLxcData.slice()
+            tempVmData = []
+            tempLxcData = []
+        }
     }
 
     Component.onCompleted: {
@@ -159,6 +179,7 @@ PlasmoidItem {
         onNewData: function(source, data) {
             var stdout = data["stdout"]
             var exitCode = data["exit code"]
+
             if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
                 loading = false
                 if (exitCode === 0 && stdout) {
@@ -166,10 +187,23 @@ PlasmoidItem {
                         proxmoxData = JSON.parse(stdout)
                         errorMessage = ""
                         lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
+
                         if (proxmoxData.data && proxmoxData.data.length > 0) {
-                            currentNode = proxmoxData.data[0].node
-                            fetchVMs()
-                            fetchLXC()
+                            // Store node list and fetch VMs/LXCs from all nodes
+                            nodeList = proxmoxData.data.map(function(node) {
+                                return node.node
+                            })
+
+                            // Reset temp data
+                            tempVmData = []
+                            tempLxcData = []
+                            pendingNodeRequests = nodeList.length * 2 // VMs + LXCs for each node
+
+                            // Fetch from all nodes
+                            for (var i = 0; i < nodeList.length; i++) {
+                                fetchVMs(nodeList[i])
+                                fetchLXC(nodeList[i])
+                            }
                         }
                     } catch (e) {
                         errorMessage = "Parse error"
@@ -178,23 +212,41 @@ PlasmoidItem {
                     errorMessage = data["stderr"] || "Connection failed"
                 }
             } else if (source.indexOf("/qemu") !== -1) {
+                var nodeName = getNodeFromSource(source)
                 if (exitCode === 0 && stdout) {
                     try {
                         var result = JSON.parse(stdout)
-                        vmData = result.data || []
+                        if (result.data) {
+                            // Add node name to each VM
+                            for (var i = 0; i < result.data.length; i++) {
+                                result.data[i].node = nodeName
+                                tempVmData.push(result.data[i])
+                            }
+                        }
                     } catch (e) {
-                        console.log("VM parse error")
+                        console.log("VM parse error for node: " + nodeName)
                     }
                 }
+                pendingNodeRequests--
+                checkRequestsComplete()
             } else if (source.indexOf("/lxc") !== -1) {
+                var nodeName = getNodeFromSource(source)
                 if (exitCode === 0 && stdout) {
                     try {
                         var result = JSON.parse(stdout)
-                        lxcData = result.data || []
+                        if (result.data) {
+                            // Add node name to each LXC
+                            for (var i = 0; i < result.data.length; i++) {
+                                result.data[i].node = nodeName
+                                tempLxcData.push(result.data[i])
+                            }
+                        }
                     } catch (e) {
-                        console.log("LXC parse error")
+                        console.log("LXC parse error for node: " + nodeName)
                     }
                 }
+                pendingNodeRequests--
+                checkRequestsComplete()
             }
             disconnectSource(source)
         }
@@ -213,14 +265,14 @@ PlasmoidItem {
         executable.connectSource(curlCmd("/nodes"))
     }
 
-    function fetchVMs() {
-        if (!currentNode) return
-        executable.connectSource(curlCmd("/nodes/" + currentNode + "/qemu"))
+    function fetchVMs(nodeName) {
+        if (!nodeName) return
+        executable.connectSource(curlCmd("/nodes/" + nodeName + "/qemu"))
     }
 
-    function fetchLXC() {
-        if (!currentNode) return
-        executable.connectSource(curlCmd("/nodes/" + currentNode + "/lxc"))
+    function fetchLXC(nodeName) {
+        if (!nodeName) return
+        executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc"))
     }
 
     property int runningVMs: {
@@ -260,7 +312,12 @@ PlasmoidItem {
                     if (loading) return "..."
                     if (errorMessage) return "!"
                     if (proxmoxData && proxmoxData.data && proxmoxData.data[0]) {
-                        return Math.round(proxmoxData.data[0].cpu * 100) + "%"
+                        // Show average CPU across all nodes
+                        var totalCpu = 0
+                        for (var i = 0; i < proxmoxData.data.length; i++) {
+                            totalCpu += proxmoxData.data[i].cpu
+                        }
+                        return Math.round((totalCpu / proxmoxData.data.length) * 100) + "%"
                     }
                     return "-"
                 }
@@ -297,7 +354,6 @@ PlasmoidItem {
                 Layout.fillWidth: true
             }
 
-            // Dev mode indicator
             PlasmaComponents.Label {
                 text: "🔧"
                 visible: devMode
@@ -370,225 +426,236 @@ PlasmoidItem {
             QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
             QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
 
-            Flickable {
-                contentWidth: availableWidth
-                contentHeight: mainContentColumn.implicitHeight
+            ColumnLayout {
+                id: mainContentColumn
+                width: scrollView.availableWidth
+                spacing: 6
 
-                ColumnLayout {
-                    id: mainContentColumn
-                    width: parent.width
-                    spacing: 6
+                // Node Info
+                Repeater {
+                    model: proxmoxData && proxmoxData.data ? proxmoxData.data : []
 
-                    // Node Info
-                    Repeater {
-                        model: proxmoxData && proxmoxData.data ? proxmoxData.data : []
+                    delegate: Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 82
+                        radius: 6
+                        color: Kirigami.Theme.backgroundColor
+                        border.color: Kirigami.Theme.disabledTextColor
+                        border.width: 1
 
-                        delegate: Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 82
-                            radius: 6
-                            color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.Theme.disabledTextColor
-                            border.width: 1
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 6
 
-                            ColumnLayout {
-                                anchors.fill: parent
-                                anchors.margins: 10
-                                spacing: 6
+                            RowLayout {
+                                spacing: 8
 
-                                RowLayout {
-                                    spacing: 8
-
-                                    Kirigami.Icon {
-                                        source: "computer"
-                                        implicitWidth: 18
-                                        implicitHeight: 18
-                                    }
-
-                                    PlasmaComponents.Label {
-                                        text: anonymizeNodeName(modelData.node, index)
-                                        font.bold: true
-                                    }
-
-                                    Rectangle {
-                                        width: 52
-                                        height: 16
-                                        radius: 8
-                                        color: modelData.status === "online" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
-
-                                        PlasmaComponents.Label {
-                                            anchors.centerIn: parent
-                                            text: modelData.status
-                                            color: "white"
-                                            font.pixelSize: 9
-                                        }
-                                    }
-                                }
-
-                                RowLayout {
-                                    spacing: 12
-
-                                    PlasmaComponents.Label {
-                                        text: "CPU: " + (modelData.cpu * 100).toFixed(1) + "%"
-                                        font.pixelSize: 12
-                                    }
-
-                                    PlasmaComponents.Label {
-                                        text: "Mem: " + (modelData.mem / 1073741824).toFixed(1) + "/" + (modelData.maxmem / 1073741824).toFixed(1) + "G"
-                                        font.pixelSize: 12
-                                    }
+                                Kirigami.Icon {
+                                    source: "computer"
+                                    implicitWidth: 18
+                                    implicitHeight: 18
                                 }
 
                                 PlasmaComponents.Label {
-                                    text: "Uptime: " + Math.floor(modelData.uptime / 86400) + "d " + Math.floor((modelData.uptime % 86400) / 3600) + "h"
-                                    font.pixelSize: 11
+                                    text: anonymizeNodeName(modelData.node, index)
+                                    font.bold: true
+                                }
+
+                                Rectangle {
+                                    width: 52
+                                    height: 16
+                                    radius: 8
+                                    color: modelData.status === "online" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+
+                                    PlasmaComponents.Label {
+                                        anchors.centerIn: parent
+                                        text: modelData.status
+                                        color: "white"
+                                        font.pixelSize: 9
+                                    }
+                                }
+                            }
+
+                            RowLayout {
+                                spacing: 12
+
+                                PlasmaComponents.Label {
+                                    text: "CPU: " + (modelData.cpu * 100).toFixed(1) + "%"
+                                    font.pixelSize: 12
+                                }
+
+                                PlasmaComponents.Label {
+                                    text: "Mem: " + (modelData.mem / 1073741824).toFixed(1) + "/" + (modelData.maxmem / 1073741824).toFixed(1) + "G"
+                                    font.pixelSize: 12
+                                }
+                            }
+
+                            PlasmaComponents.Label {
+                                text: "Uptime: " + Math.floor(modelData.uptime / 86400) + "d " + Math.floor((modelData.uptime % 86400) / 3600) + "h"
+                                font.pixelSize: 11
+                                opacity: 0.7
+                            }
+                        }
+                    }
+                }
+
+                // VMs Section
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: vmData.length > 0
+                    spacing: 4
+
+                    RowLayout {
+                        Layout.preferredHeight: 24
+                        spacing: 6
+
+                        Kirigami.Icon {
+                            source: "computer-symbolic"
+                            implicitWidth: 16
+                            implicitHeight: 16
+                        }
+
+                        PlasmaComponents.Label {
+                            text: "Virtual Machines (" + runningVMs + "/" + vmData.length + ")"
+                            font.bold: true
+                            font.pixelSize: 12
+                        }
+                    }
+
+                    Repeater {
+                        model: sortedVmData
+
+                        delegate: Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            radius: 4
+                            color: modelData.status === "running" ? Qt.rgba(0, 0.5, 0, 0.15) : Qt.rgba(0.5, 0.5, 0.5, 0.1)
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 8
+
+                                Rectangle {
+                                    width: 8
+                                    height: 8
+                                    radius: 4
+                                    color: modelData.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                                }
+
+                                PlasmaComponents.Label {
+                                    text: anonymizeVmId(modelData.vmid, index) + ": " + anonymizeVmName(modelData.name, index)
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    font.pixelSize: 12
+                                }
+
+                                // Node indicator
+                                PlasmaComponents.Label {
+                                    text: "[" + (devMode ? anonymizeNodeName(modelData.node, nodeList.indexOf(modelData.node)) : modelData.node) + "]"
+                                    font.pixelSize: 9
+                                    opacity: 0.5
+                                    visible: nodeList.length > 1
+                                }
+
+                                PlasmaComponents.Label {
+                                    text: modelData.status === "running" ?
+                                          (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
+                                          modelData.status
+                                    font.pixelSize: 10
                                     opacity: 0.7
                                 }
                             }
                         }
                     }
+                }
 
-                    // VMs Section
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        visible: vmData.length > 0
-                        spacing: 4
+                // LXC Section
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    visible: lxcData.length > 0
+                    spacing: 4
 
-                        RowLayout {
-                            Layout.preferredHeight: 24
-                            spacing: 6
+                    RowLayout {
+                        Layout.preferredHeight: 24
+                        spacing: 6
 
-                            Kirigami.Icon {
-                                source: "computer-symbolic"
-                                implicitWidth: 16
-                                implicitHeight: 16
-                            }
-
-                            PlasmaComponents.Label {
-                                text: "Virtual Machines (" + runningVMs + "/" + vmData.length + ")"
-                                font.bold: true
-                                font.pixelSize: 12
-                            }
+                        Kirigami.Icon {
+                            source: "lxc"
+                            implicitWidth: 16
+                            implicitHeight: 16
                         }
 
-                        Repeater {
-                            model: sortedVmData
+                        PlasmaComponents.Label {
+                            text: "Containers (" + runningLXC + "/" + lxcData.length + ")"
+                            font.bold: true
+                            font.pixelSize: 12
+                        }
+                    }
 
-                            delegate: Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 30
-                                radius: 4
-                                color: modelData.status === "running" ? Qt.rgba(0, 0.5, 0, 0.15) : Qt.rgba(0.5, 0.5, 0.5, 0.1)
+                    Repeater {
+                        model: sortedLxcData
 
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    spacing: 8
+                        delegate: Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            radius: 4
+                            color: modelData.status === "running" ? Qt.rgba(0, 0.3, 0.6, 0.15) : Qt.rgba(0.5, 0.5, 0.5, 0.1)
 
-                                    Rectangle {
-                                        width: 8
-                                        height: 8
-                                        radius: 4
-                                        color: modelData.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
-                                    }
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 8
 
-                                    PlasmaComponents.Label {
-                                        text: anonymizeVmId(modelData.vmid, index) + ": " + anonymizeVmName(modelData.name, index)
-                                        Layout.fillWidth: true
-                                        elide: Text.ElideRight
-                                        font.pixelSize: 12
-                                    }
+                                Rectangle {
+                                    width: 8
+                                    height: 8
+                                    radius: 4
+                                    color: modelData.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                                }
 
-                                    PlasmaComponents.Label {
-                                        text: modelData.status === "running" ?
-                                              (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
-                                              modelData.status
-                                        font.pixelSize: 10
-                                        opacity: 0.7
-                                    }
+                                PlasmaComponents.Label {
+                                    text: anonymizeVmId(modelData.vmid, index) + ": " + anonymizeLxcName(modelData.name, index)
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                    font.pixelSize: 12
+                                }
+
+                                // Node indicator
+                                PlasmaComponents.Label {
+                                    text: "[" + (devMode ? anonymizeNodeName(modelData.node, nodeList.indexOf(modelData.node)) : modelData.node) + "]"
+                                    font.pixelSize: 9
+                                    opacity: 0.5
+                                    visible: nodeList.length > 1
+                                }
+
+                                PlasmaComponents.Label {
+                                    text: modelData.status === "running" ?
+                                          (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
+                                          modelData.status
+                                    font.pixelSize: 10
+                                    opacity: 0.7
                                 }
                             }
                         }
                     }
+                }
 
-                    // LXC Section
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        visible: lxcData.length > 0
-                        spacing: 4
+                // No VMs/LXC
+                PlasmaComponents.Label {
+                    text: "No VMs or Containers found"
+                    visible: vmData.length === 0 && lxcData.length === 0 && proxmoxData !== null
+                    opacity: 0.6
+                    Layout.alignment: Qt.AlignHCenter
+                }
 
-                        RowLayout {
-                            Layout.preferredHeight: 24
-                            spacing: 6
-
-                            Kirigami.Icon {
-                                source: "lxc"
-                                implicitWidth: 16
-                                implicitHeight: 16
-                            }
-
-                            PlasmaComponents.Label {
-                                text: "Containers (" + runningLXC + "/" + lxcData.length + ")"
-                                font.bold: true
-                                font.pixelSize: 12
-                            }
-                        }
-
-                        Repeater {
-                            model: sortedLxcData
-
-                            delegate: Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 30
-                                radius: 4
-                                color: modelData.status === "running" ? Qt.rgba(0, 0.3, 0.6, 0.15) : Qt.rgba(0.5, 0.5, 0.5, 0.1)
-
-                                RowLayout {
-                                    anchors.fill: parent
-                                    anchors.leftMargin: 8
-                                    anchors.rightMargin: 8
-                                    spacing: 8
-
-                                    Rectangle {
-                                        width: 8
-                                        height: 8
-                                        radius: 4
-                                        color: modelData.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
-                                    }
-
-                                    PlasmaComponents.Label {
-                                        text: anonymizeVmId(modelData.vmid, index) + ": " + anonymizeLxcName(modelData.name, index)
-                                        Layout.fillWidth: true
-                                        elide: Text.ElideRight
-                                        font.pixelSize: 12
-                                    }
-
-                                    PlasmaComponents.Label {
-                                        text: modelData.status === "running" ?
-                                              (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
-                                              modelData.status
-                                        font.pixelSize: 10
-                                        opacity: 0.7
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // No VMs/LXC
-                    PlasmaComponents.Label {
-                        text: "No VMs or Containers found"
-                        visible: vmData.length === 0 && lxcData.length === 0 && proxmoxData !== null
-                        opacity: 0.6
-                        Layout.alignment: Qt.AlignHCenter
-                    }
-
-                    // Bottom spacer for scroll padding
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 4
-                    }
+                // Bottom spacer
+                Item {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 4
                 }
             }
         }
@@ -611,6 +678,22 @@ PlasmoidItem {
                 RowLayout {
                     anchors.fill: parent
                     spacing: 4
+
+                    // Node count indicator
+                    Kirigami.Icon {
+                        source: "server-database"
+                        implicitWidth: 12
+                        implicitHeight: 12
+                        opacity: 0.6
+                    }
+
+                    PlasmaComponents.Label {
+                        text: nodeList.length + (nodeList.length === 1 ? " node" : " nodes")
+                        font.pixelSize: 10
+                        opacity: 0.6
+                    }
+
+                    Item { width: 8 }
 
                     Kirigami.Icon {
                         source: "computer-symbolic"
