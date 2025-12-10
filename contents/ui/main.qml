@@ -164,27 +164,27 @@ PlasmoidItem {
         return data.slice().sort(function(a, b) {
             switch (defaultSorting) {
                 case "status":
-                    var aRunning = (a.status === "running") ? 0 : 1;
-                    var bRunning = (b.status === "running") ? 0 : 1;
+                    var aRunning = (a.status === "running") ? 0 : 1
+                    var bRunning = (b.status === "running") ? 0 : 1
                     if (aRunning !== bRunning) {
-                        return aRunning - bRunning;
+                        return aRunning - bRunning
                     }
-                    return a.name.localeCompare(b.name);
+                    return a.name.localeCompare(b.name)
                 case "name":
-                    return a.name.localeCompare(b.name);
+                    return a.name.localeCompare(b.name)
                 case "nameDesc":
-                    return b.name.localeCompare(a.name);
+                    return b.name.localeCompare(a.name)
                 case "id":
-                    return a.vmid - b.vmid;
+                    return a.vmid - b.vmid
                 case "idDesc":
-                    return b.vmid - a.vmid;
+                    return b.vmid - a.vmid
                 default:
-                    var aRun = (a.status === "running") ? 0 : 1;
-                    var bRun = (b.status === "running") ? 0 : 1;
-                    if (aRun !== bRun) return aRun - bRun;
-                    return a.name.localeCompare(b.name);
+                    var aRun = (a.status === "running") ? 0 : 1
+                    var bRun = (b.status === "running") ? 0 : 1
+                    if (aRun !== bRun) return aRun - bRun
+                    return a.name.localeCompare(b.name)
             }
-        });
+        })
     }
 
     // Get node name from API URL
@@ -275,35 +275,35 @@ PlasmoidItem {
                     errorMessage = data["stderr"] || "Connection failed"
                 }
             } else if (source.indexOf("/qemu") !== -1) {
-                var nodeName = getNodeFromSource(source)
+                var nodeNameQemu = getNodeFromSource(source)
                 if (exitCode === 0 && stdout) {
                     try {
-                        var result = JSON.parse(stdout)
-                        if (result.data) {
-                            for (var i = 0; i < result.data.length; i++) {
-                                result.data[i].node = nodeName
-                                tempVmData.push(result.data[i])
+                        var resultQemu = JSON.parse(stdout)
+                        if (resultQemu.data) {
+                            for (var j = 0; j < resultQemu.data.length; j++) {
+                                resultQemu.data[j].node = nodeNameQemu
+                                tempVmData.push(resultQemu.data[j])
                             }
                         }
                     } catch (e) {
-                        console.log("VM parse error for node: " + nodeName)
+                        console.log("VM parse error for node: " + nodeNameQemu)
                     }
                 }
                 pendingNodeRequests--
                 checkRequestsComplete()
             } else if (source.indexOf("/lxc") !== -1) {
-                var nodeName = getNodeFromSource(source)
+                var nodeNameLxc = getNodeFromSource(source)
                 if (exitCode === 0 && stdout) {
                     try {
-                        var result = JSON.parse(stdout)
-                        if (result.data) {
-                            for (var i = 0; i < result.data.length; i++) {
-                                result.data[i].node = nodeName
-                                tempLxcData.push(result.data[i])
+                        var resultLxc = JSON.parse(stdout)
+                        if (resultLxc.data) {
+                            for (var k = 0; k < resultLxc.data.length; k++) {
+                                resultLxc.data[k].node = nodeNameLxc
+                                tempLxcData.push(resultLxc.data[k])
                             }
                         }
                     } catch (e) {
-                        console.log("LXC parse error for node: " + nodeName)
+                        console.log("LXC parse error for node: " + nodeNameLxc)
                     }
                 }
                 pendingNodeRequests--
@@ -561,7 +561,7 @@ PlasmoidItem {
 
                                     Item { Layout.fillWidth: true }
 
-                                    // VM/LXC count summary
+                                    // VM/LXC count summary (visible when collapsed)
                                     RowLayout {
                                         spacing: 4
                                         visible: isCollapsed
@@ -857,3 +857,19 @@ PlasmoidItem {
 
                     PlasmaComponents.Label {
                         text: lastUpdate ? "Updated: " + lastUpdate : ""
+                        font.pixelSize: 10
+                        opacity: 0.6
+                    }
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: refreshInterval > 0 ? refreshInterval : 30000
+        running: configured
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: fetchData()
+    }
+}
