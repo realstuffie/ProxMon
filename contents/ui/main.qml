@@ -15,10 +15,19 @@ PlasmoidItem {
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
+    
+    // Raw data (updated during fetch)
     property var proxmoxData: null
     property var vmData: []
     property var lxcData: []
+    
+    // Displayed data (only updated when all requests complete)
+    property var displayedProxmoxData: null
+    property var displayedVmData: []
+    property var displayedLxcData: []
+    
     property bool loading: false
+    property bool isRefreshing: false
     property string errorMessage: ""
     property string lastUpdate: ""
     property bool configured: proxmoxHost !== "" && apiTokenSecret !== ""
@@ -29,6 +38,7 @@ PlasmoidItem {
 
     // Multi-node support
     property var nodeList: []
+    property var displayedNodeList: []
     property var pendingNodeRequests: 0
     property var tempVmData: []
     property var tempLxcData: []
@@ -41,14 +51,14 @@ PlasmoidItem {
     readonly property var anonVmNames: ["web-server", "database", "backup-srv", "dev-env", "test-vm", "mail-server", "proxy", "monitoring", "gitlab", "nextcloud"]
     readonly property var anonLxcNames: ["nginx-proxy", "pihole", "postgres-db", "redis-cache", "mqtt-broker", "homeassistant", "grafana", "prometheus", "traefik", "portainer"]
 
-    // Calculate total height needed
-    readonly property int nodeCount: proxmoxData && proxmoxData.data ? proxmoxData.data.length : 0
-    readonly property int vmCount: vmData.length
-    readonly property int lxcCount: lxcData.length
+    // Calculate total height needed (use displayed data)
+    readonly property int nodeCount: displayedProxmoxData && displayedProxmoxData.data ? displayedProxmoxData.data.length : 0
+    readonly property int vmCount: displayedVmData.length
+    readonly property int lxcCount: displayedLxcData.length
     readonly property int calculatedHeight: {
         var h = 50
         if (!configured) return 200
-        if (proxmoxData && proxmoxData.data) h += proxmoxData.data.length * 90
+        if (displayedProxmoxData && displayedProxmoxData.data) h += displayedProxmoxData.data.length * 90
         if (vmCount > 0) h += 28 + (vmCount * 36)
         if (lxcCount > 0) h += 28 + (lxcCount * 36)
         h += 40
@@ -56,54 +66,54 @@ PlasmoidItem {
         return Math.max(200, Math.min(h, 600))
     }
 
-    // Get VMs for a specific node
+    // Get VMs for a specific node (use displayed data)
     function getVmsForNode(nodeName) {
-        var nodeVms = vmData.filter(function(vm) {
+        var nodeVms = displayedVmData.filter(function(vm) {
             return vm.node === nodeName
         })
         return sortByStatus(nodeVms)
     }
 
-    // Get LXCs for a specific node
+    // Get LXCs for a specific node (use displayed data)
     function getLxcForNode(nodeName) {
-        var nodeLxc = lxcData.filter(function(lxc) {
+        var nodeLxc = displayedLxcData.filter(function(lxc) {
             return lxc.node === nodeName
         })
         return sortByStatus(nodeLxc)
     }
 
-    // Get running VM count for a node
+    // Get running VM count for a node (use displayed data)
     function getRunningVmsForNode(nodeName) {
         var count = 0
-        for (var i = 0; i < vmData.length; i++) {
-            if (vmData[i].node === nodeName && vmData[i].status === "running") count++
+        for (var i = 0; i < displayedVmData.length; i++) {
+            if (displayedVmData[i].node === nodeName && displayedVmData[i].status === "running") count++
         }
         return count
     }
 
-    // Get running LXC count for a node
+    // Get running LXC count for a node (use displayed data)
     function getRunningLxcForNode(nodeName) {
         var count = 0
-        for (var i = 0; i < lxcData.length; i++) {
-            if (lxcData[i].node === nodeName && lxcData[i].status === "running") count++
+        for (var i = 0; i < displayedLxcData.length; i++) {
+            if (displayedLxcData[i].node === nodeName && displayedLxcData[i].status === "running") count++
         }
         return count
     }
 
-    // Get total VM count for a node
+    // Get total VM count for a node (use displayed data)
     function getTotalVmsForNode(nodeName) {
         var count = 0
-        for (var i = 0; i < vmData.length; i++) {
-            if (vmData[i].node === nodeName) count++
+        for (var i = 0; i < displayedVmData.length; i++) {
+            if (displayedVmData[i].node === nodeName) count++
         }
         return count
     }
 
-    // Get total LXC count for a node
+    // Get total LXC count for a node (use displayed data)
     function getTotalLxcForNode(nodeName) {
         var count = 0
-        for (var i = 0; i < lxcData.length; i++) {
-            if (lxcData[i].node === nodeName) count++
+        for (var i = 0; i < displayedLxcData.length; i++) {
+            if (displayedLxcData[i].node === nodeName) count++
         }
         return count
     }
@@ -193,13 +203,25 @@ PlasmoidItem {
         return match ? match[1] : ""
     }
 
-    // Check if all node requests are complete
+    // Check if all node requests are complete - update displayed data atomically
     function checkRequestsComplete() {
         if (pendingNodeRequests <= 0) {
+            // Atomically update all displayed data at once
+            displayedProxmoxData = proxmoxData
+            displayedNodeList = nodeList.slice()
+            displayedVmData = tempVmData.slice()
+            displayedLxcData = tempLxcData.slice()
+            
+            // Update raw data
             vmData = tempVmData.slice()
             lxcData = tempLxcData.slice()
+            
+            // Clear temp data
             tempVmData = []
             tempLxcData = []
+            
+            // Mark refresh complete
+            isRefreshing = false
         }
     }
 
@@ -247,7 +269,11 @@ PlasmoidItem {
             var exitCode = data["exit code"]
 
             if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
-                loading = false
+                // Only set loading false on initial load, not refresh
+                if (!displayedProxmoxData) {
+                    loading = false
+                }
+                
                 if (exitCode === 0 && stdout) {
                     try {
                         proxmoxData = JSON.parse(stdout)
@@ -267,12 +293,24 @@ PlasmoidItem {
                                 fetchVMs(nodeList[i])
                                 fetchLXC(nodeList[i])
                             }
+                        } else {
+                            // No nodes, update displayed data immediately
+                            displayedProxmoxData = proxmoxData
+                            displayedNodeList = []
+                            displayedVmData = []
+                            displayedLxcData = []
+                            isRefreshing = false
+                            loading = false
                         }
                     } catch (e) {
                         errorMessage = "Parse error"
+                        isRefreshing = false
+                        loading = false
                     }
                 } else {
                     errorMessage = data["stderr"] || "Connection failed"
+                    isRefreshing = false
+                    loading = false
                 }
             } else if (source.indexOf("/qemu") !== -1) {
                 var nodeNameQemu = getNodeFromSource(source)
@@ -321,7 +359,14 @@ PlasmoidItem {
 
     function fetchData() {
         if (!configured) return
-        loading = true
+        
+        // Only show loading spinner on initial load
+        if (!displayedProxmoxData) {
+            loading = true
+        } else {
+            isRefreshing = true
+        }
+        
         errorMessage = ""
         executable.connectSource(curlCmd("/nodes"))
     }
@@ -336,18 +381,19 @@ PlasmoidItem {
         executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc"))
     }
 
+    // Use displayed data for counts
     property int runningVMs: {
         var count = 0
-        for (var i = 0; i < vmData.length; i++) {
-            if (vmData[i].status === "running") count++
+        for (var i = 0; i < displayedVmData.length; i++) {
+            if (displayedVmData[i].status === "running") count++
         }
         return count
     }
 
     property int runningLXC: {
         var count = 0
-        for (var i = 0; i < lxcData.length; i++) {
-            if (lxcData[i].status === "running") count++
+        for (var i = 0; i < displayedLxcData.length; i++) {
+            if (displayedLxcData[i].status === "running") count++
         }
         return count
     }
@@ -372,12 +418,12 @@ PlasmoidItem {
                     if (!configured) return "⚙️"
                     if (loading) return "..."
                     if (errorMessage) return "!"
-                    if (proxmoxData && proxmoxData.data && proxmoxData.data[0]) {
+                    if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
                         var totalCpu = 0
-                        for (var i = 0; i < proxmoxData.data.length; i++) {
-                            totalCpu += proxmoxData.data[i].cpu
+                        for (var i = 0; i < displayedProxmoxData.data.length; i++) {
+                            totalCpu += displayedProxmoxData.data[i].cpu
                         }
-                        return Math.round((totalCpu / proxmoxData.data.length) * 100) + "%"
+                        return Math.round((totalCpu / displayedProxmoxData.data.length) * 100) + "%"
                     }
                     return "-"
                 }
@@ -420,10 +466,18 @@ PlasmoidItem {
                 font.pixelSize: 14
             }
 
+            // Refresh indicator
+            PlasmaComponents.BusyIndicator {
+                running: isRefreshing
+                visible: isRefreshing
+                implicitWidth: 20
+                implicitHeight: 20
+            }
+
             PlasmaComponents.Button {
                 icon.name: "view-refresh"
                 onClicked: fetchData()
-                visible: configured
+                visible: configured && !isRefreshing
                 implicitHeight: 28
                 implicitWidth: 28
             }
@@ -449,7 +503,7 @@ PlasmoidItem {
             Item { Layout.fillHeight: true }
         }
 
-        // Loading
+        // Loading (only on initial load)
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: loading ? 50 : 0
@@ -491,9 +545,9 @@ PlasmoidItem {
                 width: scrollView.availableWidth
                 spacing: 8
 
-                // Nodes with their VMs and LXCs
+                // Nodes with their VMs and LXCs (use displayedProxmoxData)
                 Repeater {
-                    model: proxmoxData && proxmoxData.data ? proxmoxData.data : []
+                    model: displayedProxmoxData && displayedProxmoxData.data ? displayedProxmoxData.data : []
 
                     delegate: ColumnLayout {
                         id: nodeDelegate
@@ -769,7 +823,7 @@ PlasmoidItem {
                             Layout.preferredHeight: 1
                             color: Kirigami.Theme.disabledTextColor
                             opacity: 0.3
-                            visible: index < (proxmoxData.data.length - 1)
+                            visible: index < (displayedProxmoxData.data.length - 1)
                             Layout.topMargin: 4
                         }
                     }
@@ -778,7 +832,7 @@ PlasmoidItem {
                 // No nodes found
                 PlasmaComponents.Label {
                     text: "No nodes found"
-                    visible: !proxmoxData || !proxmoxData.data || proxmoxData.data.length === 0
+                    visible: !displayedProxmoxData || !displayedProxmoxData.data || displayedProxmoxData.data.length === 0
                     opacity: 0.6
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -818,7 +872,7 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.Label {
-                        text: nodeList.length + (nodeList.length === 1 ? " node" : " nodes")
+                        text: displayedNodeList.length + (displayedNodeList.length === 1 ? " node" : " nodes")
                         font.pixelSize: 10
                         opacity: 0.6
                     }
@@ -833,7 +887,7 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.Label {
-                        text: runningVMs + "/" + vmData.length
+                        text: runningVMs + "/" + displayedVmData.length
                         font.pixelSize: 10
                         opacity: 0.6
                     }
@@ -848,7 +902,7 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.Label {
-                        text: runningLXC + "/" + lxcData.length
+                        text: runningLXC + "/" + displayedLxcData.length
                         font.pixelSize: 10
                         opacity: 0.6
                     }
