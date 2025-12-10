@@ -8,7 +8,10 @@ Item {
     
     width: parent?.width ?? 400
     height: parent?.height ?? 400
+    
     property string title: "Behavior"
+    
+    // Sorting properties (this page's main config)
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
     
@@ -17,6 +20,20 @@ Item {
     property int cfg_length: 0
     property bool cfg_expandingDefault: false
     property int cfg_lengthDefault: 0
+    
+    // Connection properties (required - defined in main.xml)
+    property string cfg_proxmoxHost: ""
+    property string cfg_proxmoxHostDefault: ""
+    property int cfg_proxmoxPort: 8006
+    property int cfg_proxmoxPortDefault: 8006
+    property string cfg_apiTokenId: ""
+    property string cfg_apiTokenIdDefault: ""
+    property string cfg_apiTokenSecret: ""
+    property string cfg_apiTokenSecretDefault: ""
+    property int cfg_refreshInterval: 30
+    property int cfg_refreshIntervalDefault: 30
+    property bool cfg_ignoreSsl: true
+    property bool cfg_ignoreSslDefault: true
 
     ColumnLayout {
         anchors.fill: parent

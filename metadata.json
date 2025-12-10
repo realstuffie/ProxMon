@@ -2,11 +2,17 @@
     "KPlugin": {
         "Id": "org.kde.plasma.proxmox",
         "Name": "Proxmox Monitor",
-        "Description": "Monitor Proxmox VE servers",
+        "Description": "Monitor Proxmox VE servers directly from your desktop panel",
         "Icon": "proxmox-monitor",
-        "Authors": [{"Name": "Stuffie"}],
+        "Authors": [
+            {
+                "Name": "Thomas Moore"
+            }
+        ],
         "Category": "System Information",
-        "License": "GPL-3.0+"
+        "License": "GPL-3.0+",
+        "Version": "0.1.0",
+        "Website": "https://github.com/realstuffie/ProxMon"
     },
     "KPackageStructure": "Plasma/Applet",
     "X-Plasma-API-Minimum-Version": "6.0",
