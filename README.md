@@ -26,6 +26,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - 🎨 Dark theme support
 - 🔒 SSL support (with option to skip verification)
 - ☰ Sorting Setting for default sorting behaviour
+- KDE 5 support
 
 ### To Be Added
 - Support For multiple Nodes (To be implemented)
