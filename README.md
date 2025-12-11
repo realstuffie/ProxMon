@@ -21,6 +21,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - [ ] Resource usage graphs
 - [ ] Storage monitoring
 - [ ] Backup status
+- [ ] Kde5 Compatible Version
 
 ## Screenshots
 
