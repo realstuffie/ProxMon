@@ -28,6 +28,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - ☰ Sorting Setting for default sorting behaviour
 - 🖧 Support For multiple Nodes
 - KDE 5 support
+- Dev Mode (click footer 3 times) enables verbose logging and anonymises data pulled
 
 ### To Be Added
 - Remote commands (E.g. Stop, Start, Restart)
