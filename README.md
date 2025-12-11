@@ -38,7 +38,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 </p>
 
 <p align="center">
-  <img src="screenshots/setings.png" alt="Settings" width="800">
+  <img src="screenshots/settings.png" alt="Settings" width="800">
   <br>
   <em>Configuration dialog</em>
 </p>
