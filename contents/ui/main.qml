@@ -15,17 +15,17 @@ PlasmoidItem {
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
-    
+
     // Raw data (updated during fetch)
     property var proxmoxData: null
     property var vmData: []
     property var lxcData: []
-    
+
     // Displayed data (only updated when all requests complete)
     property var displayedProxmoxData: null
     property var displayedVmData: []
     property var displayedLxcData: []
-    
+
     property bool loading: false
     property bool isRefreshing: false
     property string errorMessage: ""
@@ -211,15 +211,15 @@ PlasmoidItem {
             displayedNodeList = nodeList.slice()
             displayedVmData = tempVmData.slice()
             displayedLxcData = tempLxcData.slice()
-            
+
             // Update raw data
             vmData = tempVmData.slice()
             lxcData = tempLxcData.slice()
-            
+
             // Clear temp data
             tempVmData = []
             tempLxcData = []
-            
+
             // Mark refresh complete
             isRefreshing = false
         }
@@ -273,7 +273,7 @@ PlasmoidItem {
                 if (!displayedProxmoxData) {
                     loading = false
                 }
-                
+
                 if (exitCode === 0 && stdout) {
                     try {
                         proxmoxData = JSON.parse(stdout)
@@ -359,14 +359,14 @@ PlasmoidItem {
 
     function fetchData() {
         if (!configured) return
-        
+
         // Only show loading spinner on initial load
         if (!displayedProxmoxData) {
             loading = true
         } else {
             isRefreshing = true
         }
-        
+
         errorMessage = ""
         executable.connectSource(curlCmd("/nodes"))
     }
@@ -377,7 +377,7 @@ PlasmoidItem {
     }
 
     function fetchLXC(nodeName) {
-        if (!nodeName) return
+        if (!nodeName)return
         executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc"))
     }
 
@@ -399,115 +399,102 @@ PlasmoidItem {
     }
 
     compactRepresentation: Item {
-    implicitWidth: row.implicitWidth + 8  // Added horizontal padding
-    implicitHeight: row.implicitHeight
+        implicitWidth: compactRow.implicitWidth + 12
+        implicitHeight: compactRow.implicitHeight
 
-    RowLayout {
-        id: row
-        anchors.centerIn: parent
-        spacing: 4
+        RowLayout {
+            id: compactRow
+            anchors.centerIn: parent
+            spacing: 6
 
-        Kirigami.Icon {
-            source: "proxmox-monitor"
-            implicitWidth: 16
-            implicitHeight: 16
-        }
+            Kirigami.Icon {
+                id: proxmoxIcon
+                source: "proxmox-monitor"
+                implicitWidth: 22
+                implicitHeight: 22
 
-        compactRepresentation: Item {
-    implicitWidth: row.implicitWidth + 8
-    implicitHeight: row.implicitHeight
+                // Heartbeat animation
+                SequentialAnimation {
+                    id: heartbeatAnimation
+                    running: loading || isRefreshing
+                    loops: Animation.Infinite
 
-    RowLayout {
-        id: row
-        anchors.centerIn: parent
-        spacing: 4
-
-        Kirigami.Icon {
-            id: proxmoxIcon
-            source: "proxmox-monitor"
-            implicitWidth: 22
-            implicitHeight: 22
-
-            // Heartbeat animation
-            SequentialAnimation {
-                id: heartbeatAnimation
-                running: loading || isRefreshing
-                loops: Animation.Infinite
-
-                PropertyAnimation {
-                    target: proxmoxIcon
-                    property: "scale"
-                    from: 1.0
-                    to: 1.2
-                    duration: 150
-                    easing.type: Easing.OutQuad
-                }
-                PropertyAnimation {
-                    target: proxmoxIcon
-                    property: "scale"
-                    from: 1.2
-                    to: 1.0
-                    duration: 150
-                    easing.type: Easing.InQuad
-                }
-                PropertyAnimation {
-                    target: proxmoxIcon
-                    property: "scale"
-                    from: 1.0
-                    to: 1.15
-                    duration: 120
-                    easing.type: Easing.OutQuad
-                }
-                PropertyAnimation {
-                    target: proxmoxIcon
-                    property: "scale"
-                    from: 1.15
-                    to: 1.0
-                    duration: 120
-                    easing.type: Easing.InQuad
-                }
-                PauseAnimation {
-                    duration: 400
-                }
-            }
-
-            // Reset scale when animation stops
-            onScaleChanged: {
-                if (!heartbeatAnimation.running && scale !== 1.0) {
-                    scale = 1.0
-                }
-            }
-
-            Connections {
-                target: root
-                function onLoadingChanged() {
-                    if (!loading && !isRefreshing) {
-                        proxmoxIcon.scale = 1.0
+                    PropertyAnimation {
+                        target: proxmoxIcon
+                        property: "scale"
+                        from: 1.0
+                        to: 1.2
+                        duration: 150
+                        easing.type: Easing.OutQuad
+                    }
+                    PropertyAnimation {
+                        target: proxmoxIcon
+                        property: "scale"
+                        from: 1.2
+                        to: 1.0
+                        duration: 150
+                        easing.type: Easing.InQuad
+                    }
+                    PropertyAnimation {
+                        target: proxmoxIcon
+                        property: "scale"
+                        from: 1.0
+                        to: 1.15
+                        duration: 120
+                        easing.type: Easing.OutQuad
+                    }
+                    PropertyAnimation {
+                        target: proxmoxIcon
+                        property: "scale"
+                        from: 1.15
+                        to: 1.0
+                        duration: 120
+                        easing.type: Easing.InQuad
+                    }
+                    PauseAnimation {
+                        duration: 400
                     }
                 }
-                function onIsRefreshingChanged() {
-                    if (!loading && !isRefreshing) {
-                        proxmoxIcon.scale = 1.0
+
+                // Reset scale when animation stops
+                Connections {
+                    target: root
+                    function onLoadingChanged() {
+                        if (!loading && !isRefreshing) {
+                            proxmoxIcon.scale = 1.0
+                        }
+                    }
+                    function onIsRefreshingChanged() {
+                        if (!loading && !isRefreshing) {
+                            proxmoxIcon.scale = 1.0
+                        }
                     }
                 }
             }
-        }
 
-        PlasmaComponents.Label {
-            text: {
-                if (!configured) return "⚙️"
-                if (loading) return "..."
-                if (errorMessage) return "!"
-                if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
-                    var totalCpu = 0
-                    for (var i = 0; i < displayedProxmoxData.data.length; i++) {
-                        totalCpu += displayedProxmoxData.data[i].cpu
+            PlasmaComponents.Label {
+                text: {
+                    if (!configured) return "⚙️"
+                    if (loading) return "..."
+                    if (errorMessage) return "!"
+                    if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
+                        var totalCpu = 0
+                        for (var i = 0; i < displayedProxmoxData.data.length; i++) {
+                            totalCpu += displayedProxmoxData.data[i].cpu
+                        }
+                        return Math.round((totalCpu / displayedProxmoxData.data.length) * 100) + "%"
                     }
-                    return Math.round((totalCpu / displayedProxmoxData.data.length) * 100) + "%"
+                    return "-"
                 }
-                return "-"
+                font.pixelSize: 13
             }
         }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.expanded = !root.expanded
+        }
+    }
 
     fullRepresentation: ColumnLayout {
         id: fullRep
