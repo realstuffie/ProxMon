@@ -29,8 +29,6 @@ PlasmoidItem {
     readonly property int LOG_INFO: 1
     readonly property int LOG_WARN: 2
     readonly property int LOG_ERROR: 3
-    readonly property int minLogLevel: devMode ? LOG_DEBUG : LOG_WARN
-    property bool verboseLogging: devMode  // Can be toggled separately if needed
 
     // Displayed data (only updated when all requests complete)
     property var displayedProxmoxData: null
