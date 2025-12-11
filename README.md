@@ -277,20 +277,3 @@ See [LICENSE](LICENSE) for details.
 ### v0.1.0
 - Initial release
 ```
-
----
-
-## **Improvements Made**
-
-| Enhancement | Description |
-|-------------|-------------|
-| **Badges** | Added license, Plasma, and Proxmox version badges |
-| **Better structure** | Organized sections more logically |
-| **Tables** | Used tables for permissions and notification modes |
-| **Code blocks** | Proper syntax highlighting for all commands |
-| **Upgrade instructions** | Added section for updating existing installs |
-| **Dedicated user example** | Added Proxmox CLI commands for creating monitoring user |
-| **Troubleshooting expanded** | More detailed debugging steps |
-| **Contributing guidelines** | Standard GitHub contribution workflow |
-| **Changelog** | Version history section |
-| **Planned features** | Checkbox list for roadmap |
