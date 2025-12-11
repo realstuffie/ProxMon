@@ -12,9 +12,13 @@
         "Category": "System Information",
         "License": "GPL-3.0+",
         "Version": "0.2.0",
+        "BugReportUrl": "https://github.com/realstuffie/ProxMon/issues",
         "Website": "https://github.com/realstuffie/ProxMon"
     },
     "KPackageStructure": "Plasma/Applet",
     "X-Plasma-API-Minimum-Version": "6.0",
-    "X-Plasma-MainScript": "ui/main.qml"
+    "X-Plasma-MainScript": "ui/main.qml",
+    "X-Plasma-Provides": [
+        "org.kde.plasma.systemmonitor"
+    ]
 }
