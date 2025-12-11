@@ -262,6 +262,13 @@ See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.3.2
+- Refresh of screenshots
+- Minor bug fixes
+
+### v0.3.1
+- minor bug fixes
+
 ### v0.3.0
 - Added notification system with filtering
 - Added whitelist/blacklist support for notifications
