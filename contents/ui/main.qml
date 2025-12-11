@@ -45,7 +45,6 @@ PlasmoidItem {
     property bool defaultsLoaded: false
     property bool devMode: false
     property int footerClickCount: 0
-    property var footerClickTimer: null
 
     // Multi-node support
     property var nodeList: []
@@ -63,7 +62,7 @@ PlasmoidItem {
     property var previousNodeStates: ({})
     property bool initialLoadComplete: false
 
-    // Anonymization data
+    // Anonymization data for dev mode
     readonly property var anonNodeNames: ["server-01", "server-02", "server-03", "pve-node", "cluster-main"]
     readonly property var anonVmNames: ["web-server", "database", "backup-srv", "dev-env", "test-vm", "mail-server", "proxy", "monitoring", "gitlab", "nextcloud"]
     readonly property var anonLxcNames: ["nginx-proxy", "pihole", "postgres-db", "redis-cache", "mqtt-broker", "homeassistant", "grafana", "prometheus", "traefik", "portainer"]
@@ -83,6 +82,21 @@ PlasmoidItem {
         return Math.max(200, Math.min(h, 600))
     }
 
+    // Static timer for footer click detection (replaces dynamic timer creation)
+    Timer {
+        id: footerClickTimer
+        interval: 1000
+        onTriggered: footerClickCount = 0
+    }
+
+    // ==================== UTILITY FUNCTIONS ====================
+
+    // Shell escape function to prevent command injection
+    function escapeShell(str) {
+        if (!str) return ""
+        return str.replace(/'/g, "'\\''")
+    }
+
     // Verbose logging function
     function logDebug(message) {
         if (devMode) {
@@ -97,6 +111,8 @@ PlasmoidItem {
             console.log("[Proxmox " + timestamp + "] " + message)
         }
     }
+
+    // ==================== NOTIFICATION FUNCTIONS ====================
 
     // Check if a VM/container should trigger notifications based on filter
     function shouldNotify(name, vmid) {
@@ -146,11 +162,14 @@ PlasmoidItem {
             logDebug("Notification suppressed (disabled): " + title + " - " + message)
             return
         }
+
         logDebug("Notification: " + title + " - " + message)
-        var icon = iconName || "proxmox-monitor"
-        var safeTitle = title.replace(/'/g, "'\\''")
-        var safeMessage = message.replace(/'/g, "'\\''")
-        var notifyCmd = "notify-send -i '" + icon + "' -a 'Proxmox Monitor' '" + safeTitle + "' '" + safeMessage + "'"
+
+        var safeIcon = escapeShell(iconName || "proxmox-monitor")
+        var safeTitle = escapeShell(title)
+        var safeMessage = escapeShell(message)
+
+        var notifyCmd = "notify-send -i '" + safeIcon + "' -a 'Proxmox Monitor' '" + safeTitle + "' '" + safeMessage + "'"
         executable.connectSource(notifyCmd)
     }
 
@@ -223,68 +242,70 @@ PlasmoidItem {
 
         // Check VMs for state changes
         for (var vi = 0; vi < displayedVmData.length; vi++) {
-            var vmData = displayedVmData[vi]
-            var vmStateKey = vmData.node + "_vm_" + vmData.vmid
+            var vmItem = displayedVmData[vi]
+            var vmStateKey = vmItem.node + "_vm_" + vmItem.vmid
             var prevVmState = previousVmStates[vmStateKey]
 
-            if (prevVmState !== undefined && prevVmState !== vmData.status) {
-                logDebug("checkStateChanges: VM " + vmData.name + " changed from " + prevVmState + " to " + vmData.status)
+            if (prevVmState !== undefined && prevVmState !== vmItem.status) {
+                logDebug("checkStateChanges: VM " + vmItem.name + " changed from " + prevVmState + " to " + vmItem.status)
 
                 // Check if this VM should trigger notifications
-                if (shouldNotify(vmData.name, vmData.vmid)) {
-                    if (notifyOnStop && prevVmState === "running" && vmData.status !== "running") {
+                if (shouldNotify(vmItem.name, vmItem.vmid)) {
+                    if (notifyOnStop && prevVmState === "running" && vmItem.status !== "running") {
                         sendNotification(
                             "VM Stopped",
-                            vmData.name + " (" + vmData.vmid + ") on " + vmData.node + " is now " + vmData.status,
+                            vmItem.name + " (" + vmItem.vmid + ") on " + vmItem.node + " is now " + vmItem.status,
                             "dialog-warning"
                         )
-                    } else if (notifyOnStart && prevVmState !== "running" && vmData.status === "running") {
+                    } else if (notifyOnStart && prevVmState !== "running" && vmItem.status === "running") {
                         sendNotification(
                             "VM Started",
-                            vmData.name + " (" + vmData.vmid + ") on " + vmData.node + " is now running",
+                            vmItem.name + " (" + vmItem.vmid + ") on " + vmItem.node + " is now running",
                             "dialog-information"
                         )
                     }
                 } else {
-                    logDebug("checkStateChanges: Notification filtered for VM " + vmData.name)
+                    logDebug("checkStateChanges: Notification filtered for VM " + vmItem.name)
                 }
             }
-            previousVmStates[vmStateKey] = vmData.status
+            previousVmStates[vmStateKey] = vmItem.status
         }
 
         // Check LXCs for state changes
         for (var li = 0; li < displayedLxcData.length; li++) {
-            var lxcData = displayedLxcData[li]
-            var lxcStateKey = lxcData.node + "_lxc_" + lxcData.vmid
+            var lxcItem = displayedLxcData[li]
+            var lxcStateKey = lxcItem.node + "_lxc_" + lxcItem.vmid
             var prevLxcState = previousLxcStates[lxcStateKey]
 
-            if (prevLxcState !== undefined && prevLxcState !== lxcData.status) {
-                logDebug("checkStateChanges: LXC " + lxcData.name + " changed from " + prevLxcState + " to " + lxcData.status)
+            if (prevLxcState !== undefined && prevLxcState !== lxcItem.status) {
+                logDebug("checkStateChanges: LXC " + lxcItem.name + " changed from " + prevLxcState + " to " + lxcItem.status)
 
                 // Check if this LXC should trigger notifications
-                if (shouldNotify(lxcData.name, lxcData.vmid)) {
-                    if (notifyOnStop && prevLxcState === "running" && lxcData.status !== "running") {
+                if (shouldNotify(lxcItem.name, lxcItem.vmid)) {
+                    if (notifyOnStop && prevLxcState === "running" && lxcItem.status !== "running") {
                         sendNotification(
                             "Container Stopped",
-                            lxcData.name + " (" + lxcData.vmid + ") on " + lxcData.node + " is now " + lxcData.status,
+                            lxcItem.name + " (" + lxcItem.vmid + ") on " + lxcItem.node + " is now " + lxcItem.status,
                             "dialog-warning"
                         )
-                    } else if (notifyOnStart && prevLxcState !== "running" && lxcData.status === "running") {
+                    } else if (notifyOnStart && prevLxcState !== "running" && lxcItem.status === "running") {
                         sendNotification(
                             "Container Started",
-                            lxcData.name + " (" + lxcData.vmid + ") on " + lxcData.node + " is now running",
+                            lxcItem.name + " (" + lxcItem.vmid + ") on " + lxcItem.node + " is now running",
                             "dialog-information"
                         )
                     }
                 } else {
-                    logDebug("checkStateChanges: Notification filtered for LXC " + lxcData.name)
+                    logDebug("checkStateChanges: Notification filtered for LXC " + lxcItem.name)
                 }
             }
-            previousLxcStates[lxcStateKey] = lxcData.status
+            previousLxcStates[lxcStateKey] = lxcItem.status
         }
 
         logDebug("checkStateChanges: State check complete")
     }
+
+    // ==================== NODE DATA FUNCTIONS ====================
 
     // Get VMs for a specific node (use displayed data)
     function getVmsForNode(nodeName) {
@@ -323,7 +344,7 @@ PlasmoidItem {
     // Get total VM count for a node (use displayed data)
     function getTotalVmsForNode(nodeName) {
         var count = 0
-        for (var i = 0; i < displayedVmData.length; i++) {
+        for (var i = 0; i < displayedV mData.length; i++) {
             if (displayedVmData[i].node === nodeName) count++
         }
         return count
@@ -352,7 +373,8 @@ PlasmoidItem {
         return collapsedNodes[nodeName] === true
     }
 
-    // Anonymization functions
+    // ==================== ANONYMIZATION FUNCTIONS ====================
+
     function anonymizeHost(host) {
         if (!devMode) return host
         return "192.168.x.x"
@@ -378,6 +400,8 @@ PlasmoidItem {
         return 100 + index
     }
 
+    // ==================== UI HELPER FUNCTIONS ====================
+
     function handleFooterClick() {
         footerClickCount++
         if (footerClickCount >= 3) {
@@ -385,13 +409,12 @@ PlasmoidItem {
             footerClickCount = 0
             console.log("[Proxmox] Developer mode: " + (devMode ? "ENABLED" : "DISABLED"))
         }
-        if (footerClickTimer) footerClickTimer.destroy()
-        footerClickTimer = Qt.createQmlObject('import QtQuick; Timer { interval: 1000; onTriggered: footerClickCount = 0 }', root)
-        footerClickTimer.start()
+        footerClickTimer.restart()
     }
 
     function sortByStatus(data) {
         if (!data || data.length === 0) return []
+
         return data.slice().sort(function(a, b) {
             switch (defaultSorting) {
                 case "status":
@@ -401,14 +424,19 @@ PlasmoidItem {
                         return aRunning - bRunning
                     }
                     return a.name.localeCompare(b.name)
+
                 case "name":
                     return a.name.localeCompare(b.name)
+
                 case "nameDesc":
                     return b.name.localeCompare(a.name)
+
                 case "id":
                     return a.vmid - b.vmid
+
                 case "idDesc":
                     return b.vmid - a.vmid
+
                 default:
                     var aRun = (a.status === "running") ? 0 : 1
                     var bRun = (b.status === "running") ? 0 : 1
@@ -427,6 +455,7 @@ PlasmoidItem {
     // Check if all node requests are complete - update displayed data atomically
     function checkRequestsComplete() {
         logDebug("checkRequestsComplete: Pending requests: " + pendingNodeRequests)
+
         if (pendingNodeRequests <= 0) {
             logDebug("checkRequestsComplete: All requests complete")
             logDebug("checkRequestsComplete: Nodes: " + nodeList.length + ", VMs: " + tempVmData.length + ", LXCs: " + tempLxcData.length)
@@ -456,172 +485,19 @@ PlasmoidItem {
         }
     }
 
-    Component.onCompleted: {
-        logDebug("Component.onCompleted: Plasmoid initialized")
-        if (!configured) {
-            logDebug("Component.onCompleted: Not configured, loading defaults")
-            loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
-        }
-    }
-
-    // DataSource for loading default settings from file
-    Plasma5Support.DataSource {
-        id: loadDefaults
-        engine: "executable"
-        connectedSources: []
-        onNewData: function(source, data) {
-            logDebug("loadDefaults: Received response")
-            if (data["exit code"] === 0 && data["stdout"] && !defaultsLoaded) {
-                try {
-                    var s = JSON.parse(data["stdout"])
-                    logDebug("loadDefaults: Parsed settings file")
-                    if (s.host) Plasmoid.configuration.proxmoxHost = s.host
-                    if (s.port) Plasmoid.configuration.proxmoxPort = s.port
-                    if (s.tokenId) Plasmoid.configuration.apiTokenId = s.tokenId
-                    if (s.tokenSecret) Plasmoid.configuration.apiTokenSecret = s.tokenSecret
-                    if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
-                    if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
-                    if (s.enableNotifications !== undefined) Plasmoid.configuration.enableNotifications = s.enableNotifications
-                    proxmoxHost = s.host || ""
-                    proxmoxPort = s.port || 8006
-                    apiTokenId = s.tokenId || ""
-                    apiTokenSecret = s.tokenSecret || ""
-                    refreshInterval = (s.refreshInterval || 30) * 1000
-                    ignoreSsl = s.ignoreSsl !== false
-                    enableNotifications = s.enableNotifications !== false
-                    defaultsLoaded = true
-                    logDebug("loadDefaults: Settings applied - host: " + proxmoxHost)
-                } catch (e) {
-                    logDebug("loadDefaults: No defaults found or parse error - " + e)
-                }
-            }
-            disconnectSource(source)
-        }
-    }
-
-    // DataSource for API calls
-    Plasma5Support.DataSource {
-        id: executable
-        engine: "executable"
-        connectedSources: []
-        onNewData: function(source, data) {
-            var stdout = data["stdout"]
-            var exitCode = data["exit code"]
-
-            // Skip notification command responses
-            if (source.indexOf("notify-send") !== -1) {
-                disconnectSource(source)
-                return
-            }
-
-            logDebug("executable: Received response, exit code: " + exitCode)
-
-            if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
-                logDebug("executable: Processing /nodes response")
-
-                if (!displayedProxmoxData) {
-                    loading = false
-                }
-
-                if (exitCode === 0 && stdout) {
-                    try {
-                        proxmoxData = JSON.parse(stdout)
-                        errorMessage = ""
-                        lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
-
-                        if (proxmoxData.data && proxmoxData.data.length > 0) {
-                            logDebug("executable: Found " + proxmoxData.data.length + " nodes")
-
-                            nodeList = proxmoxData.data.map(function(node) {
-                                logDebug("executable: Node: " + node.node + " (status: " + node.status + ", cpu: " + (node.cpu * 100).toFixed(1) + "%)")
-                                return node.node
-                            })
-
-                            tempVmData = []
-                            tempLxcData = []
-                            pendingNodeRequests = nodeList.length * 2
-                            logDebug("executable: Starting " + pendingNodeRequests + " requests for VMs/LXCs")
-
-                            for (var i = 0; i < nodeList.length; i++) {
-                                fetchVMs(nodeList[i])
-                                fetchLXC(nodeList[i])
-                            }
-                        } else {
-                            logDebug("executable: No nodes found in response")
-                            displayedProxmoxData = proxmoxData
-                            displayedNodeList = []
-                            displayedVmData = []
-                            displayedLxcData = []
-                            isRefreshing = false
-                            loading = false
-                        }
-                    } catch (e) {
-                        logDebug("executable: Parse error - " + e)
-                        errorMessage = "Parse error"
-                        isRefreshing = false
-                        loading = false
-                    }
-                } else {
-                    logDebug("executable: Request failed - " + (data["stderr"] || "Unknown error"))
-                    errorMessage = data["stderr"] || "Connection failed"
-                    isRefreshing = false
-                    loading = false
-                }
-            } else if (source.indexOf("/qemu") !== -1) {
-                var nodeNameQemu = getNodeFromSource(source)
-                logDebug("executable: Processing /qemu response for node: " + nodeNameQemu)
-
-                if (exitCode === 0 && stdout) {
-                    try {
-                        var resultQemu = JSON.parse(stdout)
-                        if (resultQemu.data) {
-                            logDebug("executable: Found " + resultQemu.data.length + " VMs on " + nodeNameQemu)
-                            for (var j = 0; j < resultQemu.data.length; j++) {
-                                resultQemu.data[j].node = nodeNameQemu
-                                logDebug("executable: VM " + resultQemu.data[j].vmid + ": " + resultQemu.data[j].name + " (" + resultQemu.data[j].status + ")")
-                                tempVmData.push(resultQemu.data[j])
-                            }
-                        }
-                    } catch (e) {
-                        logDebug("executable: VM parse error for " + nodeNameQemu + " - " + e)
-                    }
-                } else {
-                    logDebug("executable: VM request failed for " + nodeNameQemu)
-                }
-                pendingNodeRequests--
-                checkRequestsComplete()
-            } else if (source.indexOf("/lxc") !== -1) {
-                var nodeNameLxc = getNodeFromSource(source)
-                logDebug("executable: Processing /lxc response for node: " + nodeNameLxc)
-
-                if (exitCode === 0 && stdout) {
-                    try {
-                        var resultLxc = JSON.parse(stdout)
-                        if (resultLxc.data) {
-                            logDebug("executable: Found " + resultLxc.data.length + " LXCs on " + nodeNameLxc)
-                            for (var k = 0; k < resultLxc.data.length; k++) {
-                                resultLxc.data[k].node = nodeNameLxc
-                                logDebug("executable: LXC " + resultLxc.data[k].vmid + ": " + resultLxc.data[k].name + " (" + resultLxc.data[k].status + ")")
-                                tempLxcData.push(resultLxc.data[k])
-                            }
-                        }
-                    } catch (e) {
-                        logDebug("executable: LXC parse error for " + nodeNameLxc + " - " + e)
-                    }
-                } else {
-                    logDebug("executable: LXC request failed for " + nodeNameLxc)
-                }
-                pendingNodeRequests--
-                checkRequestsComplete()
-            }
-            disconnectSource(source)
-        }
-    }
+    // ==================== API FUNCTIONS ====================
 
     function curlCmd(endpoint) {
-        var cmd = "curl " + (ignoreSsl ? "-k " : "") + "-s --connect-timeout 10 'https://" +
-            proxmoxHost + ":" + proxmoxPort + "/api2/json" + endpoint +
-            "' -H 'Authorization: PVEAPIToken=" + apiTokenId + "=" + apiTokenSecret + "'"
+        var safeHost = escapeShell(proxmoxHost)
+        var safeTokenId = escapeShell(apiTokenId)
+        var safeTokenSecret = escapeShell(apiTokenSecret)
+        var safeEndpoint = escapeShell(endpoint)
+
+        var cmd = "curl " + (ignoreSsl ? "-k " : "") +
+            "-s --connect-timeout 10 'https://" + safeHost + ":" + proxmoxPort +
+            "/api2/json" + safeEndpoint + "' -H 'Authorization: PVEAPIToken=" +
+            safeTokenId + "=" + safeTokenSecret + "'"
+
         logDebug("curlCmd: " + endpoint)
         return cmd
     }
@@ -673,6 +549,187 @@ PlasmoidItem {
         }
         return count
     }
+
+    // ==================== INITIALIZATION ====================
+
+    Component.onCompleted: {
+        logDebug("Component.onCompleted: Plasmoid initialized")
+        if (!configured) {
+            logDebug("Component.onCompleted: Not configured, loading defaults")
+            loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
+        }
+    }
+
+    // ==================== DATA SOURCES ====================
+
+    // DataSource for loading default settings from file
+    Plasma5Support.DataSource {
+        id: loadDefaults
+        engine: "executable"
+        connectedSources: []
+
+        onNewData: function(source, data) {
+            logDebug("loadDefaults: Received response")
+
+            if (data["exit code"] === 0 && data["stdout"] && !defaultsLoaded) {
+                try {
+                    var s = JSON.parse(data["stdout"])
+                    logDebug("loadDefaults: Parsed settings file")
+
+                    if (s.host) Plasmoid.configuration.proxmoxHost = s.host
+                    if (s.port) Plasmoid.configuration.proxmoxPort = s.port
+                    if (s.tokenId) Plasmoid.configuration.apiTokenId = s.tokenId
+                    if (s.tokenSecret) Plasmoid.configuration.apiTokenSecret = s.tokenSecret
+                    if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
+                    if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
+                    if (s.enableNotifications !== undefined) Plasmoid.configuration.enableNotifications = s.enableNotifications
+
+                    proxmoxHost = s.host || ""
+                    proxmoxPort = s.port || 8006
+                    apiTokenId = s.tokenId || ""
+                    apiTokenSecret = s.tokenSecret || ""
+                    refreshInterval = (s.refreshInterval || 30) * 1000
+                    ignoreSsl = s.ignoreSsl !== false
+                    enableNotifications = s.enableNotifications !== false
+
+                    defaultsLoaded = true
+                    logDebug("loadDefaults: Settings applied - host: " + proxmoxHost)
+                } catch (e) {
+                    logDebug("loadDefaults: No defaults found or parse error - " + e)
+                }
+            }
+            disconnectSource(source)
+        }
+    }
+
+    // DataSource for API calls
+    Plasma5Support.DataSource {
+        id: executable
+        engine: "executable"
+        connectedSources: []
+
+        onNewData: function(source, data) {
+            var stdout = data["stdout"]
+            var exitCode = data["exit code"]
+
+            // Skip notification command responses
+            if (source.indexOf("notify-send") !== -1) {
+                disconnectSource(source)
+                return
+            }
+
+            logDebug("executable: Received response, exit code: " + exitCode)
+
+            if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
+                logDebug("executable: Processing /nodes response")
+
+                if (!displayedProxmoxData) {
+                    loading = false
+                }
+
+                if (exitCode === 0 && stdout) {
+                    try {
+                        proxmoxData = JSON.parse(stdout)
+                        errorMessage = ""
+                        lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
+
+                        if (proxmoxData.data && proxmoxData.data.length > 0) {
+                            logDebug("executable: Found " + proxmoxData.data.length + " nodes")
+
+                            nodeList = proxmoxData.data.map(function(node) {
+                                logDebug("executable: Node: " + node.node + " (status: " + node.status + ", cpu: " + (node.cpu * 100).toFixed(1) + "%)")
+                                return node.node
+                            })
+
+                            tempVmData = []
+                            tempLxcData = []
+                            pendingNodeRequests = nodeList.length * 2
+
+                            logDebug("executable: Starting " + pendingNodeRequests + " requests for VMs/LXCs")
+
+                            for (var i = 0; i < nodeList.length; i++) {
+                                fetchVMs(nodeList[i])
+                                fetchLXC(nodeList[i])
+                            }
+                        } else {
+                            logDebug("executable: No nodes found in response")
+                            displayedProxmoxData = proxmoxData
+                            displayedNodeList = []
+                            displayedVmData = []
+                            displayedLxcData = []
+                            isRefreshing = false
+                            loading = false
+                        }
+                    } catch (e) {
+                        logDebug("executable: Parse error - " + e)
+                        errorMessage = "Parse error"
+                        isRefreshing = false
+                        loading = false
+                    }
+                } else {
+                    logDebug("executable: Request failed - " + (data["stderr"] || "Unknown error"))
+                    errorMessage = data["stderr"] || "Connection failed"
+                    isRefreshing = false
+                    loading = false
+                }
+            } else if (source.indexOf("/qemu") !== -1) {
+                var nodeNameQemu = getNodeFromSource(source)
+                logDebug("executable: Processing /qemu response for node: " + nodeNameQemu)
+
+                if (exitCode === 0 && stdout) {
+                    try {
+                        var resultQemu = JSON.parse(stdout)
+                        if (resultQemu.data) {
+                            logDebug("executable: Found " + resultQemu.data.length + " VMs on " + nodeNameQemu)
+
+                            for (var j = 0; j < resultQemu.data.length; j++) {
+                                resultQemu.data[j].node = nodeNameQemu
+                                logDebug("executable: VM " + resultQemu.data[j].vmid + ": " + resultQemu.data[j].name + " (" + resultQemu.data[j].status + ")")
+                                tempVmData.push(resultQemu.data[j])
+                            }
+                        }
+                    } catch (e) {
+                        logDebug("executable: VM parse error for " + nodeNameQemu + " - " + e)
+                    }
+                } else {
+                    logDebug("executable: VM request failed for " + nodeNameQemu)
+                }
+
+                pendingNodeRequests--
+                checkRequestsComplete()
+
+            } else if (source.indexOf("/lxc") !== -1) {
+                var nodeNameLxc = getNodeFromSource(source)
+                logDebug("executable: Processing /lxc response for node: " + nodeNameLxc)
+
+                if (exitCode === 0 && stdout) {
+                    try {
+                        var resultLxc = JSON.parse(stdout)
+                        if (resultLxc.data) {
+                            logDebug("executable: Found " + resultLxc.data.length + " LXCs on " + nodeNameLxc)
+
+                            for (var k = 0; k < resultLxc.data.length; k++) {
+                                resultLxc.data[k].node = nodeNameLxc
+                                logDebug("executable: LXC " + resultLxc.data[k].vmid + ": " + resultLxc.data[k].name + " (" + resultLxc.data[k].status + ")")
+                                tempLxcData.push(resultLxc.data[k])
+                            }
+                        }
+                    } catch (e) {
+                        logDebug("executable: LXC parse error for " + nodeNameLxc + " - " + e)
+                    }
+                } else {
+                    logDebug("executable: LXC request failed for " + nodeNameLxc)
+                }
+
+                pendingNodeRequests--
+                checkRequestsComplete()
+            }
+
+            disconnectSource(source)
+        }
+    }
+
+    // ==================== COMPACT REPRESENTATION ====================
 
     compactRepresentation: Item {
         implicitWidth: compactRow.implicitWidth + 4 + 8
@@ -749,7 +806,7 @@ PlasmoidItem {
 
             PlasmaComponents.Label {
                 text: {
-                    if (!configured) return "⚙️"
+                    if (!configured) return "⚙"
                     if (loading) return "..."
                     if (errorMessage) return "!"
                     if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
@@ -771,6 +828,8 @@ PlasmoidItem {
             onClicked: root.expanded = !root.expanded
         }
     }
+
+    // ==================== FULL REPRESENTATION ====================
 
     fullRepresentation: ColumnLayout {
         id: fullRep
@@ -831,7 +890,7 @@ PlasmoidItem {
             }
         }
 
-        // Not configured
+        // Not configured message
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -839,19 +898,31 @@ PlasmoidItem {
             spacing: 8
 
             Item { Layout.fillHeight: true }
+
+            Kirigami.Icon {
+                source: "configure"
+                implicitWidth: 48
+                implicitHeight: 48
+                Layout.alignment: Qt.AlignHCenter
+                opacity: 0.6
+            }
+
             PlasmaComponents.Label {
                 text: "Not Configured"
                 font.bold: true
                 Layout.alignment: Qt.AlignHCenter
             }
+
             PlasmaComponents.Label {
-                text: "Right-click → Configure"
+                text: "Right-click → Configure Widget"
+                opacity: 0.7
                 Layout.alignment: Qt.AlignHCenter
             }
+
             Item { Layout.fillHeight: true }
         }
 
-        // Loading (only on initial load)
+        // Loading indicator (only on initial load)
         Item {
             Layout.fillWidth: true
             Layout.preferredHeight: loading ? 50 : 0
@@ -863,15 +934,44 @@ PlasmoidItem {
             }
         }
 
-        // Error
-        PlasmaComponents.Label {
-            text: errorMessage
-            color: Kirigami.Theme.negativeTextColor
-            visible: errorMessage !== "" && configured
-            Layout.alignment: Qt.AlignHCenter
-            wrapMode: Text.WordWrap
+        // Error message
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.margins: 10
+            visible: errorMessage !== "" && configured
+            spacing: 8
+
+            RowLayout {
+                spacing: 8
+                Layout.alignment: Qt.AlignHCenter
+
+                Kirigami.Icon {
+                    source: "dialog-error"
+                    implicitWidth: 22
+                    implicitHeight: 22
+                }
+
+                PlasmaComponents.Label {
+                    text: "Connection Error"
+                    font.bold: true
+                    color: Kirigami.Theme.negativeTextColor
+                }
+            }
+
+            PlasmaComponents.Label {
+                text: errorMessage
+                color: Kirigami.Theme.negativeTextColor
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            PlasmaComponents.Button {
+                text: "Retry"
+                icon.name: "view-refresh"
+                Layout.alignment: Qt.AlignHCenter
+                onClicked: fetchData()
+            }
         }
 
         // Scrollable Main Content
@@ -882,7 +982,6 @@ PlasmoidItem {
             Layout.leftMargin: 6
             Layout.rightMargin: 6
             visible: configured && !loading && errorMessage === ""
-
             clip: true
 
             QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
@@ -906,6 +1005,7 @@ PlasmoidItem {
                         property var nodeLxc: getLxcForNode(nodeName)
                         property bool isCollapsed: isNodeCollapsed(nodeName)
 
+                        // Node card
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 70
@@ -961,6 +1061,7 @@ PlasmoidItem {
 
                                     Item { Layout.fillWidth: true }
 
+                                    // Collapsed summary
                                     RowLayout {
                                         spacing: 4
                                         visible: isCollapsed
@@ -971,6 +1072,7 @@ PlasmoidItem {
                                             implicitHeight: 12
                                             opacity: 0.7
                                         }
+
                                         PlasmaComponents.Label {
                                             text: getRunningVmsForNode(nodeName) + "/" + getTotalVmsForNode(nodeName)
                                             font.pixelSize: 10
@@ -985,6 +1087,7 @@ PlasmoidItem {
                                             implicitHeight: 12
                                             opacity: 0.7
                                         }
+
                                         PlasmaComponents.Label {
                                             text: getRunningLxcForNode(nodeName) + "/" + getTotalLxcForNode(nodeName)
                                             font.pixelSize: 10
@@ -1017,12 +1120,14 @@ PlasmoidItem {
                             }
                         }
 
+                        // Expanded content (VMs and LXCs)
                         ColumnLayout {
                             Layout.fillWidth: true
                             Layout.leftMargin: 12
                             visible: !isCollapsed
                             spacing: 4
 
+                            // VMs section
                             ColumnLayout {
                                 Layout.fillWidth: true
                                 visible: nodeVms.length > 0
@@ -1052,7 +1157,9 @@ PlasmoidItem {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 28
                                         radius: 4
-                                        color: modelData.status === "running" ? Qt.rgba(0, 0.5, 0, 0.15) : Qt.rgba(0.5, 0.5, 0.5, 0.1)
+                                        color: modelData.status === "running"
+                                            ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15)
+                                            : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -1075,9 +1182,9 @@ PlasmoidItem {
                                             }
 
                                             PlasmaComponents.Label {
-                                                text: modelData.status === "running" ?
-                                                    (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
-                                                    modelData.status
+                                                text: modelData.status === "running"
+                                                    ? (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G"
+                                                    : modelData.status
                                                 font.pixelSize: 10
                                                 opacity: 0.7
                                             }
@@ -1086,6 +1193,7 @@ PlasmoidItem {
                                 }
                             }
 
+                            // LXC section
                             ColumnLayout {
                                 Layout.fillWidth: true
                                 visible: nodeLxc.length > 0
@@ -1115,7 +1223,9 @@ PlasmoidItem {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 28
                                         radius: 4
-                                        color: modelData.status === "running" ? Qt.rgba(0, 0.3, 0.6, 0.15) : Qt.rgba(0.5, 0.5, 0.5, 0.1)
+                                        color: modelData.status === "running"
+                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                            : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -1138,9 +1248,9 @@ PlasmoidItem {
                                             }
 
                                             PlasmaComponents.Label {
-                                                text: modelData.status === "running" ?
-                                                    (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
-                                                    modelData.status
+                                                text: modelData.status === "running"
+                                                    ? (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G"
+                                                    : modelData.status
                                                 font.pixelSize: 10
                                                 opacity: 0.7
                                             }
@@ -1149,6 +1259,7 @@ PlasmoidItem {
                                 }
                             }
 
+                            // Empty state
                             PlasmaComponents.Label {
                                 text: "No VMs or Containers"
                                 visible: nodeVms.length === 0 && nodeLxc.length === 0
@@ -1158,6 +1269,7 @@ PlasmoidItem {
                             }
                         }
 
+                        // Node separator
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 1
@@ -1169,6 +1281,7 @@ PlasmoidItem {
                     }
                 }
 
+                // Empty state
                 PlasmaComponents.Label {
                     text: "No nodes found"
                     visible: !displayedProxmoxData || !displayedProxmoxData.data || displayedProxmoxData.data.length === 0
@@ -1176,6 +1289,7 @@ PlasmoidItem {
                     Layout.alignment: Qt.AlignHCenter
                 }
 
+                // Bottom padding
                 Item {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 4
@@ -1256,6 +1370,8 @@ PlasmoidItem {
             }
         }
     }
+
+    // ==================== REFRESH TIMER ====================
 
     Timer {
         interval: refreshInterval > 0 ? refreshInterval : 30000
