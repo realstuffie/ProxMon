@@ -413,6 +413,86 @@ PlasmoidItem {
             implicitHeight: 16
         }
 
+        compactRepresentation: Item {
+    implicitWidth: row.implicitWidth + 8
+    implicitHeight: row.implicitHeight
+
+    RowLayout {
+        id: row
+        anchors.centerIn: parent
+        spacing: 4
+
+        Kirigami.Icon {
+            id: proxmoxIcon
+            source: "proxmox-monitor"
+            implicitWidth: 22
+            implicitHeight: 22
+
+            // Heartbeat animation
+            SequentialAnimation {
+                id: heartbeatAnimation
+                running: loading || isRefreshing
+                loops: Animation.Infinite
+
+                PropertyAnimation {
+                    target: proxmoxIcon
+                    property: "scale"
+                    from: 1.0
+                    to: 1.2
+                    duration: 150
+                    easing.type: Easing.OutQuad
+                }
+                PropertyAnimation {
+                    target: proxmoxIcon
+                    property: "scale"
+                    from: 1.2
+                    to: 1.0
+                    duration: 150
+                    easing.type: Easing.InQuad
+                }
+                PropertyAnimation {
+                    target: proxmoxIcon
+                    property: "scale"
+                    from: 1.0
+                    to: 1.15
+                    duration: 120
+                    easing.type: Easing.OutQuad
+                }
+                PropertyAnimation {
+                    target: proxmoxIcon
+                    property: "scale"
+                    from: 1.15
+                    to: 1.0
+                    duration: 120
+                    easing.type: Easing.InQuad
+                }
+                PauseAnimation {
+                    duration: 400
+                }
+            }
+
+            // Reset scale when animation stops
+            onScaleChanged: {
+                if (!heartbeatAnimation.running && scale !== 1.0) {
+                    scale = 1.0
+                }
+            }
+
+            Connections {
+                target: root
+                function onLoadingChanged() {
+                    if (!loading && !isRefreshing) {
+                        proxmoxIcon.scale = 1.0
+                    }
+                }
+                function onIsRefreshingChanged() {
+                    if (!loading && !isRefreshing) {
+                        proxmoxIcon.scale = 1.0
+                    }
+                }
+            }
+        }
+
         PlasmaComponents.Label {
             text: {
                 if (!configured) return "⚙️"
@@ -428,13 +508,6 @@ PlasmoidItem {
                 return "-"
             }
         }
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        onClicked: root.expanded = !root.expanded
-    }
-}
 
     fullRepresentation: ColumnLayout {
         id: fullRep
