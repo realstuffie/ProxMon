@@ -1,3 +1,4 @@
+// contents/ui/configGeneral.qml
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -8,33 +9,27 @@ Item {
     id: root
     width: parent?.width ?? 400
     height: parent?.height ?? 400
-
     property string title: "Connection"
 
+    // Connection properties (aliased to UI controls)
     property alias cfg_proxmoxHost: hostField.text
     property alias cfg_proxmoxPort: portField.value
     property alias cfg_apiTokenId: tokenIdField.text
     property alias cfg_apiTokenSecret: tokenSecretField.text
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
+    property alias cfg_enableNotifications: enableNotificationsCheck.checked
 
-    // Required properties for Plasma
-    property bool cfg_expanding: false
-    property int cfg_length: 0
-    property bool cfg_expandingDefault: false
-    property int cfg_lengthDefault: 0
-
-    // Sorting properties (shared with configBehavior.qml)
-    property string cfg_defaultSorting: "status"
-    property string cfg_defaultSortingDefault: "status"
-
+    // Default values for Plasma
     property string cfg_proxmoxHostDefault: ""
     property int cfg_proxmoxPortDefault: 8006
     property string cfg_apiTokenIdDefault: ""
     property string cfg_apiTokenSecretDefault: ""
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
+    property bool cfg_enableNotificationsDefault: true
 
+    // DataSource for saving settings to file
     Plasma5Support.DataSource {
         id: saveExec
         engine: "executable"
@@ -47,10 +42,12 @@ Item {
                 saveStatus.text = "✗ Failed"
                 saveStatus.color = Kirigami.Theme.negativeTextColor
             }
+            saveStatusTimer.restart()
             disconnectSource(source)
         }
     }
 
+    // DataSource for loading settings from file
     Plasma5Support.DataSource {
         id: loadExec
         engine: "executable"
@@ -72,9 +69,31 @@ Item {
                     loadStatus.text = "No defaults saved"
                     loadStatus.color = Kirigami.Theme.neutralTextColor
                 }
+            } else {
+                loadStatus.text = "No defaults saved"
+                loadStatus.color = Kirigami.Theme.neutralTextColor
             }
+            loadStatusTimer.restart()
             disconnectSource(source)
         }
+    }
+
+    // Timers to clear status messages
+    Timer {
+        id: saveStatusTimer
+        interval: 3000
+        onTriggered: saveStatus.text = ""
+    }
+
+    Timer {
+        id: loadStatusTimer
+        interval: 3000
+        onTriggered: loadStatus.text = ""
+    }
+
+    // Helper function to escape JSON for shell
+    function escapeForShell(str) {
+        return str.replace(/\\/g, "\\\\").replace(/'/g, "'\\''")
     }
 
     ColumnLayout {
@@ -82,20 +101,30 @@ Item {
         anchors.margins: 20
         spacing: 15
 
+        // Connection Settings Section
+        Kirigami.Heading {
+            text: "Connection Settings"
+            level: 2
+        }
+
         GridLayout {
             columns: 2
             columnSpacing: 15
             rowSpacing: 12
             Layout.fillWidth: true
 
-            QQC2.Label { text: "Host:" }
+            QQC2.Label {
+                text: "Host:"
+            }
             QQC2.TextField {
                 id: hostField
                 Layout.fillWidth: true
-                placeholderText: "192.168.1.100"
+                placeholderText: "192.168.1.100 or proxmox.local"
             }
 
-            QQC2.Label { text: "Port:" }
+            QQC2.Label {
+                text: "Port:"
+            }
             QQC2.SpinBox {
                 id: portField
                 from: 1
@@ -104,35 +133,61 @@ Item {
                 editable: true
             }
 
-            QQC2.Label { text: "API Token ID:" }
+            QQC2.Label {
+                text: "API Token ID:"
+            }
             QQC2.TextField {
                 id: tokenIdField
                 Layout.fillWidth: true
                 placeholderText: "user@realm!tokenname"
             }
 
-            QQC2.Label { text: "API Token Secret:" }
+            QQC2.Label {
+                text: "API Token Secret:"
+            }
             QQC2.TextField {
                 id: tokenSecretField
                 Layout.fillWidth: true
                 echoMode: TextInput.Password
+                placeholderText: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
             }
 
-            QQC2.Label { text: "Refresh (sec):" }
-            QQC2.SpinBox {
-                id: refreshField
-                from: 5
-                to: 3600
-                value: 30
-                editable: true
+            QQC2.Label {
+                text: "Refresh Interval:"
+            }
+            RowLayout {
+                spacing: 8
+                QQC2.SpinBox {
+                    id: refreshField
+                    from: 5
+                    to: 3600
+                    value: 30
+                    editable: true
+                }
+                QQC2.Label {
+                    text: "seconds"
+                    opacity: 0.7
+                }
             }
 
-            QQC2.Label { text: "Ignore SSL:" }
+            QQC2.Label {
+                text: "SSL Verification:"
+            }
             QQC2.CheckBox {
                 id: ignoreSslCheck
                 checked: true
-                text: "Skip certificate verification"
+                text: "Ignore SSL certificate errors"
             }
+
+            QQC2.Label {
+                text: "Notifications:"
+            }
+            QQC2.CheckBox {
+                id: enableNotificationsCheck
+                checked: true
+                text: "Enable desktop notifications"
+            }
+        }
 
         // Notification info
         RowLayout {
@@ -145,9 +200,8 @@ Item {
                 implicitHeight: 16
                 opacity: 0.7
             }
-
             QQC2.Label {
-                text: "Notifications are sent when VMs, containers, or nodes change state"
+                text: "Notifications are sent when VMs, containers, or nodes change state. Configure filters in the Behavior tab."
                 font.pixelSize: 11
                 opacity: 0.7
                 wrapMode: Text.WordWrap
@@ -155,11 +209,26 @@ Item {
             }
         }
 
+        // Separator
         Rectangle {
             Layout.fillWidth: true
             height: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.3
+        }
+
+        // Default Settings Section
+        Kirigami.Heading {
+            text: "Default Settings"
+            level: 2
+        }
+
+        QQC2.Label {
+            text: "Save current settings as defaults for new widget instances"
+            font.pixelSize: 11
+            opacity: 0.7
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
         }
 
         RowLayout {
@@ -170,7 +239,7 @@ Item {
                 text: "Save as Default"
                 icon.name: "document-save"
                 onClicked: {
-                    var json = JSON.stringify({
+                    var settings = {
                         host: hostField.text,
                         port: portField.value,
                         tokenId: tokenIdField.text,
@@ -178,8 +247,10 @@ Item {
                         refreshInterval: refreshField.value,
                         ignoreSsl: ignoreSslCheck.checked,
                         enableNotifications: enableNotificationsCheck.checked
-                    })
-                    saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && echo '" + json + "' > ~/.config/proxmox-plasmoid/settings.json")
+                    }
+                    var json = JSON.stringify(settings)
+                    var safeJson = escapeForShell(json)
+                    saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && echo '" + safeJson + "' > ~/.config/proxmox-plasmoid/settings.json")
                 }
             }
 
@@ -204,12 +275,32 @@ Item {
             }
         }
 
-        QQC2.Label {
-            text: "Click 'Save as Default' to remember settings for new widgets"
-            font.pixelSize: 11
-            opacity: 0.6
+        // Spacer
+        Item { Layout.fillHeight: true }
+
+        // API Token Help
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.3
         }
 
-        Item { Layout.fillHeight: true }
+        Kirigami.Heading {
+            text: "How to Create an API Token"
+            level: 3
+        }
+
+        QQC2.Label {
+            text: "1. Log into Proxmox web interface\n" +
+                  "2. Go to Datacenter → Permissions → API Tokens\n" +
+                  "3. Click 'Add' and create a token\n" +
+                  "4. Uncheck 'Privilege Separation' for full access\n" +
+                  "5. Copy the Token ID and Secret"
+            font.pixelSize: 11
+            opacity: 0.7
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+        }
     }
 }
