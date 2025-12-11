@@ -33,7 +33,6 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### To Be Added
 - Remote commands (E.g. Stop, Start, Restart)
-- Customized Alerts (netdown, 80-90%+ usage alert)
 
 ### Screenshots
 
