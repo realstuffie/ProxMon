@@ -8,6 +8,8 @@ import org.kde.plasma.plasma5support as Plasma5Support
 
 PlasmoidItem {
     id: root
+
+    // Connection properties
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
@@ -15,7 +17,14 @@ PlasmoidItem {
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
+
+    // Notification properties
     property bool enableNotifications: Plasmoid.configuration.enableNotifications !== false
+    property string notifyMode: Plasmoid.configuration.notifyMode || "all"
+    property string notifyFilter: Plasmoid.configuration.notifyFilter || ""
+    property bool notifyOnStop: Plasmoid.configuration.notifyOnStop !== false
+    property bool notifyOnStart: Plasmoid.configuration.notifyOnStart !== false
+    property bool notifyOnNodeChange: Plasmoid.configuration.notifyOnNodeChange !== false
 
     // Raw data (updated during fetch)
     property var proxmoxData: null
@@ -27,6 +36,7 @@ PlasmoidItem {
     property var displayedVmData: []
     property var displayedLxcData: []
 
+    // State properties
     property bool loading: false
     property bool isRefreshing: false
     property string errorMessage: ""
@@ -88,6 +98,48 @@ PlasmoidItem {
         }
     }
 
+    // Check if a VM/container should trigger notifications based on filter
+    function shouldNotify(name, vmid) {
+        if (notifyMode === "all") {
+            return true
+        }
+
+        if (!notifyFilter || notifyFilter.trim() === "") {
+            return notifyMode === "all"
+        }
+
+        var filters = notifyFilter.split(",").map(function(f) {
+            return f.trim().toLowerCase()
+        }).filter(function(f) {
+            return f.length > 0
+        })
+
+        if (filters.length === 0) {
+            return notifyMode === "all"
+        }
+
+        var nameL = (name || "").toLowerCase()
+        var vmidStr = String(vmid)
+
+        var matches = filters.some(function(filter) {
+            // Check for wildcard patterns
+            if (filter.indexOf("*") !== -1) {
+                var regex = new RegExp("^" + filter.replace(/\*/g, ".*") + "$")
+                return regex.test(nameL) || regex.test(vmidStr)
+            }
+            // Exact match on name or vmid
+            return nameL === filter || vmidStr === filter
+        })
+
+        if (notifyMode === "whitelist") {
+            return matches
+        } else if (notifyMode === "blacklist") {
+            return !matches
+        }
+
+        return true
+    }
+
     // Send desktop notification
     function sendNotification(title, message, iconName) {
         if (!enableNotifications) {
@@ -100,6 +152,12 @@ PlasmoidItem {
         var safeMessage = message.replace(/'/g, "'\\''")
         var notifyCmd = "notify-send -i '" + icon + "' -a 'Proxmox Monitor' '" + safeTitle + "' '" + safeMessage + "'"
         executable.connectSource(notifyCmd)
+    }
+
+    // Test notifications function (dev mode)
+    function testNotifications() {
+        logDebug("Testing notifications...")
+        sendNotification("VM Stopped", "test-vm (100) on pve1 is now stopped", "dialog-warning")
     }
 
     // Check for state changes and send notifications
@@ -137,7 +195,7 @@ PlasmoidItem {
         }
 
         // Check nodes for state changes
-        if (displayedProxmoxData && displayedProxmoxData.data) {
+        if (notifyOnNodeChange && displayedProxmoxData && displayedProxmoxData.data) {
             for (var ni = 0; ni < displayedProxmoxData.data.length; ni++) {
                 var nodeData = displayedProxmoxData.data[ni]
                 var prevNodeState = previousNodeStates[nodeData.node]
@@ -172,18 +230,23 @@ PlasmoidItem {
             if (prevVmState !== undefined && prevVmState !== vmData.status) {
                 logDebug("checkStateChanges: VM " + vmData.name + " changed from " + prevVmState + " to " + vmData.status)
 
-                if (prevVmState === "running" && vmData.status !== "running") {
-                    sendNotification(
-                        "VM Stopped",
-                        vmData.name + " (" + vmData.vmid + ") on " + vmData.node + " is now " + vmData.status,
-                        "dialog-warning"
-                    )
-                } else if (prevVmState !== "running" && vmData.status === "running") {
-                    sendNotification(
-                        "VM Started",
-                        vmData.name + " (" + vmData.vmid + ") on " + vmData.node + " is now running",
-                        "dialog-information"
-                    )
+                // Check if this VM should trigger notifications
+                if (shouldNotify(vmData.name, vmData.vmid)) {
+                    if (notifyOnStop && prevVmState === "running" && vmData.status !== "running") {
+                        sendNotification(
+                            "VM Stopped",
+                            vmData.name + " (" + vmData.vmid + ") on " + vmData.node + " is now " + vmData.status,
+                            "dialog-warning"
+                        )
+                    } else if (notifyOnStart && prevVmState !== "running" && vmData.status === "running") {
+                        sendNotification(
+                            "VM Started",
+                            vmData.name + " (" + vmData.vmid + ") on " + vmData.node + " is now running",
+                            "dialog-information"
+                        )
+                    }
+                } else {
+                    logDebug("checkStateChanges: Notification filtered for VM " + vmData.name)
                 }
             }
             previousVmStates[vmStateKey] = vmData.status
@@ -198,18 +261,23 @@ PlasmoidItem {
             if (prevLxcState !== undefined && prevLxcState !== lxcData.status) {
                 logDebug("checkStateChanges: LXC " + lxcData.name + " changed from " + prevLxcState + " to " + lxcData.status)
 
-                if (prevLxcState === "running" && lxcData.status !== "running") {
-                    sendNotification(
-                        "Container Stopped",
-                        lxcData.name + " (" + lxcData.vmid + ") on " + lxcData.node + " is now " + lxcData.status,
-                        "dialog-warning"
-                    )
-                } else if (prevLxcState !== "running" && lxcData.status === "running") {
-                    sendNotification(
-                        "Container Started",
-                        lxcData.name + " (" + lxcData.vmid + ") on " + lxcData.node + " is now running",
-                        "dialog-information"
-                    )
+                // Check if this LXC should trigger notifications
+                if (shouldNotify(lxcData.name, lxcData.vmid)) {
+                    if (notifyOnStop && prevLxcState === "running" && lxcData.status !== "running") {
+                        sendNotification(
+                            "Container Stopped",
+                            lxcData.name + " (" + lxcData.vmid + ") on " + lxcData.node + " is now " + lxcData.status,
+                            "dialog-warning"
+                        )
+                    } else if (notifyOnStart && prevLxcState !== "running" && lxcData.status === "running") {
+                        sendNotification(
+                            "Container Started",
+                            lxcData.name + " (" + lxcData.vmid + ") on " + lxcData.node + " is now running",
+                            "dialog-information"
+                        )
+                    }
+                } else {
+                    logDebug("checkStateChanges: Notification filtered for LXC " + lxcData.name)
                 }
             }
             previousLxcStates[lxcStateKey] = lxcData.status
@@ -413,12 +481,14 @@ PlasmoidItem {
                     if (s.tokenSecret) Plasmoid.configuration.apiTokenSecret = s.tokenSecret
                     if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
                     if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
+                    if (s.enableNotifications !== undefined) Plasmoid.configuration.enableNotifications = s.enableNotifications
                     proxmoxHost = s.host || ""
                     proxmoxPort = s.port || 8006
                     apiTokenId = s.tokenId || ""
                     apiTokenSecret = s.tokenSecret || ""
                     refreshInterval = (s.refreshInterval || 30) * 1000
                     ignoreSsl = s.ignoreSsl !== false
+                    enableNotifications = s.enableNotifications !== false
                     defaultsLoaded = true
                     logDebug("loadDefaults: Settings applied - host: " + proxmoxHost)
                 } catch (e) {
@@ -730,6 +800,19 @@ PlasmoidItem {
                 text: "🔧"
                 visible: devMode
                 font.pixelSize: 14
+            }
+
+            // Test notifications button (dev mode only)
+            PlasmaComponents.Button {
+                icon.name: "notifications"
+                onClicked: testNotifications()
+                visible: devMode
+                implicitHeight: 28
+                implicitWidth: 28
+
+                PlasmaComponents.ToolTip {
+                    text: "Test notification"
+                }
             }
 
             PlasmaComponents.BusyIndicator {
