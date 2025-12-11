@@ -6,9 +6,9 @@ import org.kde.plasma.plasma5support as Plasma5Support
 
 Item {
     id: root
-    
     width: parent?.width ?? 400
     height: parent?.height ?? 400
+
     property string title: "Connection"
 
     property alias cfg_proxmoxHost: hostField.text
@@ -35,8 +35,6 @@ Item {
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
 
-    // REMOVED: property string title: "Connection" - This is a FINAL property
-
     Plasma5Support.DataSource {
         id: saveExec
         engine: "executable"
@@ -44,10 +42,10 @@ Item {
         onNewData: function(source, data) {
             if (data["exit code"] === 0) {
                 saveStatus.text = "✓ Saved!"
-                saveStatus.color = "green"
+                saveStatus.color = Kirigami.Theme.positiveTextColor
             } else {
                 saveStatus.text = "✗ Failed"
-                saveStatus.color = "red"
+                saveStatus.color = Kirigami.Theme.negativeTextColor
             }
             disconnectSource(source)
         }
@@ -67,11 +65,12 @@ Item {
                     if (s.tokenSecret) tokenSecretField.text = s.tokenSecret
                     if (s.refreshInterval) refreshField.value = s.refreshInterval
                     if (s.ignoreSsl !== undefined) ignoreSslCheck.checked = s.ignoreSsl
+                    if (s.enableNotifications !== undefined) enableNotificationsCheck.checked = s.enableNotifications
                     loadStatus.text = "✓ Loaded!"
-                    loadStatus.color = "green"
+                    loadStatus.color = Kirigami.Theme.positiveTextColor
                 } catch (e) {
                     loadStatus.text = "No defaults saved"
-                    loadStatus.color = "orange"
+                    loadStatus.color = Kirigami.Theme.neutralTextColor
                 }
             }
             disconnectSource(source)
@@ -134,6 +133,33 @@ Item {
                 checked: true
                 text: "Skip certificate verification"
             }
+
+        // Notification info
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Kirigami.Icon {
+                source: "dialog-information"
+                implicitWidth: 16
+                implicitHeight: 16
+                opacity: 0.7
+            }
+
+            QQC2.Label {
+                text: "Notifications are sent when VMs, containers, or nodes change state"
+                font.pixelSize: 11
+                opacity: 0.7
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+
+        Rectangle {
+            Layout.fillWidth: true
+            height: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.3
         }
 
         RowLayout {
@@ -150,7 +176,8 @@ Item {
                         tokenId: tokenIdField.text,
                         tokenSecret: tokenSecretField.text,
                         refreshInterval: refreshField.value,
-                        ignoreSsl: ignoreSslCheck.checked
+                        ignoreSsl: ignoreSslCheck.checked,
+                        enableNotifications: enableNotificationsCheck.checked
                     })
                     saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && echo '" + json + "' > ~/.config/proxmox-plasmoid/settings.json")
                 }

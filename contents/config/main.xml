@@ -23,5 +23,8 @@
         <entry name="defaultSorting" type="String">
             <default>status</default>
         </entry>
+        <entry name="enableNotifications" type="Bool">
+    <default>true</default>
+    </entry>
     </group>
 </kcfg>
