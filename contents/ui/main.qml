@@ -15,20 +15,12 @@ PlasmoidItem {
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
+    property bool enableNotifications: Plasmoid.configuration.enableNotifications !== false
 
     // Raw data (updated during fetch)
     property var proxmoxData: null
     property var vmData: []
     property var lxcData: []
-
-    // DevMode
-    property bool devMode: false
-
-    // Log levels enum-like values
-    readonly property int LOG_DEBUG: 0
-    readonly property int LOG_INFO: 1
-    readonly property int LOG_WARN: 2
-    readonly property int LOG_ERROR: 3
 
     // Displayed data (only updated when all requests complete)
     property var displayedProxmoxData: null
@@ -41,6 +33,7 @@ PlasmoidItem {
     property string lastUpdate: ""
     property bool configured: proxmoxHost !== "" && apiTokenSecret !== ""
     property bool defaultsLoaded: false
+    property bool devMode: false
     property int footerClickCount: 0
     property var footerClickTimer: null
 
@@ -53,6 +46,12 @@ PlasmoidItem {
 
     // Collapsed state tracking for nodes
     property var collapsedNodes: ({})
+
+    // State tracking for notifications
+    property var previousVmStates: ({})
+    property var previousLxcStates: ({})
+    property var previousNodeStates: ({})
+    property bool initialLoadComplete: false
 
     // Anonymization data
     readonly property var anonNodeNames: ["server-01", "server-02", "server-03", "pve-node", "cluster-main"]
@@ -74,36 +73,151 @@ PlasmoidItem {
         return Math.max(200, Math.min(h, 600))
     }
 
-    // Core logging function
-    // Core logging function - checks devMode directly for reactivity
-function log(level, levelName, message) {
-    var currentMinLevel = devMode ? LOG_DEBUG : LOG_WARN
-    if (level >= currentMinLevel) {
-        var now = new Date()
-        var timestamp = now.getHours().toString().padStart(2, '0') + ":" +
-                       now.getMinutes().toString().padStart(2, '0') + ":" +
-                       now.getSeconds().toString().padStart(2, '0') + "." +
-                       now.getMilliseconds().toString().padStart(3, '0')
-        console.log("[Proxmox " + timestamp + " " + levelName + "] " + message)
+    // Verbose logging function
+    function logDebug(message) {
+        if (devMode) {
+            var now = new Date()
+            var timestamp = now.getFullYear() + "-" +
+                (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
+                now.getDate().toString().padStart(2, '0') + " " +
+                now.getHours().toString().padStart(2, '0') + ":" +
+                now.getMinutes().toString().padStart(2, '0') + ":" +
+                now.getSeconds().toString().padStart(2, '0') + "." +
+                now.getMilliseconds().toString().padStart(3, '0')
+            console.log("[Proxmox " + timestamp + "] " + message)
+        }
     }
-}
 
-// Convenience functions for each log level
-function logDebug(message) {
-    log(LOG_DEBUG, "DEBUG", message)
-}
+    // Send desktop notification
+    function sendNotification(title, message, iconName) {
+        if (!enableNotifications) {
+            logDebug("Notification suppressed (disabled): " + title + " - " + message)
+            return
+        }
+        logDebug("Notification: " + title + " - " + message)
+        var icon = iconName || "proxmox-monitor"
+        var safeTitle = title.replace(/'/g, "'\\''")
+        var safeMessage = message.replace(/'/g, "'\\''")
+        var notifyCmd = "notify-send -i '" + icon + "' -a 'Proxmox Monitor' '" + safeTitle + "' '" + safeMessage + "'"
+        executable.connectSource(notifyCmd)
+    }
 
-function logInfo(message) {
-    log(LOG_INFO, "INFO", message)
-}
+    // Check for state changes and send notifications
+    function checkStateChanges() {
+        if (!initialLoadComplete) {
+            logDebug("checkStateChanges: Initial load, recording states")
 
-function logWarn(message) {
-    log(LOG_WARN, "WARN", message)
-}
+            // Record initial node states
+            if (displayedProxmoxData && displayedProxmoxData.data) {
+                for (var n = 0; n < displayedProxmoxData.data.length; n++) {
+                    var node = displayedProxmoxData.data[n]
+                    previousNodeStates[node.node] = node.status
+                }
+            }
 
-function logError(message) {
-    log(LOG_ERROR, "ERROR", message)
-}
+            // Record initial VM states
+            for (var i = 0; i < displayedVmData.length; i++) {
+                var vm = displayedVmData[i]
+                var vmKey = vm.node + "_vm_" + vm.vmid
+                previousVmStates[vmKey] = vm.status
+            }
+
+            // Record initial LXC states
+            for (var j = 0; j < displayedLxcData.length; j++) {
+                var lxc = displayedLxcData[j]
+                var lxcKey = lxc.node + "_lxc_" + lxc.vmid
+                previousLxcStates[lxcKey] = lxc.status
+            }
+
+            initialLoadComplete = true
+            logDebug("checkStateChanges: Recorded " + Object.keys(previousNodeStates).length + " node states, " +
+                     Object.keys(previousVmStates).length + " VM states, " +
+                     Object.keys(previousLxcStates).length + " LXC states")
+            return
+        }
+
+        // Check nodes for state changes
+        if (displayedProxmoxData && displayedProxmoxData.data) {
+            for (var ni = 0; ni < displayedProxmoxData.data.length; ni++) {
+                var nodeData = displayedProxmoxData.data[ni]
+                var prevNodeState = previousNodeStates[nodeData.node]
+
+                if (prevNodeState !== undefined && prevNodeState !== nodeData.status) {
+                    logDebug("checkStateChanges: Node " + nodeData.node + " changed from " + prevNodeState + " to " + nodeData.status)
+
+                    if (prevNodeState === "online" && nodeData.status !== "online") {
+                        sendNotification(
+                            "Node Offline",
+                            nodeData.node + " is now " + nodeData.status,
+                            "dialog-error"
+                        )
+                    } else if (prevNodeState !== "online" && nodeData.status === "online") {
+                        sendNotification(
+                            "Node Online",
+                            nodeData.node + " is back online",
+                            "dialog-information"
+                        )
+                    }
+                }
+                previousNodeStates[nodeData.node] = nodeData.status
+            }
+        }
+
+        // Check VMs for state changes
+        for (var vi = 0; vi < displayedVmData.length; vi++) {
+            var vmData = displayedVmData[vi]
+            var vmStateKey = vmData.node + "_vm_" + vmData.vmid
+            var prevVmState = previousVmStates[vmStateKey]
+
+            if (prevVmState !== undefined && prevVmState !== vmData.status) {
+                logDebug("checkStateChanges: VM " + vmData.name + " changed from " + prevVmState + " to " + vmData.status)
+
+                if (prevVmState === "running" && vmData.status !== "running") {
+                    sendNotification(
+                        "VM Stopped",
+                        vmData.name + " (" + vmData.vmid + ") on " + vmData.node + " is now " + vmData.status,
+                        "dialog-warning"
+                    )
+                } else if (prevVmState !== "running" && vmData.status === "running") {
+                    sendNotification(
+                        "VM Started",
+                        vmData.name + " (" + vmData.vmid + ") on " + vmData.node + " is now running",
+                        "dialog-information"
+                    )
+                }
+            }
+            previousVmStates[vmStateKey] = vmData.status
+        }
+
+        // Check LXCs for state changes
+        for (var li = 0; li < displayedLxcData.length; li++) {
+            var lxcData = displayedLxcData[li]
+            var lxcStateKey = lxcData.node + "_lxc_" + lxcData.vmid
+            var prevLxcState = previousLxcStates[lxcStateKey]
+
+            if (prevLxcState !== undefined && prevLxcState !== lxcData.status) {
+                logDebug("checkStateChanges: LXC " + lxcData.name + " changed from " + prevLxcState + " to " + lxcData.status)
+
+                if (prevLxcState === "running" && lxcData.status !== "running") {
+                    sendNotification(
+                        "Container Stopped",
+                        lxcData.name + " (" + lxcData.vmid + ") on " + lxcData.node + " is now " + lxcData.status,
+                        "dialog-warning"
+                    )
+                } else if (prevLxcState !== "running" && lxcData.status === "running") {
+                    sendNotification(
+                        "Container Started",
+                        lxcData.name + " (" + lxcData.vmid + ") on " + lxcData.node + " is now running",
+                        "dialog-information"
+                    )
+                }
+            }
+            previousLxcStates[lxcStateKey] = lxcData.status
+        }
+
+        logDebug("checkStateChanges: State check complete")
+    }
+
     // Get VMs for a specific node (use displayed data)
     function getVmsForNode(nodeName) {
         var nodeVms = displayedVmData.filter(function(vm) {
@@ -245,7 +359,6 @@ function logError(message) {
     // Check if all node requests are complete - update displayed data atomically
     function checkRequestsComplete() {
         logDebug("checkRequestsComplete: Pending requests: " + pendingNodeRequests)
-
         if (pendingNodeRequests <= 0) {
             logDebug("checkRequestsComplete: All requests complete")
             logDebug("checkRequestsComplete: Nodes: " + nodeList.length + ", VMs: " + tempVmData.length + ", LXCs: " + tempLxcData.length)
@@ -266,7 +379,12 @@ function logError(message) {
 
             // Mark refresh complete
             isRefreshing = false
+            loading = false
+
             logDebug("checkRequestsComplete: Display data updated")
+
+            // Check for state changes and send notifications
+            checkStateChanges()
         }
     }
 
@@ -313,116 +431,122 @@ function logError(message) {
 
     // DataSource for API calls
     Plasma5Support.DataSource {
-    id: executable
-    engine: "executable"
-    connectedSources: []
-    onNewData: function(source, data) {
-        var stdout = data["stdout"]
-        var exitCode = data["exit code"]
+        id: executable
+        engine: "executable"
+        connectedSources: []
+        onNewData: function(source, data) {
+            var stdout = data["stdout"]
+            var exitCode = data["exit code"]
 
-        logDebug("executable: Received response, exit code: " + exitCode)
-
-        if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
-            logDebug("executable: Processing /nodes response")
-
-            if (!displayedProxmoxData) {
-                loading = false
+            // Skip notification command responses
+            if (source.indexOf("notify-send") !== -1) {
+                disconnectSource(source)
+                return
             }
 
-            if (exitCode === 0 && stdout) {
-                try {
-                    proxmoxData = JSON.parse(stdout)
-                    errorMessage = ""
-                    lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
+            logDebug("executable: Received response, exit code: " + exitCode)
 
-                    if (proxmoxData.data && proxmoxData.data.length > 0) {
-                        logInfo("Found " + proxmoxData.data.length + " nodes")
+            if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
+                logDebug("executable: Processing /nodes response")
 
-                        nodeList = proxmoxData.data.map(function(node) {
-                            logDebug("Node: " + node.node + " (status: " + node.status + ", cpu: " + (node.cpu * 100).toFixed(1) + "%)")
-                            return node.node
-                        })
+                if (!displayedProxmoxData) {
+                    loading = false
+                }
 
-                        tempVmData = []
-                        tempLxcData = []
-                        pendingNodeRequests = nodeList.length * 2
-                        logDebug("Starting " + pendingNodeRequests + " requests for VMs/LXCs")
+                if (exitCode === 0 && stdout) {
+                    try {
+                        proxmoxData = JSON.parse(stdout)
+                        errorMessage = ""
+                        lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
 
-                        for (var i = 0; i < nodeList.length; i++) {
-                            fetchVMs(nodeList[i])
-                            fetchLXC(nodeList[i])
+                        if (proxmoxData.data && proxmoxData.data.length > 0) {
+                            logDebug("executable: Found " + proxmoxData.data.length + " nodes")
+
+                            nodeList = proxmoxData.data.map(function(node) {
+                                logDebug("executable: Node: " + node.node + " (status: " + node.status + ", cpu: " + (node.cpu * 100).toFixed(1) + "%)")
+                                return node.node
+                            })
+
+                            tempVmData = []
+                            tempLxcData = []
+                            pendingNodeRequests = nodeList.length * 2
+                            logDebug("executable: Starting " + pendingNodeRequests + " requests for VMs/LXCs")
+
+                            for (var i = 0; i < nodeList.length; i++) {
+                                fetchVMs(nodeList[i])
+                                fetchLXC(nodeList[i])
+                            }
+                        } else {
+                            logDebug("executable: No nodes found in response")
+                            displayedProxmoxData = proxmoxData
+                            displayedNodeList = []
+                            displayedVmData = []
+                            displayedLxcData = []
+                            isRefreshing = false
+                            loading = false
                         }
-                    } else {
-                        logWarn("No nodes found in response")
-                        displayedProxmoxData = proxmoxData
-                        displayedNodeList = []
-                        displayedVmData = []
-                        displayedLxcData = []
+                    } catch (e) {
+                        logDebug("executable: Parse error - " + e)
+                        errorMessage = "Parse error"
                         isRefreshing = false
                         loading = false
                     }
-                } catch (e) {
-                    logError("Parse error - " + e)
-                    errorMessage = "Parse error"
+                } else {
+                    logDebug("executable: Request failed - " + (data["stderr"] || "Unknown error"))
+                    errorMessage = data["stderr"] || "Connection failed"
                     isRefreshing = false
                     loading = false
                 }
-            } else {
-                logError("Request failed - " + (data["stderr"] || "Unknown error"))
-                errorMessage = data["stderr"] || "Connection failed"
-                isRefreshing = false
-                loading = false
-            }
-        } else if (source.indexOf("/qemu") !== -1) {
-            var nodeNameQemu = getNodeFromSource(source)
-            logDebug("Processing /qemu response for node: " + nodeNameQemu)
+            } else if (source.indexOf("/qemu") !== -1) {
+                var nodeNameQemu = getNodeFromSource(source)
+                logDebug("executable: Processing /qemu response for node: " + nodeNameQemu)
 
-            if (exitCode === 0 && stdout) {
-                try {
-                    var resultQemu = JSON.parse(stdout)
-                    if (resultQemu.data) {
-                        logDebug("Found " + resultQemu.data.length + " VMs on " + nodeNameQemu)
-                        for (var j = 0; j < resultQemu.data.length; j++) {
-                            resultQemu.data[j].node = nodeNameQemu
-                            logDebug("VM " + resultQemu.data[j].vmid + ": " + resultQemu.data[j].name + " (" + resultQemu.data[j].status + ")")
-                            tempVmData.push(resultQemu.data[j])
+                if (exitCode === 0 && stdout) {
+                    try {
+                        var resultQemu = JSON.parse(stdout)
+                        if (resultQemu.data) {
+                            logDebug("executable: Found " + resultQemu.data.length + " VMs on " + nodeNameQemu)
+                            for (var j = 0; j < resultQemu.data.length; j++) {
+                                resultQemu.data[j].node = nodeNameQemu
+                                logDebug("executable: VM " + resultQemu.data[j].vmid + ": " + resultQemu.data[j].name + " (" + resultQemu.data[j].status + ")")
+                                tempVmData.push(resultQemu.data[j])
+                            }
                         }
+                    } catch (e) {
+                        logDebug("executable: VM parse error for " + nodeNameQemu + " - " + e)
                     }
-                } catch (e) {
-                    logError("VM parse error for " + nodeNameQemu + " - " + e)
+                } else {
+                    logDebug("executable: VM request failed for " + nodeNameQemu)
                 }
-            } else {
-                logWarn("VM request failed for " + nodeNameQemu)
-            }
-            pendingNodeRequests--
-            checkRequestsComplete()
-        } else if (source.indexOf("/lxc") !== -1) {
-            var nodeNameLxc = getNodeFromSource(source)
-            logDebug("Processing /lxc response for node: " + nodeNameLxc)
+                pendingNodeRequests--
+                checkRequestsComplete()
+            } else if (source.indexOf("/lxc") !== -1) {
+                var nodeNameLxc = getNodeFromSource(source)
+                logDebug("executable: Processing /lxc response for node: " + nodeNameLxc)
 
-            if (exitCode === 0 && stdout) {
-                try {
-                    var resultLxc = JSON.parse(stdout)
-                    if (resultLxc.data) {
-                        logDebug("Found " + resultLxc.data.length + " LXCs on " + nodeNameLxc)
-                        for (var k = 0; k < resultLxc.data.length; k++) {
-                            resultLxc.data[k].node = nodeNameLxc
-                            logDebug("LXC " + resultLxc.data[k].vmid + ": " + resultLxc.data[k].name + " (" + resultLxc.data[k].status + ")")
-                            tempLxcData.push(resultLxc.data[k])
+                if (exitCode === 0 && stdout) {
+                    try {
+                        var resultLxc = JSON.parse(stdout)
+                        if (resultLxc.data) {
+                            logDebug("executable: Found " + resultLxc.data.length + " LXCs on " + nodeNameLxc)
+                            for (var k = 0; k < resultLxc.data.length; k++) {
+                                resultLxc.data[k].node = nodeNameLxc
+                                logDebug("executable: LXC " + resultLxc.data[k].vmid + ": " + resultLxc.data[k].name + " (" + resultLxc.data[k].status + ")")
+                                tempLxcData.push(resultLxc.data[k])
+                            }
                         }
+                    } catch (e) {
+                        logDebug("executable: LXC parse error for " + nodeNameLxc + " - " + e)
                     }
-                } catch (e) {
-                    logError("LXC parse error for " + nodeNameLxc + " - " + e)
+                } else {
+                    logDebug("executable: LXC request failed for " + nodeNameLxc)
                 }
-            } else {
-                logWarn("LXC request failed for " + nodeNameLxc)
+                pendingNodeRequests--
+                checkRequestsComplete()
             }
-            pendingNodeRequests--
-            checkRequestsComplete()
+            disconnectSource(source)
         }
-        disconnectSource(source)
     }
-}
 
     function curlCmd(endpoint) {
         var cmd = "curl " + (ignoreSsl ? "-k " : "") + "-s --connect-timeout 10 'https://" +
