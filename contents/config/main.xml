@@ -24,7 +24,22 @@
             <default>status</default>
         </entry>
         <entry name="enableNotifications" type="Bool">
-    <default>true</default>
+        <default>true</default>
+        </entry>
+        <entry name="notifyMode" type="String">
+        <default>all</default>
+        </entry>
+        <entry name="notifyFilter" type="String">
+        <default></default>
+        </entry>
+        <entry name="notifyOnStop" type="Bool">
+        <default>true</default>
+        </entry>
+        <entry name="notifyOnStart" type="Bool">
+        <default>true</default>
+        </entry>
+        <entry name="notifyOnNodeChange" type="Bool">
+        <default>true</default>
     </entry>
     </group>
 </kcfg>
