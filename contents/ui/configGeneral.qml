@@ -17,7 +17,6 @@ Item {
     property alias cfg_apiTokenSecret: tokenSecretField.text
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
-    property alias cfg_enableNotifications: enableNotificationsCheck.checked
 
     // Required properties for Plasma
     property bool cfg_expanding: false
@@ -35,7 +34,6 @@ Item {
     property string cfg_apiTokenSecretDefault: ""
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
-    property bool cfg_enableNotificationsDefault: true
 
     Plasma5Support.DataSource {
         id: saveExec
@@ -135,14 +133,6 @@ Item {
                 checked: true
                 text: "Skip certificate verification"
             }
-
-            QQC2.Label { text: "Notifications:" }
-            QQC2.CheckBox {
-                id: enableNotificationsCheck
-                checked: true
-                text: "Enable status change notifications"
-            }
-        }
 
         // Notification info
         RowLayout {
