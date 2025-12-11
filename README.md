@@ -1,9 +1,4 @@
 ```markdown
-# Proxmox Monitor - KDE Plasma 6 Widget
-
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![KDE Plasma 6](https://img.shields.io/badge/KDE%20Plasma-6.0+-blue.svg)](https://kde.org/plasma-desktop/)
-[![Proxmox VE](https://img.shields.io/badge/Proxmox%20VE-7.0+-orange.svg)](https://www.proxmox.com/)
 
 A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your desktop panel.
 
