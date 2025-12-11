@@ -399,42 +399,42 @@ PlasmoidItem {
     }
 
     compactRepresentation: Item {
-        implicitWidth: row.implicitWidth
-        implicitHeight: row.implicitHeight
+    implicitWidth: row.implicitWidth + 8  // Added horizontal padding
+    implicitHeight: row.implicitHeight
 
-        RowLayout {
-            id: row
-            anchors.fill: parent
-            spacing: 4
+    RowLayout {
+        id: row
+        anchors.centerIn: parent
+        spacing: 4
 
-            Kirigami.Icon {
-                source: "proxmox-monitor"
-                implicitWidth: 16
-                implicitHeight: 16
-            }
-
-            PlasmaComponents.Label {
-                text: {
-                    if (!configured) return "⚙️"
-                    if (loading) return "..."
-                    if (errorMessage) return "!"
-                    if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
-                        var totalCpu = 0
-                        for (var i = 0; i < displayedProxmoxData.data.length; i++) {
-                            totalCpu += displayedProxmoxData.data[i].cpu
-                        }
-                        return Math.round((totalCpu / displayedProxmoxData.data.length) * 100) + "%"
-                    }
-                    return "-"
-                }
-            }
+        Kirigami.Icon {
+            source: "proxmox-monitor"
+            implicitWidth: 16
+            implicitHeight: 16
         }
 
-        MouseArea {
-            anchors.fill: parent
-            onClicked: root.expanded = !root.expanded
+        PlasmaComponents.Label {
+            text: {
+                if (!configured) return "⚙️"
+                if (loading) return "..."
+                if (errorMessage) return "!"
+                if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
+                    var totalCpu = 0
+                    for (var i = 0; i < displayedProxmoxData.data.length; i++) {
+                        totalCpu += displayedProxmoxData.data[i].cpu
+                    }
+                    return Math.round((totalCpu / displayedProxmoxData.data.length) * 100) + "%"
+                }
+                return "-"
+            }
         }
     }
+
+    MouseArea {
+        anchors.fill: parent
+        onClicked: root.expanded = !root.expanded
+    }
+}
 
     fullRepresentation: ColumnLayout {
         id: fullRep
