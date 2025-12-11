@@ -1,14 +1,13 @@
+// contents/ui/configGeneral.qml
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
+import org.kde.kcmutils as KCM
 
-Item {
+KCM.SimpleKCM {
     id: root
-    width: parent?.width ?? 400
-    height: parent?.height ?? 400
-    property string title: "Connection"
 
     // Connection properties (aliased to UI controls)
     property alias cfg_proxmoxHost: hostField.text
@@ -96,8 +95,8 @@ Item {
     }
 
     ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 20
+        anchors.left: parent.left
+        anchors.right: parent.right
         spacing: 15
 
         // Connection Settings Section
@@ -114,6 +113,7 @@ Item {
 
             QQC2.Label {
                 text: "Host:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
             QQC2.TextField {
                 id: hostField
@@ -123,6 +123,7 @@ Item {
 
             QQC2.Label {
                 text: "Port:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
             QQC2.SpinBox {
                 id: portField
@@ -134,6 +135,7 @@ Item {
 
             QQC2.Label {
                 text: "API Token ID:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
             QQC2.TextField {
                 id: tokenIdField
@@ -143,6 +145,7 @@ Item {
 
             QQC2.Label {
                 text: "API Token Secret:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
             QQC2.TextField {
                 id: tokenSecretField
@@ -153,6 +156,7 @@ Item {
 
             QQC2.Label {
                 text: "Refresh Interval:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
             RowLayout {
                 spacing: 8
@@ -171,6 +175,7 @@ Item {
 
             QQC2.Label {
                 text: "SSL Verification:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
             QQC2.CheckBox {
                 id: ignoreSslCheck
@@ -180,6 +185,7 @@ Item {
 
             QQC2.Label {
                 text: "Notifications:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
             QQC2.CheckBox {
                 id: enableNotificationsCheck
@@ -274,17 +280,16 @@ Item {
             }
         }
 
-        // Spacer
-        Item { Layout.fillHeight: true }
-
-        // API Token Help
+        // Separator
         Rectangle {
             Layout.fillWidth: true
             height: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.3
+            Layout.topMargin: 10
         }
 
+        // API Token Help
         Kirigami.Heading {
             text: "How to Create an API Token"
             level: 3
