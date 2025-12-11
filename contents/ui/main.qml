@@ -21,6 +21,17 @@ PlasmoidItem {
     property var vmData: []
     property var lxcData: []
 
+    // DevMode
+    property bool devMode: false
+
+    // Log levels enum-like values
+    readonly property int LOG_DEBUG: 0
+    readonly property int LOG_INFO: 1
+    readonly property int LOG_WARN: 2
+    readonly property int LOG_ERROR: 3
+    readonly property int minLogLevel: devMode ? LOG_DEBUG : LOG_WARN
+    property bool verboseLogging: devMode  // Can be toggled separately if needed
+
     // Displayed data (only updated when all requests complete)
     property var displayedProxmoxData: null
     property var displayedVmData: []
@@ -32,7 +43,6 @@ PlasmoidItem {
     property string lastUpdate: ""
     property bool configured: proxmoxHost !== "" && apiTokenSecret !== ""
     property bool defaultsLoaded: false
-    property bool devMode: false
     property int footerClickCount: 0
     property var footerClickTimer: null
 
@@ -66,21 +76,36 @@ PlasmoidItem {
         return Math.max(200, Math.min(h, 600))
     }
 
-    // Verbose logging function
-    function logDebug(message) {
-        if (devMode) {
-            var now = new Date()
-            var timestamp = now.getFullYear() + "-" +
-            (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
-            now.getDate().toString().padStart(2, '0') + " " +
-            now.getHours().toString().padStart(2, '0') + ":" +
-            now.getMinutes().toString().padStart(2, '0') + ":" +
-            now.getSeconds().toString().padStart(2, '0') + "." +
-            now.getMilliseconds().toString().padStart(3, '0')
-            console.log("[Proxmox " + timestamp + "] " + message)
-        }
+    // Core logging function
+    // Core logging function - checks devMode directly for reactivity
+function log(level, levelName, message) {
+    var currentMinLevel = devMode ? LOG_DEBUG : LOG_WARN
+    if (level >= currentMinLevel) {
+        var now = new Date()
+        var timestamp = now.getHours().toString().padStart(2, '0') + ":" +
+                       now.getMinutes().toString().padStart(2, '0') + ":" +
+                       now.getSeconds().toString().padStart(2, '0') + "." +
+                       now.getMilliseconds().toString().padStart(3, '0')
+        console.log("[Proxmox " + timestamp + " " + levelName + "] " + message)
     }
+}
 
+// Convenience functions for each log level
+function logDebug(message) {
+    log(LOG_DEBUG, "DEBUG", message)
+}
+
+function logInfo(message) {
+    log(LOG_INFO, "INFO", message)
+}
+
+function logWarn(message) {
+    log(LOG_WARN, "WARN", message)
+}
+
+function logError(message) {
+    log(LOG_ERROR, "ERROR", message)
+}
     // Get VMs for a specific node (use displayed data)
     function getVmsForNode(nodeName) {
         var nodeVms = displayedVmData.filter(function(vm) {
@@ -290,117 +315,116 @@ PlasmoidItem {
 
     // DataSource for API calls
     Plasma5Support.DataSource {
-        id: executable
-        engine: "executable"
-        connectedSources: []
-        onNewData: function(source, data) {
-            var stdout = data["stdout"]
-            var exitCode = data["exit code"]
+    id: executable
+    engine: "executable"
+    connectedSources: []
+    onNewData: function(source, data) {
+        var stdout = data["stdout"]
+        var exitCode = data["exit code"]
 
-            logDebug("executable: Received response, exit code: " + exitCode)
+        logDebug("executable: Received response, exit code: " + exitCode)
 
-            if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
-                logDebug("executable: Processing /nodes response")
+        if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
+            logDebug("executable: Processing /nodes response")
 
-                // Only set loading false on initial load, not refresh
-                if (!displayedProxmoxData) {
-                    loading = false
-                }
+            if (!displayedProxmoxData) {
+                loading = false
+            }
 
-                if (exitCode === 0 && stdout) {
-                    try {
-                        proxmoxData = JSON.parse(stdout)
-                        errorMessage = ""
-                        lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
+            if (exitCode === 0 && stdout) {
+                try {
+                    proxmoxData = JSON.parse(stdout)
+                    errorMessage = ""
+                    lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
 
-                        if (proxmoxData.data && proxmoxData.data.length > 0) {
-                            logDebug("executable: Found " + proxmoxData.data.length + " nodes")
+                    if (proxmoxData.data && proxmoxData.data.length > 0) {
+                        logInfo("Found " + proxmoxData.data.length + " nodes")
 
-                            nodeList = proxmoxData.data.map(function(node) {
-                                logDebug("executable: Node: " + node.node + " (status: " + node.status + ", cpu: " + (node.cpu * 100).toFixed(1) + "%)")
-                                return node.node
-                            })
+                        nodeList = proxmoxData.data.map(function(node) {
+                            logDebug("Node: " + node.node + " (status: " + node.status + ", cpu: " + (node.cpu * 100).toFixed(1) + "%)")
+                            return node.node
+                        })
 
-                            tempVmData = []
-                            tempLxcData = []
-                            pendingNodeRequests = nodeList.length * 2
-                            logDebug("executable: Starting " + pendingNodeRequests + " requests for VMs/LXCs")
+                        tempVmData = []
+                        tempLxcData = []
+                        pendingNodeRequests = nodeList.length * 2
+                        logDebug("Starting " + pendingNodeRequests + " requests for VMs/LXCs")
 
-                            for (var i = 0; i < nodeList.length; i++) {
-                                fetchVMs(nodeList[i])
-                                fetchLXC(nodeList[i])
-                            }
-                        } else {
-                            logDebug("executable: No nodes found in response")
-                            displayedProxmoxData = proxmoxData
-                            displayedNodeList = []
-                            displayedVmData = []
-                            displayedLxcData = []
-                            isRefreshing = false
-                            loading = false
+                        for (var i = 0; i < nodeList.length; i++) {
+                            fetchVMs(nodeList[i])
+                            fetchLXC(nodeList[i])
                         }
-                    } catch (e) {
-                        logDebug("executable: Parse error - " + e)
-                        errorMessage = "Parse error"
+                    } else {
+                        logWarn("No nodes found in response")
+                        displayedProxmoxData = proxmoxData
+                        displayedNodeList = []
+                        displayedVmData = []
+                        displayedLxcData = []
                         isRefreshing = false
                         loading = false
                     }
-                } else {
-                    logDebug("executable: Request failed - " + (data["stderr"] || "Unknown error"))
-                    errorMessage = data["stderr"] || "Connection failed"
+                } catch (e) {
+                    logError("Parse error - " + e)
+                    errorMessage = "Parse error"
                     isRefreshing = false
                     loading = false
                 }
-            } else if (source.indexOf("/qemu") !== -1) {
-                var nodeNameQemu = getNodeFromSource(source)
-                logDebug("executable: Processing /qemu response for node: " + nodeNameQemu)
-
-                if (exitCode === 0 && stdout) {
-                    try {
-                        var resultQemu = JSON.parse(stdout)
-                        if (resultQemu.data) {
-                            logDebug("executable: Found " + resultQemu.data.length + " VMs on " + nodeNameQemu)
-                            for (var j = 0; j < resultQemu.data.length; j++) {
-                                resultQemu.data[j].node = nodeNameQemu
-                                logDebug("executable: VM " + resultQemu.data[j].vmid + ": " + resultQemu.data[j].name + " (" + resultQemu.data[j].status + ")")
-                                tempVmData.push(resultQemu.data[j])
-                            }
-                        }
-                    } catch (e) {
-                        logDebug("executable: VM parse error for " + nodeNameQemu + " - " + e)
-                    }
-                } else {
-                    logDebug("executable: VM request failed for " + nodeNameQemu)
-                }
-                pendingNodeRequests--
-                checkRequestsComplete()
-            } else if (source.indexOf("/lxc") !== -1) {
-                var nodeNameLxc = getNodeFromSource(source)
-                logDebug("executable: Processing /lxc response for node: " + nodeNameLxc)
-
-                if (exitCode === 0 && stdout) {
-                    try {
-                        var resultLxc = JSON.parse(stdout)
-                        if (resultLxc.data) {
-                            logDebug("executable: Found " + resultLxc.data.length + " LXCs on " + nodeNameLxc)
-                            for (var k = 0; k < resultLxc.data.length; k++) {
-                                resultLxc.data[k].node = nodeNameLxc
-                                logDebug("executable: LXC " + resultLxc.data[k].vmid + ": " + resultLxc.data[k].name + " (" + resultLxc.data[k].status + ")")
-                                tempLxcData.push(resultLxc.data[k])
-                            }
-                        }
-                    } catch (e) {
-                        logDebug("executable: LXC parse error for " + nodeNameLxc + " - " + e)
-                    }
-                } else {
-                    logDebug("executable: LXC request failed for " + nodeNameLxc)
-                }
-                pendingNodeRequests--
-                checkRequestsComplete()
+            } else {
+                logError("Request failed - " + (data["stderr"] || "Unknown error"))
+                errorMessage = data["stderr"] || "Connection failed"
+                isRefreshing = false
+                loading = false
             }
-            disconnectSource(source)
+        } else if (source.indexOf("/qemu") !== -1) {
+            var nodeNameQemu = getNodeFromSource(source)
+            logDebug("Processing /qemu response for node: " + nodeNameQemu)
+
+            if (exitCode === 0 && stdout) {
+                try {
+                    var resultQemu = JSON.parse(stdout)
+                    if (resultQemu.data) {
+                        logDebug("Found " + resultQemu.data.length + " VMs on " + nodeNameQemu)
+                        for (var j = 0; j < resultQemu.data.length; j++) {
+                            resultQemu.data[j].node = nodeNameQemu
+                            logDebug("VM " + resultQemu.data[j].vmid + ": " + resultQemu.data[j].name + " (" + resultQemu.data[j].status + ")")
+                            tempVmData.push(resultQemu.data[j])
+                        }
+                    }
+                } catch (e) {
+                    logError("VM parse error for " + nodeNameQemu + " - " + e)
+                }
+            } else {
+                logWarn("VM request failed for " + nodeNameQemu)
+            }
+            pendingNodeRequests--
+            checkRequestsComplete()
+        } else if (source.indexOf("/lxc") !== -1) {
+            var nodeNameLxc = getNodeFromSource(source)
+            logDebug("Processing /lxc response for node: " + nodeNameLxc)
+
+            if (exitCode === 0 && stdout) {
+                try {
+                    var resultLxc = JSON.parse(stdout)
+                    if (resultLxc.data) {
+                        logDebug("Found " + resultLxc.data.length + " LXCs on " + nodeNameLxc)
+                        for (var k = 0; k < resultLxc.data.length; k++) {
+                            resultLxc.data[k].node = nodeNameLxc
+                            logDebug("LXC " + resultLxc.data[k].vmid + ": " + resultLxc.data[k].name + " (" + resultLxc.data[k].status + ")")
+                            tempLxcData.push(resultLxc.data[k])
+                        }
+                    }
+                } catch (e) {
+                    logError("LXC parse error for " + nodeNameLxc + " - " + e)
+                }
+            } else {
+                logWarn("LXC request failed for " + nodeNameLxc)
+            }
+            pendingNodeRequests--
+            checkRequestsComplete()
         }
+        disconnectSource(source)
     }
+}
 
     function curlCmd(endpoint) {
         var cmd = "curl " + (ignoreSsl ? "-k " : "") + "-s --connect-timeout 10 'https://" +
