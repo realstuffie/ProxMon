@@ -58,7 +58,7 @@ git clone https://github.com/realstuffie/ProxMon.git
 cd ProxMon
 
 # Run the install script
-./install.sh
+bash install.sh
 ```
 
 ### Manual Installation
