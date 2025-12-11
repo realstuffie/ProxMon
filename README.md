@@ -43,7 +43,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
   <br>
   <em>Configuration dialog</em>
 </p>
-
+```
 ## Requirements
 
 - KDE Plasma 6.0+
