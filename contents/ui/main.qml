@@ -225,6 +225,13 @@ PlasmoidItem {
         }
     }
 
+    // Verbose logging function
+    function logDebug(message) {
+        if (devMode) {
+            console.log("[Proxmox] " + message)
+        }
+    }
+
     Component.onCompleted: {
         if (!configured) {
             loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
@@ -358,17 +365,22 @@ PlasmoidItem {
     }
 
     function fetchData() {
-        if (!configured) return
+        if (!configured) {
+            logDebug("fetchData: Not configured, skipping")
+            return
+        }
 
-            // Only show loading spinner on initial load
-            if (!displayedProxmoxData) {
-                loading = true
-            } else {
-                isRefreshing = true
-            }
+        if (!displayedProxmoxData) {
+            loading = true
+            logDebug("fetchData: Initial load started")
+        } else {
+            isRefreshing = true
+            logDebug("fetchData: Refresh started")
+        }
 
-            errorMessage = ""
-            executable.connectSource(curlCmd("/nodes"))
+        errorMessage = ""
+        logDebug("fetchData: Requesting /nodes from " + proxmoxHost + ":" + proxmoxPort)
+        executable.connectSource(curlCmd("/nodes"))
     }
 
     function fetchVMs(nodeName) {
