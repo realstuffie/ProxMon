@@ -58,12 +58,12 @@ PlasmoidItem {
     readonly property int calculatedHeight: {
         var h = 50
         if (!configured) return 200
-        if (displayedProxmoxData && displayedProxmoxData.data) h += displayedProxmoxData.data.length * 90
-        if (vmCount > 0) h += 28 + (vmCount * 36)
-        if (lxcCount > 0) h += 28 + (lxcCount * 36)
-        h += 40
-        h += 20
-        return Math.max(200, Math.min(h, 600))
+            if (displayedProxmoxData && displayedProxmoxData.data) h += displayedProxmoxData.data.length * 90
+                if (vmCount > 0) h += 28 + (vmCount * 36)
+                    if (lxcCount > 0) h += 28 + (lxcCount * 36)
+                        h += 40
+                        h += 20
+                        return Math.max(200, Math.min(h, 600))
     }
 
     // Get VMs for a specific node (use displayed data)
@@ -134,27 +134,27 @@ PlasmoidItem {
     // Anonymization functions
     function anonymizeHost(host) {
         if (!devMode) return host
-        return "192.168.x.x"
+            return "192.168.x.x"
     }
 
     function anonymizeNodeName(name, index) {
         if (!devMode) return name
-        return anonNodeNames[index % anonNodeNames.length]
+            return anonNodeNames[index % anonNodeNames.length]
     }
 
     function anonymizeVmName(name, index) {
         if (!devMode) return name
-        return anonVmNames[index % anonVmNames.length]
+            return anonVmNames[index % anonVmNames.length]
     }
 
     function anonymizeLxcName(name, index) {
         if (!devMode) return name
-        return anonLxcNames[index % anonLxcNames.length]
+            return anonLxcNames[index % anonLxcNames.length]
     }
 
     function anonymizeVmId(id, index) {
         if (!devMode) return id
-        return 100 + index
+            return 100 + index
     }
 
     function handleFooterClick() {
@@ -165,36 +165,36 @@ PlasmoidItem {
             console.log("Developer mode: " + (devMode ? "ENABLED" : "DISABLED"))
         }
         if (footerClickTimer) footerClickTimer.destroy()
-        footerClickTimer = Qt.createQmlObject('import QtQuick; Timer { interval: 1000; onTriggered: footerClickCount = 0 }', root)
-        footerClickTimer.start()
+            footerClickTimer = Qt.createQmlObject('import QtQuick; Timer { interval: 1000; onTriggered: footerClickCount = 0 }', root)
+            footerClickTimer.start()
     }
 
     function sortByStatus(data) {
         if (!data || data.length === 0) return []
-        return data.slice().sort(function(a, b) {
-            switch (defaultSorting) {
-                case "status":
-                    var aRunning = (a.status === "running") ? 0 : 1
-                    var bRunning = (b.status === "running") ? 0 : 1
-                    if (aRunning !== bRunning) {
-                        return aRunning - bRunning
-                    }
-                    return a.name.localeCompare(b.name)
-                case "name":
-                    return a.name.localeCompare(b.name)
-                case "nameDesc":
-                    return b.name.localeCompare(a.name)
-                case "id":
-                    return a.vmid - b.vmid
-                case "idDesc":
-                    return b.vmid - a.vmid
-                default:
-                    var aRun = (a.status === "running") ? 0 : 1
-                    var bRun = (b.status === "running") ? 0 : 1
-                    if (aRun !== bRun) return aRun - bRun
-                    return a.name.localeCompare(b.name)
-            }
-        })
+            return data.slice().sort(function(a, b) {
+                switch (defaultSorting) {
+                    case "status":
+                        var aRunning = (a.status === "running") ? 0 : 1
+                        var bRunning = (b.status === "running") ? 0 : 1
+                        if (aRunning !== bRunning) {
+                            return aRunning - bRunning
+                        }
+                        return a.name.localeCompare(b.name)
+                    case "name":
+                        return a.name.localeCompare(b.name)
+                    case "nameDesc":
+                        return b.name.localeCompare(a.name)
+                    case "id":
+                        return a.vmid - b.vmid
+                    case "idDesc":
+                        return b.vmid - a.vmid
+                    default:
+                        var aRun = (a.status === "running") ? 0 : 1
+                        var bRun = (b.status === "running") ? 0 : 1
+                        if (aRun !== bRun) return aRun - bRun
+                            return a.name.localeCompare(b.name)
+                }
+            })
     }
 
     // Get node name from API URL
@@ -240,18 +240,18 @@ PlasmoidItem {
                 try {
                     var s = JSON.parse(data["stdout"])
                     if (s.host) Plasmoid.configuration.proxmoxHost = s.host
-                    if (s.port) Plasmoid.configuration.proxmoxPort = s.port
-                    if (s.tokenId) Plasmoid.configuration.apiTokenId = s.tokenId
-                    if (s.tokenSecret) Plasmoid.configuration.apiTokenSecret = s.tokenSecret
-                    if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
-                    if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
-                    proxmoxHost = s.host || ""
-                    proxmoxPort = s.port || 8006
-                    apiTokenId = s.tokenId || ""
-                    apiTokenSecret = s.tokenSecret || ""
-                    refreshInterval = (s.refreshInterval || 30) * 1000
-                    ignoreSsl = s.ignoreSsl !== false
-                    defaultsLoaded = true
+                        if (s.port) Plasmoid.configuration.proxmoxPort = s.port
+                            if (s.tokenId) Plasmoid.configuration.apiTokenId = s.tokenId
+                                if (s.tokenSecret) Plasmoid.configuration.apiTokenSecret = s.tokenSecret
+                                    if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
+                                        if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
+                                            proxmoxHost = s.host || ""
+                                            proxmoxPort = s.port || 8006
+                                            apiTokenId = s.tokenId || ""
+                                            apiTokenSecret = s.tokenSecret || ""
+                                            refreshInterval = (s.refreshInterval || 30) * 1000
+                                            ignoreSsl = s.ignoreSsl !== false
+                                            defaultsLoaded = true
                 } catch (e) {
                     console.log("No defaults found")
                 }
@@ -353,32 +353,32 @@ PlasmoidItem {
 
     function curlCmd(endpoint) {
         return "curl " + (ignoreSsl ? "-k " : "") + "-s --connect-timeout 10 'https://" +
-               proxmoxHost + ":" + proxmoxPort + "/api2/json" + endpoint +
-               "' -H 'Authorization: PVEAPIToken=" + apiTokenId + "=" + apiTokenSecret + "'"
+        proxmoxHost + ":" + proxmoxPort + "/api2/json" + endpoint +
+        "' -H 'Authorization: PVEAPIToken=" + apiTokenId + "=" + apiTokenSecret + "'"
     }
 
     function fetchData() {
         if (!configured) return
 
-        // Only show loading spinner on initial load
-        if (!displayedProxmoxData) {
-            loading = true
-        } else {
-            isRefreshing = true
-        }
+            // Only show loading spinner on initial load
+            if (!displayedProxmoxData) {
+                loading = true
+            } else {
+                isRefreshing = true
+            }
 
-        errorMessage = ""
-        executable.connectSource(curlCmd("/nodes"))
+            errorMessage = ""
+            executable.connectSource(curlCmd("/nodes"))
     }
 
     function fetchVMs(nodeName) {
         if (!nodeName) return
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/qemu"))
+            executable.connectSource(curlCmd("/nodes/" + nodeName + "/qemu"))
     }
 
     function fetchLXC(nodeName) {
         if (!nodeName)return
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc"))
+            executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc"))
     }
 
     // Use displayed data for counts
@@ -399,13 +399,14 @@ PlasmoidItem {
     }
 
     compactRepresentation: Item {
-        implicitWidth: compactRow.implicitWidth + 12
+        implicitWidth: compactRow.implicitWidth + 4 + 8  // 4 left + 8 right padding
         implicitHeight: compactRow.implicitHeight
 
         RowLayout {
             id: compactRow
             anchors.centerIn: parent
-            spacing: 6
+            anchors.horizontalCenterOffset: -2  // Shift left slightly to account for extra right padding
+            spacing: 4
 
             Kirigami.Icon {
                 id: proxmoxIcon
@@ -456,7 +457,6 @@ PlasmoidItem {
                     }
                 }
 
-                // Reset scale when animation stops
                 Connections {
                     target: root
                     function onLoadingChanged() {
@@ -475,18 +475,19 @@ PlasmoidItem {
             PlasmaComponents.Label {
                 text: {
                     if (!configured) return "⚙️"
-                    if (loading) return "..."
-                    if (errorMessage) return "!"
-                    if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
-                        var totalCpu = 0
-                        for (var i = 0; i < displayedProxmoxData.data.length; i++) {
-                            totalCpu += displayedProxmoxData.data[i].cpu
-                        }
-                        return Math.round((totalCpu / displayedProxmoxData.data.length) * 100) + "%"
-                    }
-                    return "-"
+                        if (loading) return "..."
+                            if (errorMessage) return "!"
+                                if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
+                                    var totalCpu = 0
+                                    for (var i = 0; i < displayedProxmoxData.data.length; i++) {
+                                        totalCpu += displayedProxmoxData.data[i].cpu
+                                    }
+                                    return Math.round((totalCpu / displayedProxmoxData.data.length) * 100) + "%"
+                                }
+                                return "-"
                 }
                 font.pixelSize: 13
+                rightPadding: 6  // Extra padding after the percentage
             }
         }
 
@@ -793,8 +794,8 @@ PlasmoidItem {
 
                                             PlasmaComponents.Label {
                                                 text: modelData.status === "running" ?
-                                                      (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
-                                                      modelData.status
+                                                (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
+                                                modelData.status
                                                 font.pixelSize: 10
                                                 opacity: 0.7
                                             }
@@ -857,8 +858,8 @@ PlasmoidItem {
 
                                             PlasmaComponents.Label {
                                                 text: modelData.status === "running" ?
-                                                      (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
-                                                      modelData.status
+                                                (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G" :
+                                                modelData.status
                                                 font.pixelSize: 10
                                                 opacity: 0.7
                                             }
