@@ -344,7 +344,7 @@ PlasmoidItem {
     // Get total VM count for a node (use displayed data)
     function getTotalVmsForNode(nodeName) {
         var count = 0
-        for (var i = 0; i < displayedV mData.length; i++) {
+        for (var i = 0; i < displayedVmData.length; i++) {
             if (displayedVmData[i].node === nodeName) count++
         }
         return count
