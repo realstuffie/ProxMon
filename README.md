@@ -1,5 +1,3 @@
-Your README.md looks great! Here's a polished version with some improvements:
-
 ```markdown
 # Proxmox Monitor - KDE Plasma 6 Widget
 
