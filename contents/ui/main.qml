@@ -41,7 +41,7 @@ PlasmoidItem {
     property bool isRefreshing: false
     property string errorMessage: ""
     property string lastUpdate: ""
-    property bool configured: proxmoxHost !== "" && apiTokenSecret !== ""
+    property bool configured: proxmoxHost !== "" && apiTokenId !== "" && apiTokenSecret !== ""
     property bool defaultsLoaded: false
     property bool devMode: false
     property int footerClickCount: 0
@@ -504,21 +504,22 @@ PlasmoidItem {
 
     // ==================== API FUNCTIONS ====================
 
-    function curlCmd(endpoint, seq) {
+    function curlCmd(endpoint, seq, kind) {
         var safeHost = escapeShell(proxmoxHost)
         var safeTokenId = escapeShell(apiTokenId)
         var safeTokenSecret = escapeShell(apiTokenSecret)
         var safeEndpoint = escapeShell(endpoint)
         var safeSeq = Number(seq || 0)
+        var safeKind = escapeShell(kind || "unknown")
 
-        // Note: the #seq=... suffix is only to tag DataSource "source" strings.
-        // It is not part of the URL (because it's after the shell command).
+        // Note: the #seq=... and #kind=... suffixes are only to tag DataSource "source" strings.
+        // They are not part of the URL (because they're after the shell command).
         var cmd = "curl " + (ignoreSsl ? "-k " : "") +
             "-s --connect-timeout 10 'https://" + safeHost + ":" + proxmoxPort +
             "/api2/json" + safeEndpoint + "' -H 'Authorization: PVEAPIToken=" +
-            safeTokenId + "=" + safeTokenSecret + "' #seq=" + safeSeq
+            safeTokenId + "=" + safeTokenSecret + "' #seq=" + safeSeq + " #kind=" + safeKind
 
-        logDebug("curlCmd: " + endpoint + " (seq=" + safeSeq + ")")
+        logDebug("curlCmd: " + endpoint + " (seq=" + safeSeq + ", kind=" + safeKind + ")")
         return cmd
     }
 
@@ -565,19 +566,19 @@ PlasmoidItem {
         refreshWatchdog.restart()
 
         logDebug("fetchData: Requesting /nodes from " + proxmoxHost + ":" + proxmoxPort)
-        executable.connectSource(curlCmd("/nodes", refreshSeq))
+        executable.connectSource(curlCmd("/nodes", refreshSeq, "nodes"))
     }
 
     function fetchVMs(nodeName) {
         if (!nodeName) return
         logDebug("fetchVMs: Requesting VMs for node: " + nodeName)
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/qemu", refreshSeq))
+        executable.connectSource(curlCmd("/nodes/" + nodeName + "/qemu", refreshSeq, "qemu"))
     }
 
     function fetchLXC(nodeName) {
         if (!nodeName) return
         logDebug("fetchLXC: Requesting LXCs for node: " + nodeName)
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc", refreshSeq))
+        executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc", refreshSeq, "lxc"))
     }
 
     // Use displayed data for counts
@@ -676,7 +677,10 @@ PlasmoidItem {
 
             logDebug("executable: Received response, exit code: " + exitCode)
 
-            if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
+            var kindMatch = source.match(/#kind=([^\s]+)/)
+            var kind = kindMatch ? kindMatch[1] : ""
+
+            if (kind === "nodes") {
                 logDebug("executable: Processing /nodes response")
 
                 if (!displayedProxmoxData) {
@@ -728,7 +732,7 @@ PlasmoidItem {
                     isRefreshing = false
                     loading = false
                 }
-            } else if (source.indexOf("/qemu") !== -1) {
+            } else if (kind === "qemu") {
                 var nodeNameQemu = getNodeFromSource(source)
                 logDebug("executable: Processing /qemu response for node: " + nodeNameQemu)
 
@@ -754,7 +758,7 @@ PlasmoidItem {
                 pendingNodeRequests--
                 checkRequestsComplete()
 
-            } else if (source.indexOf("/lxc") !== -1) {
+            } else if (kind === "lxc") {
                 var nodeNameLxc = getNodeFromSource(source)
                 logDebug("executable: Processing /lxc response for node: " + nodeNameLxc)
 
