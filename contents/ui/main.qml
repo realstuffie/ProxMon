@@ -5,6 +5,7 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
+import org.kde.plasma.proxmox 1.0 as ProxMon
 
 PlasmoidItem {
     id: root
@@ -91,11 +92,84 @@ PlasmoidItem {
 
     // ==================== UTILITY FUNCTIONS ====================
 
-    // Shell escape function to prevent command injection
-    function escapeShell(str) {
-        if (!str) return ""
-        return str.replace(/'/g, "'\\''")
+        // Shell escape function to prevent command injection
+        function escapeShell(str) {
+            if (!str) return ""
+            return str.replace(/'/g, "'\\''")
+        }
+ 
+        ProxMon.ProxmoxClient {
+        id: api
+        host: proxmoxHost
+        port: proxmoxPort
+        tokenId: apiTokenId
+        tokenSecret: apiTokenSecret
+        ignoreSslErrors: ignoreSsl
+
+        onReply: function(seq, kind, node, data) {
+            // Ignore late responses from older refresh cycles
+            if (seq !== refreshSeq) return
+
+            if (kind === "nodes") {
+                if (!displayedProxmoxData) {
+                    loading = false
+                }
+
+                proxmoxData = data
+                errorMessage = ""
+                lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
+
+                if (proxmoxData && proxmoxData.data && proxmoxData.data.length > 0) {
+                    nodeList = proxmoxData.data.map(function(n) { return n.node })
+
+                    tempVmData = []
+                    tempLxcData = []
+                    pendingNodeRequests = nodeList.length * 2
+    
+                    for (var i = 0; i < nodeList.length; i++) {
+                        api.requestQemu(nodeList[i], refreshSeq)
+                        api.requestLxc(nodeList[i], refreshSeq)
+                    }
+                } else {
+                    displayedProxmoxData = proxmoxData
+                    displayedNodeList = []
+                    displayedVmData = []
+                    displayedLxcData = []
+                    isRefreshing = false
+                    loading = false
+                }
+            } else if (kind === "qemu") {
+                if (data && data.data) {
+                    for (var j = 0; j < data.data.length; j++) {
+                            data.data[j].node = node
+                        tempVmData.push(data.data[j])
+                    }
+                }
+                pendingNodeRequests--
+                checkRequestsComplete()
+            } else if (kind === "lxc") {
+                if (data && data.data) {
+                    for (var k = 0; k < data.data.length; k++) {
+                        data.data[k].node = node
+                        tempLxcData.push(data.data[k])
+                    }
+                }
+                pendingNodeRequests--
+                checkRequestsComplete()
+            }
+        }
+
+        onError: function(seq, kind, node, message) {
+            if (seq !== refreshSeq) return
+    
+            logDebug("api error: " + kind + " " + node + " - " + message)
+            errorMessage = message || "Connection failed"
+            pendingNodeRequests = 0
+            isRefreshing = false
+            loading = false
+        }
     }
+
 
     // Verbose logging function
     function logDebug(message) {
