@@ -254,7 +254,11 @@ KCM.SimpleKCM {
                     }
                     var json = JSON.stringify(settings)
                     var safeJson = escapeForShell(json)
-                    saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && echo '" + safeJson + "' > ~/.config/proxmox-plasmoid/settings.json")
+
+                    // Use printf (more predictable than echo) and avoid newlines
+                    safeJson = safeJson.replace(/[\r\n]+/g, " ")
+
+                    saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && printf '%s' '" + safeJson + "' > ~/.config/proxmox-plasmoid/settings.json")
                 }
             }
 
