@@ -23,6 +23,12 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - [ ] Backup status
 - [ ] Kde5 Compatible Version
 
+
+
+### Known Bugs/Limitations
+
+API token Secret is present in the curl command (visible in process list)
+
 ## Screenshots
 
 <p align="center">
