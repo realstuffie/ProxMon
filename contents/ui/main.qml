@@ -114,14 +114,24 @@ PlasmoidItem {
 
     // ==================== NOTIFICATION FUNCTIONS ====================
 
+    // Escape regex special chars except "*" (handled as wildcard)
+    function escapeRegexPattern(str) {
+        if (!str) return ""
+        // Escape everything that has meaning in a regex
+        return str.replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+    }
+
     // Check if a VM/container should trigger notifications based on filter
     function shouldNotify(name, vmid) {
         if (notifyMode === "all") {
             return true
         }
 
+        // Empty filter behavior:
+        // - whitelist: nothing matches => no notifications
+        // - blacklist: nothing excluded => notify everything
         if (!notifyFilter || notifyFilter.trim() === "") {
-            return notifyMode === "all"
+            return notifyMode === "blacklist"
         }
 
         var filters = notifyFilter.split(",").map(function(f) {
@@ -131,7 +141,7 @@ PlasmoidItem {
         })
 
         if (filters.length === 0) {
-            return notifyMode === "all"
+            return notifyMode === "blacklist"
         }
 
         var nameL = (name || "").toLowerCase()
@@ -140,7 +150,8 @@ PlasmoidItem {
         var matches = filters.some(function(filter) {
             // Check for wildcard patterns
             if (filter.indexOf("*") !== -1) {
-                var regex = new RegExp("^" + filter.replace(/\*/g, ".*") + "$")
+                var escaped = escapeRegexPattern(filter).replace(/\\\*/g, ".*")
+                var regex = new RegExp("^" + escaped + "$")
                 return regex.test(nameL) || regex.test(vmidStr)
             }
             // Exact match on name or vmid
@@ -162,6 +173,10 @@ PlasmoidItem {
             logDebug("Notification suppressed (disabled): " + title + " - " + message)
             return
         }
+
+        // Prevent newlines from breaking the shell command
+        title = (title || "").replace(/[\r\n]+/g, " ")
+        message = (message || "").replace(/[\r\n]+/g, " ")
 
         logDebug("Notification: " + title + " - " + message)
 
@@ -457,6 +472,8 @@ PlasmoidItem {
         logDebug("checkRequestsComplete: Pending requests: " + pendingNodeRequests)
 
         if (pendingNodeRequests <= 0) {
+            refreshWatchdog.stop()
+
             logDebug("checkRequestsComplete: All requests complete")
             logDebug("checkRequestsComplete: Nodes: " + nodeList.length + ", VMs: " + tempVmData.length + ", LXCs: " + tempLxcData.length)
 
@@ -487,19 +504,40 @@ PlasmoidItem {
 
     // ==================== API FUNCTIONS ====================
 
-    function curlCmd(endpoint) {
+    function curlCmd(endpoint, seq) {
         var safeHost = escapeShell(proxmoxHost)
         var safeTokenId = escapeShell(apiTokenId)
         var safeTokenSecret = escapeShell(apiTokenSecret)
         var safeEndpoint = escapeShell(endpoint)
+        var safeSeq = Number(seq || 0)
 
+        // Note: the #seq=... suffix is only to tag DataSource "source" strings.
+        // It is not part of the URL (because it's after the shell command).
         var cmd = "curl " + (ignoreSsl ? "-k " : "") +
             "-s --connect-timeout 10 'https://" + safeHost + ":" + proxmoxPort +
             "/api2/json" + safeEndpoint + "' -H 'Authorization: PVEAPIToken=" +
-            safeTokenId + "=" + safeTokenSecret + "'"
+            safeTokenId + "=" + safeTokenSecret + "' #seq=" + safeSeq
 
-        logDebug("curlCmd: " + endpoint)
+        logDebug("curlCmd: " + endpoint + " (seq=" + safeSeq + ")")
         return cmd
+    }
+
+    // Sequencing for refreshes so we can ignore late responses from older refresh cycles
+    property int refreshSeq: 0
+
+    Timer {
+        id: refreshWatchdog
+        interval: 15000
+        repeat: false
+        onTriggered: {
+            if (pendingNodeRequests > 0) {
+                logDebug("refreshWatchdog: Timed out, pending requests: " + pendingNodeRequests)
+                errorMessage = "Request timed out"
+                pendingNodeRequests = 0
+                isRefreshing = false
+                loading = false
+            }
+        }
     }
 
     function fetchData() {
@@ -507,6 +545,8 @@ PlasmoidItem {
             logDebug("fetchData: Not configured, skipping")
             return
         }
+
+        refreshSeq++
 
         if (!displayedProxmoxData) {
             loading = true
@@ -516,21 +556,28 @@ PlasmoidItem {
             logDebug("fetchData: Refresh started")
         }
 
+        // Reset temp state for this refresh cycle
+        pendingNodeRequests = 0
+        tempVmData = []
+        tempLxcData = []
         errorMessage = ""
+
+        refreshWatchdog.restart()
+
         logDebug("fetchData: Requesting /nodes from " + proxmoxHost + ":" + proxmoxPort)
-        executable.connectSource(curlCmd("/nodes"))
+        executable.connectSource(curlCmd("/nodes", refreshSeq))
     }
 
     function fetchVMs(nodeName) {
         if (!nodeName) return
         logDebug("fetchVMs: Requesting VMs for node: " + nodeName)
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/qemu"))
+        executable.connectSource(curlCmd("/nodes/" + nodeName + "/qemu", refreshSeq))
     }
 
     function fetchLXC(nodeName) {
         if (!nodeName) return
         logDebug("fetchLXC: Requesting LXCs for node: " + nodeName)
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc"))
+        executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc", refreshSeq))
     }
 
     // Use displayed data for counts
@@ -614,6 +661,15 @@ PlasmoidItem {
 
             // Skip notification command responses
             if (source.indexOf("notify-send") !== -1) {
+                disconnectSource(source)
+                return
+            }
+
+            // Ignore late responses from older refresh cycles
+            var seqMatch = source.match(/#seq=(\d+)/)
+            var seq = seqMatch ? Number(seqMatch[1]) : 0
+            if (seq !== refreshSeq) {
+                logDebug("executable: Ignoring stale response (seq=" + seq + ", current=" + refreshSeq + ")")
                 disconnectSource(source)
                 return
             }
