@@ -578,25 +578,6 @@ PlasmoidItem {
 
     // ==================== API FUNCTIONS ====================
 
-    function curlCmd(endpoint, seq, kind) {
-        var safeHost = escapeShell(proxmoxHost)
-        var safeTokenId = escapeShell(apiTokenId)
-        var safeTokenSecret = escapeShell(apiTokenSecret)
-        var safeEndpoint = escapeShell(endpoint)
-        var safeSeq = Number(seq || 0)
-        var safeKind = escapeShell(kind || "unknown")
-
-        // Note: the #seq=... and #kind=... suffixes are only to tag DataSource "source" strings.
-        // They are not part of the URL (because they're after the shell command).
-        var cmd = "curl " + (ignoreSsl ? "-k " : "") +
-            "-s --connect-timeout 10 'https://" + safeHost + ":" + proxmoxPort +
-            "/api2/json" + safeEndpoint + "' -H 'Authorization: PVEAPIToken=" +
-            safeTokenId + "=" + safeTokenSecret + "' #seq=" + safeSeq + " #kind=" + safeKind
-
-        logDebug("curlCmd: " + endpoint + " (seq=" + safeSeq + ", kind=" + safeKind + ")")
-        return cmd
-    }
-
     // Sequencing for refreshes so we can ignore late responses from older refresh cycles
     property int refreshSeq: 0
 
@@ -640,19 +621,19 @@ PlasmoidItem {
         refreshWatchdog.restart()
 
         logDebug("fetchData: Requesting /nodes from " + proxmoxHost + ":" + proxmoxPort)
-        executable.connectSource(curlCmd("/nodes", refreshSeq, "nodes"))
+        api.requestNodes(refreshSeq)
     }
 
     function fetchVMs(nodeName) {
         if (!nodeName) return
         logDebug("fetchVMs: Requesting VMs for node: " + nodeName)
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/qemu", refreshSeq, "qemu"))
+        api.requestNodes(refreshSeq)
     }
 
     function fetchLXC(nodeName) {
         if (!nodeName) return
         logDebug("fetchLXC: Requesting LXCs for node: " + nodeName)
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc", refreshSeq, "lxc"))
+        api.requestLxc(nodeName, refreshSeq)
     }
 
     // Use displayed data for counts
