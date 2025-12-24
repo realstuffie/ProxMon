@@ -27,7 +27,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Known Bugs/Limitations
 
-API token Secret is present in the curl command (visible in process list)
+API token Secret is present in the curl command (visible in process list) Working on migrating to api Module
 
 ## Screenshots
 
