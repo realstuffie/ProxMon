@@ -67,6 +67,8 @@ cd ProxMon
 bash install.sh
 ```
 
+> Note: Build output is not committed to the repository. The install script builds the native plugin in a temporary directory and stages the resulting `.so` into the plasmoid package.
+
 ### Manual Installation
 
 ```bash
