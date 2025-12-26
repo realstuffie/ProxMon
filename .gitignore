@@ -1,0 +1,90 @@
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/
+*.swp
+*~
+
+# ---- CMake / Qt / build artifacts ----
+# Prefer out-of-source builds, but ignore any in-tree build dirs too.
+build/
+**/build/
+
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+compile_commands.json
+install_manifest.txt
+
+*_autogen/
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+
+# ---- Binaries / objects ----
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+
+# ---- Logs / misc ----
+*.log
+
+# ---- Local tooling ----
+qmlls.ini
+
+# ---- IDE / tooling (common safe defaults) ----
+# VS Code
+*.code-workspace
+.vscode/
+
+# JetBrains
+.idea/
+*.iml
+
+# Vim / Emacs / other editors
+*.swp
+*.swo
+*.swn
+*~
+\#*\#
+.\#*
+*.orig
+*.rej
+
+# Qt Creator
+*.user
+*.user.*
+*.creator
+*.creator.*
+*.files
+*.includes
+*.config
+
+# clangd / ccls
+.cache/
+.clangd/
+.ccls-cache/
+
+# macOS / Windows extra noise
+.AppleDouble
+.LSOverride
+Desktop.ini
+
+# Python / Node misc caches (often created by tooling even in non-Python/Node projects)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*

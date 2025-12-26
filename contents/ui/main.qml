@@ -5,6 +5,7 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
+import org.kde.plasma.proxmox 1.0 as ProxMon
 
 PlasmoidItem {
     id: root
@@ -41,7 +42,7 @@ PlasmoidItem {
     property bool isRefreshing: false
     property string errorMessage: ""
     property string lastUpdate: ""
-    property bool configured: proxmoxHost !== "" && apiTokenSecret !== ""
+    property bool configured: proxmoxHost !== "" && apiTokenId !== "" && apiTokenSecret !== ""
     property bool defaultsLoaded: false
     property bool devMode: false
     property int footerClickCount: 0
@@ -91,11 +92,84 @@ PlasmoidItem {
 
     // ==================== UTILITY FUNCTIONS ====================
 
-    // Shell escape function to prevent command injection
-    function escapeShell(str) {
-        if (!str) return ""
-        return str.replace(/'/g, "'\\''")
+        // Shell escape function to prevent command injection
+        function escapeShell(str) {
+            if (!str) return ""
+            return str.replace(/'/g, "'\\''")
+        }
+ 
+        ProxMon.ProxmoxClient {
+        id: api
+        host: proxmoxHost
+        port: proxmoxPort
+        tokenId: apiTokenId
+        tokenSecret: apiTokenSecret
+        ignoreSslErrors: ignoreSsl
+
+        onReply: function(seq, kind, node, data) {
+            // Ignore late responses from older refresh cycles
+            if (seq !== refreshSeq) return
+
+            if (kind === "nodes") {
+                if (!displayedProxmoxData) {
+                    loading = false
+                }
+
+                proxmoxData = data
+                errorMessage = ""
+                lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
+
+                if (proxmoxData && proxmoxData.data && proxmoxData.data.length > 0) {
+                    nodeList = proxmoxData.data.map(function(n) { return n.node })
+
+                    tempVmData = []
+                    tempLxcData = []
+                    pendingNodeRequests = nodeList.length * 2
+    
+                    for (var i = 0; i < nodeList.length; i++) {
+                        api.requestQemu(nodeList[i], refreshSeq)
+                        api.requestLxc(nodeList[i], refreshSeq)
+                    }
+                } else {
+                    displayedProxmoxData = proxmoxData
+                    displayedNodeList = []
+                    displayedVmData = []
+                    displayedLxcData = []
+                    isRefreshing = false
+                    loading = false
+                }
+            } else if (kind === "qemu") {
+                if (data && data.data) {
+                    for (var j = 0; j < data.data.length; j++) {
+                            data.data[j].node = node
+                        tempVmData.push(data.data[j])
+                    }
+                }
+                pendingNodeRequests--
+                checkRequestsComplete()
+            } else if (kind === "lxc") {
+                if (data && data.data) {
+                    for (var k = 0; k < data.data.length; k++) {
+                        data.data[k].node = node
+                        tempLxcData.push(data.data[k])
+                    }
+                }
+                pendingNodeRequests--
+                checkRequestsComplete()
+            }
+        }
+
+        onError: function(seq, kind, node, message) {
+            if (seq !== refreshSeq) return
+    
+            logDebug("api error: " + kind + " " + node + " - " + message)
+            errorMessage = message || "Connection failed"
+            pendingNodeRequests = 0
+            isRefreshing = false
+            loading = false
+        }
     }
+
 
     // Verbose logging function
     function logDebug(message) {
@@ -504,24 +578,6 @@ PlasmoidItem {
 
     // ==================== API FUNCTIONS ====================
 
-    function curlCmd(endpoint, seq) {
-        var safeHost = escapeShell(proxmoxHost)
-        var safeTokenId = escapeShell(apiTokenId)
-        var safeTokenSecret = escapeShell(apiTokenSecret)
-        var safeEndpoint = escapeShell(endpoint)
-        var safeSeq = Number(seq || 0)
-
-        // Note: the #seq=... suffix is only to tag DataSource "source" strings.
-        // It is not part of the URL (because it's after the shell command).
-        var cmd = "curl " + (ignoreSsl ? "-k " : "") +
-            "-s --connect-timeout 10 'https://" + safeHost + ":" + proxmoxPort +
-            "/api2/json" + safeEndpoint + "' -H 'Authorization: PVEAPIToken=" +
-            safeTokenId + "=" + safeTokenSecret + "' #seq=" + safeSeq
-
-        logDebug("curlCmd: " + endpoint + " (seq=" + safeSeq + ")")
-        return cmd
-    }
-
     // Sequencing for refreshes so we can ignore late responses from older refresh cycles
     property int refreshSeq: 0
 
@@ -565,19 +621,19 @@ PlasmoidItem {
         refreshWatchdog.restart()
 
         logDebug("fetchData: Requesting /nodes from " + proxmoxHost + ":" + proxmoxPort)
-        executable.connectSource(curlCmd("/nodes", refreshSeq))
+        api.requestNodes(refreshSeq)
     }
 
     function fetchVMs(nodeName) {
         if (!nodeName) return
         logDebug("fetchVMs: Requesting VMs for node: " + nodeName)
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/qemu", refreshSeq))
+        api.requestNodes(refreshSeq)
     }
 
     function fetchLXC(nodeName) {
         if (!nodeName) return
         logDebug("fetchLXC: Requesting LXCs for node: " + nodeName)
-        executable.connectSource(curlCmd("/nodes/" + nodeName + "/lxc", refreshSeq))
+        api.requestLxc(nodeName, refreshSeq)
     }
 
     // Use displayed data for counts
@@ -676,7 +732,10 @@ PlasmoidItem {
 
             logDebug("executable: Received response, exit code: " + exitCode)
 
-            if (source.indexOf("/nodes\"") !== -1 || source.indexOf("/nodes'") !== -1) {
+            var kindMatch = source.match(/#kind=([^\s]+)/)
+            var kind = kindMatch ? kindMatch[1] : ""
+
+            if (kind === "nodes") {
                 logDebug("executable: Processing /nodes response")
 
                 if (!displayedProxmoxData) {
@@ -728,7 +787,7 @@ PlasmoidItem {
                     isRefreshing = false
                     loading = false
                 }
-            } else if (source.indexOf("/qemu") !== -1) {
+            } else if (kind === "qemu") {
                 var nodeNameQemu = getNodeFromSource(source)
                 logDebug("executable: Processing /qemu response for node: " + nodeNameQemu)
 
@@ -754,7 +813,7 @@ PlasmoidItem {
                 pendingNodeRequests--
                 checkRequestsComplete()
 
-            } else if (source.indexOf("/lxc") !== -1) {
+            } else if (kind === "lxc") {
                 var nodeNameLxc = getNodeFromSource(source)
                 logDebug("executable: Processing /lxc response for node: " + nodeNameLxc)
 
