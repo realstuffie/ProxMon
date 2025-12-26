@@ -267,6 +267,8 @@ See [LICENSE](LICENSE) for details.
 - [KDE Plasma](https://kde.org/plasma-desktop/) - Desktop environment
 
 ## Changelog
+### v0.3.3
+- Security hardening
 
 ### v0.3.2
 - Refresh of screenshots
