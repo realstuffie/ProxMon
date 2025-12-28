@@ -14,6 +14,8 @@ PlasmoidItem {
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
+    // Secret is stored in the system keyring via SecretStore (QtKeychain).
+    // Keep Plasmoid.configuration.apiTokenSecret as a backward-compatible fallback only.
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
@@ -627,7 +629,7 @@ PlasmoidItem {
     function fetchVMs(nodeName) {
         if (!nodeName) return
         logDebug("fetchVMs: Requesting VMs for node: " + nodeName)
-        api.requestNodes(refreshSeq)
+        api.requestQemu(nodeName, refreshSeq)
     }
 
     function fetchLXC(nodeName) {
@@ -655,8 +657,33 @@ PlasmoidItem {
 
     // ==================== INITIALIZATION ====================
 
+    ProxMon.SecretStore {
+        id: secretStore
+        service: "ProxMon"
+        key: "apiTokenSecret:" + apiTokenId + "@" + proxmoxHost + ":" + proxmoxPort
+
+        onSecretReady: function(secret) {
+            if (secret && secret.length > 0) {
+                logDebug("secretStore: Secret loaded from keyring")
+                apiTokenSecret = secret
+            } else {
+                // Fallback to existing config value if no keyring entry exists
+                logDebug("secretStore: No keyring secret found (or empty), using config fallback")
+            }
+        }
+
+        onError: function(message) {
+            logDebug("secretStore: " + message)
+        }
+    }
+
     Component.onCompleted: {
         logDebug("Component.onCompleted: Plasmoid initialized")
+        // Load secret as early as possible
+        if (apiTokenId && proxmoxHost) {
+            secretStore.readSecret()
+        }
+
         if (!configured) {
             logDebug("Component.onCompleted: Not configured, loading defaults")
             loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
@@ -705,141 +732,16 @@ PlasmoidItem {
         }
     }
 
-    // DataSource for API calls
+    // DataSource for running local commands (notifications + reading defaults).
+    // NOTE: API calls are handled by the native ProxMon.ProxmoxClient (QNetworkAccessManager),
+    // so we intentionally do NOT fetch Proxmox data via "executable" anymore.
     Plasma5Support.DataSource {
         id: executable
         engine: "executable"
         connectedSources: []
 
         onNewData: function(source, data) {
-            var stdout = data["stdout"]
-            var exitCode = data["exit code"]
-
-            // Skip notification command responses
-            if (source.indexOf("notify-send") !== -1) {
-                disconnectSource(source)
-                return
-            }
-
-            // Ignore late responses from older refresh cycles
-            var seqMatch = source.match(/#seq=(\d+)/)
-            var seq = seqMatch ? Number(seqMatch[1]) : 0
-            if (seq !== refreshSeq) {
-                logDebug("executable: Ignoring stale response (seq=" + seq + ", current=" + refreshSeq + ")")
-                disconnectSource(source)
-                return
-            }
-
-            logDebug("executable: Received response, exit code: " + exitCode)
-
-            var kindMatch = source.match(/#kind=([^\s]+)/)
-            var kind = kindMatch ? kindMatch[1] : ""
-
-            if (kind === "nodes") {
-                logDebug("executable: Processing /nodes response")
-
-                if (!displayedProxmoxData) {
-                    loading = false
-                }
-
-                if (exitCode === 0 && stdout) {
-                    try {
-                        proxmoxData = JSON.parse(stdout)
-                        errorMessage = ""
-                        lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
-
-                        if (proxmoxData.data && proxmoxData.data.length > 0) {
-                            logDebug("executable: Found " + proxmoxData.data.length + " nodes")
-
-                            nodeList = proxmoxData.data.map(function(node) {
-                                logDebug("executable: Node: " + node.node + " (status: " + node.status + ", cpu: " + (node.cpu * 100).toFixed(1) + "%)")
-                                return node.node
-                            })
-
-                            tempVmData = []
-                            tempLxcData = []
-                            pendingNodeRequests = nodeList.length * 2
-
-                            logDebug("executable: Starting " + pendingNodeRequests + " requests for VMs/LXCs")
-
-                            for (var i = 0; i < nodeList.length; i++) {
-                                fetchVMs(nodeList[i])
-                                fetchLXC(nodeList[i])
-                            }
-                        } else {
-                            logDebug("executable: No nodes found in response")
-                            displayedProxmoxData = proxmoxData
-                            displayedNodeList = []
-                            displayedVmData = []
-                            displayedLxcData = []
-                            isRefreshing = false
-                            loading = false
-                        }
-                    } catch (e) {
-                        logDebug("executable: Parse error - " + e)
-                        errorMessage = "Parse error"
-                        isRefreshing = false
-                        loading = false
-                    }
-                } else {
-                    logDebug("executable: Request failed - " + (data["stderr"] || "Unknown error"))
-                    errorMessage = data["stderr"] || "Connection failed"
-                    isRefreshing = false
-                    loading = false
-                }
-            } else if (kind === "qemu") {
-                var nodeNameQemu = getNodeFromSource(source)
-                logDebug("executable: Processing /qemu response for node: " + nodeNameQemu)
-
-                if (exitCode === 0 && stdout) {
-                    try {
-                        var resultQemu = JSON.parse(stdout)
-                        if (resultQemu.data) {
-                            logDebug("executable: Found " + resultQemu.data.length + " VMs on " + nodeNameQemu)
-
-                            for (var j = 0; j < resultQemu.data.length; j++) {
-                                resultQemu.data[j].node = nodeNameQemu
-                                logDebug("executable: VM " + resultQemu.data[j].vmid + ": " + resultQemu.data[j].name + " (" + resultQemu.data[j].status + ")")
-                                tempVmData.push(resultQemu.data[j])
-                            }
-                        }
-                    } catch (e) {
-                        logDebug("executable: VM parse error for " + nodeNameQemu + " - " + e)
-                    }
-                } else {
-                    logDebug("executable: VM request failed for " + nodeNameQemu)
-                }
-
-                pendingNodeRequests--
-                checkRequestsComplete()
-
-            } else if (kind === "lxc") {
-                var nodeNameLxc = getNodeFromSource(source)
-                logDebug("executable: Processing /lxc response for node: " + nodeNameLxc)
-
-                if (exitCode === 0 && stdout) {
-                    try {
-                        var resultLxc = JSON.parse(stdout)
-                        if (resultLxc.data) {
-                            logDebug("executable: Found " + resultLxc.data.length + " LXCs on " + nodeNameLxc)
-
-                            for (var k = 0; k < resultLxc.data.length; k++) {
-                                resultLxc.data[k].node = nodeNameLxc
-                                logDebug("executable: LXC " + resultLxc.data[k].vmid + ": " + resultLxc.data[k].name + " (" + resultLxc.data[k].status + ")")
-                                tempLxcData.push(resultLxc.data[k])
-                            }
-                        }
-                    } catch (e) {
-                        logDebug("executable: LXC parse error for " + nodeNameLxc + " - " + e)
-                    }
-                } else {
-                    logDebug("executable: LXC request failed for " + nodeNameLxc)
-                }
-
-                pendingNodeRequests--
-                checkRequestsComplete()
-            }
-
+            // We only use this datasource for fire-and-forget notify-send and for loadDefaults ("cat ...").
             disconnectSource(source)
         }
     }

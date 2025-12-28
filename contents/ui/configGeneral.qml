@@ -4,6 +4,7 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.kcmutils as KCM
+import org.kde.plasma.proxmox 1.0 as ProxMon
 
 KCM.SimpleKCM {
     id: root
@@ -93,6 +94,27 @@ KCM.SimpleKCM {
         return str.replace(/\\/g, "\\\\").replace(/'/g, "'\\''")
     }
 
+    ProxMon.SecretStore {
+        id: secretStore
+        service: "ProxMon"
+        key: "apiTokenSecret:" + tokenIdField.text + "@" + hostField.text + ":" + portField.value
+
+        onSecretReady: function(secret) {
+            if (secret && secret.length > 0) {
+                tokenSecretField.text = secret
+            }
+        }
+    }
+
+    function saveSecretToKeyring() {
+        if (!tokenSecretField.text || tokenSecretField.text.trim() === "") return
+        secretStore.writeSecret(tokenSecretField.text)
+        // Clear plaintext storage after saving
+        cfg_apiTokenSecret = ""
+        tokenSecretField.text = ""
+        cfg_apiTokenSecretDefault = ""
+    }
+
     ColumnLayout {
         anchors.left: parent.left
         anchors.right: parent.right
@@ -118,6 +140,7 @@ KCM.SimpleKCM {
                 id: hostField
                 Layout.fillWidth: true
                 placeholderText: "192.168.1.100 or proxmox.local"
+                onEditingFinished: secretStore.readSecret()
             }
 
             QQC2.Label {
@@ -130,6 +153,7 @@ KCM.SimpleKCM {
                 to: 65535
                 value: 8006
                 editable: true
+                onValueModified: secretStore.readSecret()
             }
 
             QQC2.Label {
@@ -140,6 +164,7 @@ KCM.SimpleKCM {
                 id: tokenIdField
                 Layout.fillWidth: true
                 placeholderText: "user@realm!tokenname"
+                onEditingFinished: secretStore.readSecret()
             }
 
             QQC2.Label {
@@ -150,7 +175,7 @@ KCM.SimpleKCM {
                 id: tokenSecretField
                 Layout.fillWidth: true
                 echoMode: TextInput.Password
-                placeholderText: "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                placeholderText: "Stored in keyring after Apply"
             }
 
             QQC2.Label {
@@ -247,7 +272,8 @@ KCM.SimpleKCM {
                         host: hostField.text,
                         port: portField.value,
                         tokenId: tokenIdField.text,
-                        tokenSecret: tokenSecretField.text,
+                        // Intentionally do not store secrets in plaintext defaults
+                        tokenSecret: "",
                         refreshInterval: refreshField.value,
                         ignoreSsl: ignoreSslCheck.checked,
                         enableNotifications: enableNotificationsCheck.checked
@@ -258,7 +284,13 @@ KCM.SimpleKCM {
                     // Use printf (more predictable than echo) and avoid newlines
                     safeJson = safeJson.replace(/[\r\n]+/g, " ")
 
+                    // Persist non-secret defaults to file
                     saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && printf '%s' '" + safeJson + "' > ~/.config/proxmox-plasmoid/settings.json")
+
+                    // Store secret in keyring
+                    if (tokenSecretField.text && tokenSecretField.text.trim() !== "") {
+                        secretStore.writeSecret(tokenSecretField.text)
+                    }
                 }
             }
 
@@ -274,6 +306,7 @@ KCM.SimpleKCM {
                 icon.name: "document-open"
                 onClicked: {
                     loadExec.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
+                    secretStore.readSecret()
                 }
             }
 

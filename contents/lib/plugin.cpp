@@ -2,6 +2,7 @@
 #include <qqml.h>
 
 #include "proxmoxclient.h"
+#include "secretstore.h"
 
 class ProxmoxClientPlugin : public QQmlExtensionPlugin {
     Q_OBJECT
@@ -13,6 +14,7 @@ public:
         Q_ASSERT(uri == QLatin1String("org.kde.plasma.proxmox"));
 
         qmlRegisterType<ProxmoxClient>(uri, 1, 0, "ProxmoxClient");
+        qmlRegisterType<SecretStore>(uri, 1, 0, "SecretStore");
     }
 };
 
