@@ -4,7 +4,12 @@ import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.kcmutils as KCM
-import org.kde.plasma.proxmox 1.0 as ProxMon
+/*
+  NOTE:
+  Config QML (KCM) runs in a separate context than the plasmoid itself and
+  should not depend on the native plugin being loadable. Otherwise the entire
+  Connection tab may fail to load if the plugin can't be resolved.
+*/
 
 KCM.SimpleKCM {
     id: root
@@ -94,26 +99,12 @@ KCM.SimpleKCM {
         return str.replace(/\\/g, "\\\\").replace(/'/g, "'\\''")
     }
 
-    ProxMon.SecretStore {
-        id: secretStore
-        service: "ProxMon"
-        key: "apiTokenSecret:" + tokenIdField.text + "@" + hostField.text + ":" + portField.value
-
-        onSecretReady: function(secret) {
-            if (secret && secret.length > 0) {
-                tokenSecretField.text = secret
-            }
-        }
-    }
-
-    function saveSecretToKeyring() {
-        if (!tokenSecretField.text || tokenSecretField.text.trim() === "") return
-        secretStore.writeSecret(tokenSecretField.text)
-        // Clear plaintext storage after saving
-        cfg_apiTokenSecret = ""
-        tokenSecretField.text = ""
-        cfg_apiTokenSecretDefault = ""
-    }
+    /*
+      Keyring handling is done by the plasmoid runtime (main.qml), which can load the
+      native plugin. Keep the KCM simple and always loadable.
+      The secret field here is treated as an input that will be migrated into keyring
+      when the widget runs.
+    */
 
     ColumnLayout {
         anchors.left: parent.left
@@ -140,7 +131,6 @@ KCM.SimpleKCM {
                 id: hostField
                 Layout.fillWidth: true
                 placeholderText: "192.168.1.100 or proxmox.local"
-                onEditingFinished: secretStore.readSecret()
             }
 
             QQC2.Label {
@@ -153,7 +143,6 @@ KCM.SimpleKCM {
                 to: 65535
                 value: 8006
                 editable: true
-                onValueModified: secretStore.readSecret()
             }
 
             QQC2.Label {
@@ -164,7 +153,6 @@ KCM.SimpleKCM {
                 id: tokenIdField
                 Layout.fillWidth: true
                 placeholderText: "user@realm!tokenname"
-                onEditingFinished: secretStore.readSecret()
             }
 
             QQC2.Label {
@@ -287,9 +275,10 @@ KCM.SimpleKCM {
                     // Persist non-secret defaults to file
                     saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && printf '%s' '" + safeJson + "' > ~/.config/proxmox-plasmoid/settings.json")
 
-                    // Store secret in keyring
+                    // Store secret in config temporarily; plasmoid runtime will migrate to keyring and clear it.
+                    // This keeps the KCM dependency-free while still letting users enter/update the secret.
                     if (tokenSecretField.text && tokenSecretField.text.trim() !== "") {
-                        secretStore.writeSecret(tokenSecretField.text)
+                        Plasmoid.configuration.apiTokenSecret = tokenSecretField.text
                     }
                 }
             }
@@ -306,7 +295,7 @@ KCM.SimpleKCM {
                 icon.name: "document-open"
                 onClicked: {
                     loadExec.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
-                    secretStore.readSecret()
+                    // Secret is not loaded via the KCM anymore.
                 }
             }
 

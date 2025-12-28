@@ -5,7 +5,7 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
-import org.kde.plasma.proxmox 1.0 as ProxMon
+import "../lib/proxmox" as ProxMon
 
 PlasmoidItem {
     id: root
