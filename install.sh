@@ -13,7 +13,7 @@ cmake --build "$BUILD_DIR" || exit 1
 
 # Stage runtime QML module into the plasmoid package
 mkdir -p contents/lib/proxmox
-cp contents/lib/proxmox/qmldir contents/lib/proxmox/qmldir || exit 1
+# qmldir is already in the package; avoid copying file onto itself
 cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/ || exit 1
 
 printf '%s\n' "Native plugin staged: contents/lib/proxmox/libproxmoxclientplugin.so"

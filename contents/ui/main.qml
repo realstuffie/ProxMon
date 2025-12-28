@@ -666,9 +666,25 @@ PlasmoidItem {
             if (secret && secret.length > 0) {
                 logDebug("secretStore: Secret loaded from keyring")
                 apiTokenSecret = secret
-            } else {
-                // Fallback to existing config value if no keyring entry exists
-                logDebug("secretStore: No keyring secret found (or empty), using config fallback")
+                return
+            }
+
+            // No keyring entry. If we still have a legacy plaintext secret in config,
+            // migrate it into the keyring and immediately clear the plaintext value.
+            if (Plasmoid.configuration.apiTokenSecret && Plasmoid.configuration.apiTokenSecret.length > 0) {
+                logDebug("secretStore: Migrating legacy plaintext secret into keyring")
+                secretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
+                apiTokenSecret = Plasmoid.configuration.apiTokenSecret
+                Plasmoid.configuration.apiTokenSecret = ""
+                return
+            }
+
+            logDebug("secretStore: No keyring secret found (and no legacy secret), staying unconfigured")
+        }
+
+        onWriteFinished: function(ok, error) {
+            if (!ok) {
+                logDebug("secretStore: write failed: " + error)
             }
         }
 

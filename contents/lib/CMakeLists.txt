@@ -18,6 +18,8 @@ set(BUILD_SHARED_LIBS ON CACHE BOOL "Build shared libs for bundling" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # libsecret dev package may not be installed; allow qtkeychain to build without it (fallbacks: KWallet/plaintext)
 set(LIBSECRET_SUPPORT OFF CACHE BOOL "Disable libsecret support for bundled qtkeychain" FORCE)
+# Ensure qtkeychain doesn't build its own tests when embedded
+set(BUILD_TESTING OFF CACHE BOOL "Disable CTest when embedding qtkeychain" FORCE)
 add_subdirectory(third_party/qtkeychain)
 
 qt_add_library(proxmoxclientplugin SHARED
