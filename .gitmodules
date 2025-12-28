@@ -1,0 +1,3 @@
+[submodule "contents/lib/third_party/qtkeychain"]
+	path = contents/lib/third_party/qtkeychain
+	url = https://github.com/frankosterfeld/qtkeychain.git
