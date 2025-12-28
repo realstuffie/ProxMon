@@ -4,7 +4,7 @@ project(proxmoxclientplugin LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Network Qml)
+find_package(Qt6 REQUIRED COMPONENTS Core Network Qml DBus)
 
 set(CMAKE_AUTOMOC ON)
 
@@ -28,11 +28,14 @@ qt_add_library(proxmoxclientplugin SHARED
     proxmoxclient.h
     secretstore.cpp
     secretstore.h
+    notifier.cpp
+    notifier.h
 )
 
 target_link_libraries(proxmoxclientplugin PRIVATE
     Qt6::Core
     Qt6::Network
     Qt6::Qml
+    Qt6::DBus
     qt6keychain
 )

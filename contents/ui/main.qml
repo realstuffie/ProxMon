@@ -21,6 +21,14 @@ PlasmoidItem {
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
 
+    // Auto-retry/backoff
+    property bool autoRetry: Plasmoid.configuration.autoRetry !== false
+    property int retryStartMs: Math.max(1000, (Plasmoid.configuration.retryStartSeconds || 5) * 1000)
+    property int retryMaxMs: Math.max(retryStartMs, (Plasmoid.configuration.retryMaxSeconds || 300) * 1000)
+    property int retryAttempt: 0
+    property int retryNextDelayMs: 0
+    property string retryStatusText: ""
+
     // Notification properties
     property bool enableNotifications: Plasmoid.configuration.enableNotifications !== false
     property string notifyMode: Plasmoid.configuration.notifyMode || "all"
@@ -120,6 +128,7 @@ PlasmoidItem {
                 proxmoxData = data
                 errorMessage = ""
                 lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
+                resetRetryState()
 
                 if (proxmoxData && proxmoxData.data && proxmoxData.data.length > 0) {
                     nodeList = proxmoxData.data.map(function(n) { return n.node })
@@ -163,12 +172,14 @@ PlasmoidItem {
 
         onError: function(seq, kind, node, message) {
             if (seq !== refreshSeq) return
-    
+
             logDebug("api error: " + kind + " " + node + " - " + message)
             errorMessage = message || "Connection failed"
             pendingNodeRequests = 0
             isRefreshing = false
             loading = false
+
+            scheduleRetry(errorMessage)
         }
     }
 
@@ -186,6 +197,40 @@ PlasmoidItem {
                 now.getMilliseconds().toString().padStart(3, '0')
             console.log("[Proxmox " + timestamp + "] " + message)
         }
+    }
+
+    function buildDebugInfo() {
+        var info = {
+            version: (Plasmoid.metaData && Plasmoid.metaData.version) ? Plasmoid.metaData.version : "",
+            host: proxmoxHost,
+            port: proxmoxPort,
+            tokenId: apiTokenId,
+            ignoreSsl: ignoreSsl,
+            refreshIntervalSeconds: Math.round(refreshInterval / 1000),
+            autoRetry: autoRetry,
+            retryStartSeconds: Math.round(retryStartMs / 1000),
+            retryMaxSeconds: Math.round(retryMaxMs / 1000),
+            lastUpdate: lastUpdate,
+            errorMessage: errorMessage,
+            nodeCount: displayedNodeList.length,
+            vmCount: displayedVmData.length,
+            lxcCount: displayedLxcData.length
+        }
+        return JSON.stringify(info, null, 2)
+    }
+
+    function copyDebugInfo() {
+        var text = buildDebugInfo()
+
+        // Copy to clipboard via wl-copy/xclip. (No secrets included.)
+        var cmd = "sh -lc " + "'" +
+            "if command -v wl-copy >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | wl-copy; " +
+            "elif command -v xclip >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | xclip -selection clipboard; " +
+            "else exit 1; fi" +
+            "'"
+
+        executable.connectSource(cmd)
+        sendNotification("Debug info copied", "Copied widget debug info to clipboard (no secrets).", "dialog-information")
     }
 
     // ==================== NOTIFICATION FUNCTIONS ====================
@@ -243,6 +288,10 @@ PlasmoidItem {
         return true
     }
 
+    ProxMon.Notifier {
+        id: notifier
+    }
+
     // Send desktop notification
     function sendNotification(title, message, iconName) {
         if (!enableNotifications) {
@@ -255,6 +304,12 @@ PlasmoidItem {
         message = (message || "").replace(/[\r\n]+/g, " ")
 
         logDebug("Notification: " + title + " - " + message)
+
+        // Prefer system notification daemon via D-Bus (works on KDE, GNOME, etc).
+        // If that fails, fallback to notify-send.
+        if (notifier.notify(title, message, iconName || "proxmox-monitor", 5000)) {
+            return
+        }
 
         var safeIcon = escapeShell(iconName || "proxmox-monitor")
         var safeTitle = escapeShell(title)
@@ -594,8 +649,45 @@ PlasmoidItem {
                 pendingNodeRequests = 0
                 isRefreshing = false
                 loading = false
+                scheduleRetry("Request timed out")
             }
         }
+    }
+
+    Timer {
+        id: retryTimer
+        repeat: false
+        onTriggered: {
+            retryStatusText = ""
+            fetchData()
+        }
+    }
+
+    function scheduleRetry(reason) {
+        if (!autoRetry) return
+        if (!configured) return
+        if (retryTimer.running) return
+
+        retryAttempt += 1
+
+        // Exponential backoff starting at retryStartMs, capped at retryMaxMs
+        var delay = retryStartMs * Math.pow(2, retryAttempt - 1)
+        delay = Math.min(delay, retryMaxMs)
+        delay = Math.round(delay)
+
+        retryNextDelayMs = delay
+        retryStatusText = "Retrying in " + Math.round(delay / 1000) + "s…"
+
+        logDebug("autoRetry: attempt " + retryAttempt + ", delay " + delay + "ms, reason: " + (reason || ""))
+        retryTimer.interval = delay
+        retryTimer.restart()
+    }
+
+    function resetRetryState() {
+        retryAttempt = 0
+        retryNextDelayMs = 0
+        retryStatusText = ""
+        retryTimer.stop()
     }
 
     function fetchData() {
@@ -894,6 +986,19 @@ PlasmoidItem {
                 font.pixelSize: 14
             }
 
+            // Copy debug info button (dev mode only)
+            PlasmaComponents.Button {
+                icon.name: "edit-copy"
+                onClicked: copyDebugInfo()
+                visible: devMode
+                implicitHeight: 28
+                implicitWidth: 28
+
+                PlasmaComponents.ToolTip {
+                    text: "Copy debug info (no secrets)"
+                }
+            }
+
             // Test notifications button (dev mode only)
             PlasmaComponents.Button {
                 icon.name: "notifications"
@@ -967,6 +1072,25 @@ PlasmoidItem {
             }
         }
 
+        function friendlyErrorHint(msg) {
+            msg = msg || ""
+            var m = msg.toLowerCase()
+
+            if (m.indexOf("authentication failed") !== -1 || m.indexOf("http 401") !== -1 || m.indexOf("http 403") !== -1) {
+                return "Check API Token ID/Secret and that the token has Sys.Audit + VM.Audit permissions."
+            }
+            if (m.indexOf("ssl") !== -1 || m.indexOf("tls") !== -1 || m.indexOf("certificate") !== -1) {
+                return "SSL/TLS error. If you use a self-signed cert, enable “Ignore SSL certificate errors”."
+            }
+            if (m.indexOf("timed out") !== -1 || m.indexOf("timeout") !== -1) {
+                return "Request timed out. Check host/port reachability, firewall, and DNS."
+            }
+            if (m.indexOf("not configured") !== -1) {
+                return "Open the widget settings and enter Host + Token ID + Token Secret."
+            }
+            return ""
+        }
+
         // Error message
         ColumnLayout {
             Layout.fillWidth: true
@@ -994,6 +1118,24 @@ PlasmoidItem {
             PlasmaComponents.Label {
                 text: errorMessage
                 color: Kirigami.Theme.negativeTextColor
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            PlasmaComponents.Label {
+                text: friendlyErrorHint(errorMessage)
+                visible: text !== ""
+                opacity: 0.85
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            PlasmaComponents.Label {
+                text: retryStatusText
+                visible: retryStatusText !== ""
+                opacity: 0.85
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter

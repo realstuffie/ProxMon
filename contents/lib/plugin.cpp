@@ -3,6 +3,7 @@
 
 #include "proxmoxclient.h"
 #include "secretstore.h"
+#include "notifier.h"
 
 class ProxmoxClientPlugin : public QQmlExtensionPlugin {
     Q_OBJECT
@@ -15,6 +16,7 @@ public:
 
         qmlRegisterType<ProxmoxClient>(uri, 1, 0, "ProxmoxClient");
         qmlRegisterType<SecretStore>(uri, 1, 0, "SecretStore");
+        qmlRegisterType<Notifier>(uri, 1, 0, "Notifier");
     }
 };
 

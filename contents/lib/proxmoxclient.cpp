@@ -1,6 +1,7 @@
 #include "proxmoxclient.h"
 
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QNetworkReply>
 #include <QUrl>
 
@@ -82,8 +83,58 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
         const int httpStatus = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray body = r->readAll();
 
+        // Helper: extract a short message from a JSON error payload if possible (bounded length).
+        auto extractJsonMessage = [&body]() -> QString {
+            QJsonParseError pe;
+            const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+            if (pe.error != QJsonParseError::NoError || doc.isNull() || !doc.isObject()) {
+                return {};
+            }
+            const QJsonObject obj = doc.object();
+
+            // Proxmox sometimes uses "errors" or "message" in responses; best-effort only.
+            QString msg;
+            if (obj.contains(QStringLiteral("message")) && obj.value(QStringLiteral("message")).isString()) {
+                msg = obj.value(QStringLiteral("message")).toString();
+            } else if (obj.contains(QStringLiteral("errors")) && obj.value(QStringLiteral("errors")).isString()) {
+                msg = obj.value(QStringLiteral("errors")).toString();
+            }
+
+            msg = msg.trimmed();
+            if (msg.size() > 160) msg = msg.left(160) + QStringLiteral("…");
+            return msg;
+        };
+
+        // Qt network error (DNS, TLS, connection refused, etc)
         if (r->error() != QNetworkReply::NoError) {
-            emit error(seq, kind, node, QStringLiteral("%1 (HTTP %2)").arg(r->errorString()).arg(httpStatus));
+            QString msg = r->errorString();
+            const QString jsonMsg = extractJsonMessage();
+            if (!jsonMsg.isEmpty()) {
+                msg += QStringLiteral(" - ") + jsonMsg;
+            }
+            emit error(seq, kind, node, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+            r->deleteLater();
+            return;
+        }
+
+        // Some HTTP failures do not set QNetworkReply::error().
+        if (httpStatus == 401 || httpStatus == 403) {
+            QString msg = QStringLiteral("Authentication failed");
+            const QString jsonMsg = extractJsonMessage();
+            if (!jsonMsg.isEmpty()) {
+                msg += QStringLiteral(" - ") + jsonMsg;
+            }
+            emit error(seq, kind, node, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+            r->deleteLater();
+            return;
+        }
+        if (httpStatus >= 400) {
+            QString msg = QStringLiteral("HTTP error");
+            const QString jsonMsg = extractJsonMessage();
+            if (!jsonMsg.isEmpty()) {
+                msg += QStringLiteral(" - ") + jsonMsg;
+            }
+            emit error(seq, kind, node, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
             r->deleteLater();
             return;
         }
