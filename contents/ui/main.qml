@@ -64,6 +64,10 @@ PlasmoidItem {
     property bool isRefreshing: false
     property string errorMessage: ""
     property string lastUpdate: ""
+
+    // One-time hint to guide users when action permissions are missing
+    property bool actionPermHintShown: false
+    property string actionPermHint: ""
     property bool hasCoreConfig: proxmoxHost !== "" && apiTokenId !== ""
     // "configured" means we have host+tokenId and the secret is ready (from keyring or migrated legacy config).
     property bool configured: hasCoreConfig && secretState === "ready" && apiTokenSecret !== ""
@@ -222,6 +226,20 @@ PlasmoidItem {
             actionBusy = newBusy
 
             errorMessage = message || "Action failed"
+
+            // Detect common permission failures and show a one-time actionable hint.
+            var m = (message || "").toLowerCase()
+            if (!actionPermHintShown && (m.indexOf("http 401") !== -1 || m.indexOf("http 403") !== -1 || m.indexOf("authentication failed") !== -1 || m.indexOf("permission") !== -1 || m.indexOf("forbidden") !== -1)) {
+                actionPermHintShown = true
+                actionPermHint = "Power actions require Proxmox permissions: VM.PowerMgmt (for VMs) and CT.PowerMgmt (for containers)."
+                sendNotification(
+                    "Missing permissions for actions",
+                    actionPermHint,
+                    "dialog-warning",
+                    "permhint:actions"
+                )
+            }
+
             sendNotification(
                 (actionKind === "qemu" ? "VM" : "Container") + " action failed",
                 actionKind + " " + vmid + " " + action + ": " + (message || ""),
@@ -1189,6 +1207,10 @@ PlasmoidItem {
 
             PlasmaComponents.Label {
                 text: {
+                    // Distinguish states in compact mode to avoid confusing "Not configured" flicker.
+                    if (!hasCoreConfig) return "⚙"
+                    if (secretState === "loading") return "..."
+                    if (secretState === "missing" || secretState === "error") return "!"
                     if (!configured) return "⚙"
                     if (loading) return "..."
 
@@ -1430,6 +1452,15 @@ PlasmoidItem {
                 text: retryStatusText
                 visible: retryStatusText !== ""
                 opacity: 0.85
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            PlasmaComponents.Label {
+                text: actionPermHint
+                visible: actionPermHintShown && actionPermHint !== ""
+                opacity: 0.9
                 wrapMode: Text.WordWrap
                 Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter

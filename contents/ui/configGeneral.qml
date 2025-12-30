@@ -169,11 +169,42 @@ KCM.SimpleKCM {
                 text: "API Token Secret:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
-            QQC2.TextField {
-                id: tokenSecretField
+            RowLayout {
                 Layout.fillWidth: true
-                echoMode: TextInput.Password
-                placeholderText: "Stored in keyring after Apply"
+                spacing: 8
+
+                QQC2.TextField {
+                    id: tokenSecretField
+                    Layout.fillWidth: true
+                    echoMode: TextInput.Password
+                    placeholderText: "Stored in keyring after Apply"
+                }
+
+                QQC2.Button {
+                    text: "Update Keyring"
+                    icon.name: "dialog-password"
+                    enabled: tokenSecretField.text && tokenSecretField.text.trim() !== ""
+                    onClicked: {
+                        // KCM cannot access keyring directly. This stores the secret temporarily in config;
+                        // the plasmoid runtime migrates it into keyring on next load and clears the plaintext.
+                        Plasmoid.configuration.apiTokenSecret = tokenSecretField.text
+                    }
+
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "Stores the secret temporarily; the widget will move it into the keyring on next load."
+                }
+
+                QQC2.Button {
+                    text: "Forget"
+                    icon.name: "edit-clear"
+                    onClicked: {
+                        tokenSecretField.text = ""
+                        Plasmoid.configuration.apiTokenSecret = ""
+                    }
+
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
+                }
             }
 
             QQC2.Label {
