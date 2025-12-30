@@ -11,6 +11,10 @@ KCM.SimpleKCM {
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
 
+    // Compact label mode: "cpu" (default), "running", "error", "lastUpdate"
+    property string cfg_compactMode: "cpu"
+    property string cfg_compactModeDefault: "cpu"
+
     // Notification properties
     property bool cfg_enableNotifications: true
     property bool cfg_enableNotificationsDefault: true
@@ -29,6 +33,12 @@ KCM.SimpleKCM {
 
     property bool cfg_notifyOnNodeChange: true
     property bool cfg_notifyOnNodeChangeDefault: true
+
+    // Notification rate limiting
+    property bool cfg_notifyRateLimitEnabled: true
+    property bool cfg_notifyRateLimitEnabledDefault: true
+    property int cfg_notifyRateLimitSeconds: 120
+    property int cfg_notifyRateLimitSecondsDefault: 120
 
     ColumnLayout {
         anchors.left: parent.left
@@ -88,6 +98,62 @@ KCM.SimpleKCM {
             opacity: 0.6
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
+        }
+
+        // Separator
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            Layout.bottomMargin: 10
+            height: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.3
+        }
+
+        // ==================== COMPACT DISPLAY SECTION ====================
+        Kirigami.Heading {
+            text: "Compact Display"
+            level: 2
+        }
+
+        GridLayout {
+            columns: 2
+            columnSpacing: 15
+            rowSpacing: 12
+            Layout.fillWidth: true
+
+            QQC2.Label {
+                text: "Compact label:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+
+            QQC2.ComboBox {
+                id: compactModeCombo
+                Layout.fillWidth: true
+                model: ListModel {
+                    id: compactModeModel
+                    ListElement { text: "Avg CPU %"; value: "cpu" }
+                    ListElement { text: "Running VMs/CTs"; value: "running" }
+                    ListElement { text: "Error indicator"; value: "error" }
+                    ListElement { text: "Last update time"; value: "lastUpdate" }
+                }
+                textRole: "text"
+
+                Component.onCompleted: {
+                    for (var i = 0; i < compactModeModel.count; i++) {
+                        if (compactModeModel.get(i).value === cfg_compactMode) {
+                            currentIndex = i
+                            break
+                        }
+                    }
+                }
+
+                onCurrentIndexChanged: {
+                    if (currentIndex >= 0) {
+                        cfg_compactMode = compactModeModel.get(currentIndex).value
+                    }
+                }
+            }
         }
 
         // Separator
@@ -174,6 +240,58 @@ KCM.SimpleKCM {
             height: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.2
+            visible: cfg_enableNotifications
+        }
+
+        // Rate limiting
+        Kirigami.Heading {
+            text: "Rate Limiting"
+            level: 4
+            visible: cfg_enableNotifications
+            opacity: cfg_enableNotifications ? 1.0 : 0.5
+        }
+
+        QQC2.CheckBox {
+            id: rateLimitEnabledCheck
+            text: "Rate limit duplicate notifications"
+            checked: cfg_notifyRateLimitEnabled
+            onCheckedChanged: cfg_notifyRateLimitEnabled = checked
+            enabled: cfg_enableNotifications
+            visible: cfg_enableNotifications
+        }
+
+        RowLayout {
+            spacing: 8
+            visible: cfg_enableNotifications
+            opacity: (cfg_enableNotifications && cfg_notifyRateLimitEnabled) ? 1.0 : 0.6
+            enabled: cfg_enableNotifications && cfg_notifyRateLimitEnabled
+
+            QQC2.Label {
+                text: "Minimum interval:"
+                opacity: 0.8
+            }
+
+            QQC2.SpinBox {
+                id: rateLimitSecondsSpin
+                from: 0
+                to: 3600
+                value: cfg_notifyRateLimitSeconds
+                editable: true
+                onValueChanged: cfg_notifyRateLimitSeconds = value
+            }
+
+            QQC2.Label {
+                text: "seconds"
+                opacity: 0.7
+            }
+        }
+
+        QQC2.Label {
+            text: "Suppresses repeated notifications for the same VM/CT/node state within the interval."
+            font.pixelSize: 11
+            opacity: 0.6
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
             visible: cfg_enableNotifications
         }
 

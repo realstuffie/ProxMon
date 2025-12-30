@@ -35,6 +35,12 @@ public:
     Q_INVOKABLE void requestQemu(const QString &node, int seq);
     Q_INVOKABLE void requestLxc(const QString &node, int seq);
 
+    // VM/CT actions: kind: "qemu" | "lxc"; action: "start" | "shutdown" | "reboot"
+    Q_INVOKABLE void requestAction(const QString &kind, const QString &node, int vmid, const QString &action, int seq);
+
+    // Abort any in-flight network requests (useful when refreshing or timing out).
+    Q_INVOKABLE void cancelAll();
+
 signals:
     void hostChanged();
     void portChanged();
@@ -46,8 +52,28 @@ signals:
     void reply(int seq, const QString &kind, const QString &node, const QVariant &data);
     void error(int seq, const QString &kind, const QString &node, const QString &message);
 
+    // actionKind: "qemu" | "lxc", action: "start" | "shutdown" | "reboot"
+    void actionReply(int seq,
+                     const QString &actionKind,
+                     const QString &node,
+                     int vmid,
+                     const QString &action,
+                     const QVariant &data);
+    void actionError(int seq,
+                     const QString &actionKind,
+                     const QString &node,
+                     int vmid,
+                     const QString &action,
+                     const QString &message);
+
 private:
     void request(const QString &path, int seq, const QString &kind, const QString &node);
+    void post(const QString &path,
+              int seq,
+              const QString &actionKind,
+              const QString &node,
+              int vmid,
+              const QString &action);
 
     QNetworkAccessManager m_nam;
     QString m_host;
@@ -55,4 +81,6 @@ private:
     QString m_tokenId;
     QString m_tokenSecret;
     bool m_ignoreSslErrors = false;
+
+    QSet<QNetworkReply *> m_inFlight;
 };

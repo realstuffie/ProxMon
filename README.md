@@ -7,7 +7,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - 📦 **LXC Container support** - Monitor containers alongside VMs
 - 🖧 **Multi-node clusters** - Support for multiple Proxmox nodes
 - 🔄 **Auto-refresh** - Configurable refresh interval
-- 🔔 **Desktop notifications** - Alerts when VMs/CTs change state
+- 🔔 **Desktop notifications** - Alerts when VMs/CTs change state (optional rate limiting to reduce spam)
 - 🎯 **Notification filters** - Whitelist/blacklist specific VMs/CTs
 - ☰ **Flexible sorting** - Sort by status, name, or ID
 - 🔒 **Secure** - API token authentication with SSL support
@@ -27,7 +27,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Known Bugs/Limitations
 
-API token Secret is present in the curl command (visible in process list) Working on migrating to api Module
+- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g., due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows “Missing Token Secret”, re-enter the secret in the settings and click Apply.
 
 ## Screenshots
 
@@ -52,7 +52,7 @@ API token Secret is present in the curl command (visible in process list) Workin
 
 - KDE Plasma 6.0+
 - Proxmox VE 7.0+ with API access
-- `curl` command-line tool
+- No external CLI tools required for API calls (uses native Qt networking)
 
 ## Installation
 
@@ -116,6 +116,19 @@ If using privilege separation, the token needs:
 | `Sys.Audit` | `/` | Read node status |
 | `VM.Audit` | `/vms` | Read VM/CT status |
 
+### Optional: Permissions for Start/Stop/Reboot actions
+
+If you want to use the widget’s power actions (Start/Shutdown/Reboot), audit permissions are **not** sufficient. Grant power-management privileges:
+
+| Permission | Path | Purpose |
+|------------|------|---------|
+| `VM.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot QEMU VMs |
+| `CT.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot LXC containers |
+
+Recommended approach:
+- Keep a read-only monitoring token with `Sys.Audit` + `VM.Audit`
+- Create a separate token/user for actions with `VM.PowerMgmt`/`CT.PowerMgmt` at the minimum scope you want
+
 ### Example: Create a Dedicated Monitoring User
 
 ```bash
@@ -141,6 +154,11 @@ pveum user token add monitor@pve plasma-monitor
    - **Notifications**: Configure state change alerts
 
 ### Notification Filtering
+
+### Notification Rate Limiting
+To reduce notification spam during flapping or frequent refresh/retry cycles, you can rate limit repeated notifications:
+- Enable/disable in **Behavior tab → Rate Limiting**
+- Configure the minimum interval in seconds between duplicates (default: 120s)
 
 You can filter which VMs/CTs trigger notifications:
 
@@ -269,6 +287,16 @@ See [LICENSE](LICENSE) for details.
 - [KDE Plasma](https://kde.org/plasma-desktop/) - Desktop environment
 
 ## Changelog
+
+### v0.4.0
+- Reliability: cancel/abort in-flight requests during refresh/timeouts
+- Credentials: keyring secret lookup normalized + legacy key auto-migration
+- Notifications: rate limiting to reduce spam
+- Various UI/behavior improvements
+
+### v0.3.3
+- Repository hygiene: add/update `.gitignore`
+- Minor README/install script improvements
 
 ### v0.3.2
 - Refresh of screenshots

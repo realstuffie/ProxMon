@@ -8,6 +8,16 @@
 ProxmoxClient::ProxmoxClient(QObject *parent)
     : QObject(parent) {}
 
+void ProxmoxClient::cancelAll() {
+    // Abort any outstanding requests to avoid late reply storms and wasted work.
+    for (auto it = m_inFlight.begin(); it != m_inFlight.end(); ++it) {
+        if (*it) {
+            (*it)->abort();
+        }
+    }
+    m_inFlight.clear();
+}
+
 void ProxmoxClient::setHost(const QString &v) {
     if (m_host == v) return;
     m_host = v;
@@ -50,28 +60,76 @@ void ProxmoxClient::requestLxc(const QString &node, int seq) {
     request(QStringLiteral("/nodes/%1/lxc").arg(node), seq, QStringLiteral("lxc"), node);
 }
 
+void ProxmoxClient::requestAction(const QString &kind, const QString &node, int vmid, const QString &action, int seq) {
+    if (kind != QStringLiteral("qemu") && kind != QStringLiteral("lxc")) {
+        emit actionError(seq, kind, node, vmid, action, QStringLiteral("Invalid kind"));
+        return;
+    }
+    if (action != QStringLiteral("start") && action != QStringLiteral("shutdown") && action != QStringLiteral("reboot")) {
+        emit actionError(seq, kind, node, vmid, action, QStringLiteral("Invalid action"));
+        return;
+    }
+
+    post(QStringLiteral("/nodes/%1/%2/%3/status/%4").arg(node).arg(kind).arg(vmid).arg(action),
+         seq,
+         kind,
+         node,
+         vmid,
+         action);
+}
+
+namespace {
+
+QNetworkRequest buildRequest(const QString &host, int port, const QString &path, const QString &tokenId, const QString &tokenSecret) {
+    const QUrl url(QStringLiteral("https://%1:%2/api2/json%3").arg(host).arg(port).arg(path));
+
+    QNetworkRequest req(url);
+    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("ProxMon"));
+    req.setRawHeader("Accept", "application/json");
+
+    const QByteArray auth = QByteArray("PVEAPIToken=") + tokenId.toUtf8() + "=" + tokenSecret.toUtf8();
+    req.setRawHeader("Authorization", auth);
+
+    return req;
+}
+
+// Helper: extract a short message from a JSON error payload if possible (bounded length).
+QString extractJsonMessage(const QByteArray &body) {
+    QJsonParseError pe;
+    const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+    if (pe.error != QJsonParseError::NoError || doc.isNull() || !doc.isObject()) {
+        return {};
+    }
+    const QJsonObject obj = doc.object();
+
+    // Proxmox sometimes uses "errors" or "message" in responses; best-effort only.
+    QString msg;
+    if (obj.contains(QStringLiteral("message")) && obj.value(QStringLiteral("message")).isString()) {
+        msg = obj.value(QStringLiteral("message")).toString();
+    } else if (obj.contains(QStringLiteral("errors")) && obj.value(QStringLiteral("errors")).isString()) {
+        msg = obj.value(QStringLiteral("errors")).toString();
+    }
+
+    msg = msg.trimmed();
+    if (msg.size() > 160) msg = msg.left(160) + QStringLiteral("…");
+    return msg;
+}
+
+} // namespace
+
 void ProxmoxClient::request(const QString &path, int seq, const QString &kind, const QString &node) {
     if (m_host.isEmpty() || m_tokenId.isEmpty() || m_tokenSecret.isEmpty()) {
         emit error(seq, kind, node, QStringLiteral("Not configured"));
         return;
     }
 
-    const QUrl url(QStringLiteral("https://%1:%2/api2/json%3")
-                       .arg(m_host)
-                       .arg(m_port)
-                       .arg(path));
-
-    QNetworkRequest req(url);
-    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("ProxMon"));
-    req.setRawHeader("Accept", "application/json");
-
-    const QByteArray auth = QByteArray("PVEAPIToken=")
-                                + m_tokenId.toUtf8()
-                                + "="
-                                + m_tokenSecret.toUtf8();
-    req.setRawHeader("Authorization", auth);
-
+    QNetworkRequest req = buildRequest(m_host, m_port, path, m_tokenId, m_tokenSecret);
     QNetworkReply *r = m_nam.get(req);
+
+    m_inFlight.insert(r);
+    QObject::connect(r, &QObject::destroyed, this, [this, r]() {
+        m_inFlight.remove(r);
+    });
 
     if (m_ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -80,35 +138,22 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
     }
 
     QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, kind, node]() {
+        // Remove early so cancelAll() never sees a finished reply.
+        m_inFlight.remove(r);
+
         const int httpStatus = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray body = r->readAll();
 
-        // Helper: extract a short message from a JSON error payload if possible (bounded length).
-        auto extractJsonMessage = [&body]() -> QString {
-            QJsonParseError pe;
-            const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
-            if (pe.error != QJsonParseError::NoError || doc.isNull() || !doc.isObject()) {
-                return {};
-            }
-            const QJsonObject obj = doc.object();
-
-            // Proxmox sometimes uses "errors" or "message" in responses; best-effort only.
-            QString msg;
-            if (obj.contains(QStringLiteral("message")) && obj.value(QStringLiteral("message")).isString()) {
-                msg = obj.value(QStringLiteral("message")).toString();
-            } else if (obj.contains(QStringLiteral("errors")) && obj.value(QStringLiteral("errors")).isString()) {
-                msg = obj.value(QStringLiteral("errors")).toString();
-            }
-
-            msg = msg.trimmed();
-            if (msg.size() > 160) msg = msg.left(160) + QStringLiteral("…");
-            return msg;
-        };
-
         // Qt network error (DNS, TLS, connection refused, etc)
         if (r->error() != QNetworkReply::NoError) {
+            // Silent cancels (expected when refresh restarts or watchdog fires)
+            if (r->error() == QNetworkReply::OperationCanceledError) {
+                r->deleteLater();
+                return;
+            }
+
             QString msg = r->errorString();
-            const QString jsonMsg = extractJsonMessage();
+            const QString jsonMsg = extractJsonMessage(body);
             if (!jsonMsg.isEmpty()) {
                 msg += QStringLiteral(" - ") + jsonMsg;
             }
@@ -120,7 +165,7 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
         // Some HTTP failures do not set QNetworkReply::error().
         if (httpStatus == 401 || httpStatus == 403) {
             QString msg = QStringLiteral("Authentication failed");
-            const QString jsonMsg = extractJsonMessage();
+            const QString jsonMsg = extractJsonMessage(body);
             if (!jsonMsg.isEmpty()) {
                 msg += QStringLiteral(" - ") + jsonMsg;
             }
@@ -130,7 +175,7 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
         }
         if (httpStatus >= 400) {
             QString msg = QStringLiteral("HTTP error");
-            const QString jsonMsg = extractJsonMessage();
+            const QString jsonMsg = extractJsonMessage(body);
             if (!jsonMsg.isEmpty()) {
                 msg += QStringLiteral(" - ") + jsonMsg;
             }
@@ -148,6 +193,86 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
         }
 
         emit reply(seq, kind, node, doc.toVariant());
+        r->deleteLater();
+    });
+}
+
+void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind, const QString &node, int vmid, const QString &action) {
+    if (m_host.isEmpty() || m_tokenId.isEmpty() || m_tokenSecret.isEmpty()) {
+        emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("Not configured"));
+        return;
+    }
+
+    QNetworkRequest req = buildRequest(m_host, m_port, path, m_tokenId, m_tokenSecret);
+
+    // Proxmox accepts an empty body for these actions.
+    QNetworkReply *r = m_nam.post(req, QByteArray());
+
+    m_inFlight.insert(r);
+    QObject::connect(r, &QObject::destroyed, this, [this, r]() {
+        m_inFlight.remove(r);
+    });
+
+    if (m_ignoreSslErrors) {
+        QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
+            r->ignoreSslErrors();
+        });
+    }
+
+    QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, actionKind, node, vmid, action]() {
+        // Remove early so cancelAll() never sees a finished reply.
+        m_inFlight.remove(r);
+
+        const int httpStatus = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray body = r->readAll();
+
+        if (r->error() != QNetworkReply::NoError) {
+            // Silent cancels (expected when refresh restarts or watchdog fires)
+            if (r->error() == QNetworkReply::OperationCanceledError) {
+                r->deleteLater();
+                return;
+            }
+
+            QString msg = r->errorString();
+            const QString jsonMsg = extractJsonMessage(body);
+            if (!jsonMsg.isEmpty()) {
+                msg += QStringLiteral(" - ") + jsonMsg;
+            }
+            emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+            r->deleteLater();
+            return;
+        }
+
+        if (httpStatus == 401 || httpStatus == 403) {
+            QString msg = QStringLiteral("Authentication failed");
+            const QString jsonMsg = extractJsonMessage(body);
+            if (!jsonMsg.isEmpty()) {
+                msg += QStringLiteral(" - ") + jsonMsg;
+            }
+            emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+            r->deleteLater();
+            return;
+        }
+        if (httpStatus >= 400) {
+            QString msg = QStringLiteral("HTTP error");
+            const QString jsonMsg = extractJsonMessage(body);
+            if (!jsonMsg.isEmpty()) {
+                msg += QStringLiteral(" - ") + jsonMsg;
+            }
+            emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+            r->deleteLater();
+            return;
+        }
+
+        // Actions typically return {"data":null} on success. Still parse JSON when possible.
+        QJsonParseError pe;
+        const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+        if (pe.error == QJsonParseError::NoError && !doc.isNull()) {
+            emit actionReply(seq, actionKind, node, vmid, action, doc.toVariant());
+        } else {
+            emit actionReply(seq, actionKind, node, vmid, action, QVariant());
+        }
+
         r->deleteLater();
     });
 }

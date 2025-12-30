@@ -46,5 +46,13 @@
         <entry name="notifyOnNodeChange" type="Bool">
             <default>true</default>
         </entry>
+
+        <!-- Notification rate limiting -->
+        <entry name="notifyRateLimitEnabled" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="notifyRateLimitSeconds" type="Int">
+            <default>120</default>
+        </entry>
     </group>
 </kcfg>

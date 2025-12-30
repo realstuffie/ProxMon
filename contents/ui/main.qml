@@ -17,6 +17,9 @@ PlasmoidItem {
     // Secret is stored in the system keyring via SecretStore (QtKeychain).
     // Keep Plasmoid.configuration.apiTokenSecret as a backward-compatible fallback only.
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
+    // Tracks keyring resolution state to avoid a "Not Configured" flicker while loading.
+    // Values: "idle" | "loading" | "ready" | "missing" | "error"
+    property string secretState: "idle"
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
@@ -37,6 +40,15 @@ PlasmoidItem {
     property bool notifyOnStart: Plasmoid.configuration.notifyOnStart !== false
     property bool notifyOnNodeChange: Plasmoid.configuration.notifyOnNodeChange !== false
 
+    // Notification rate limiting (seconds)
+    property bool notifyRateLimitEnabled: Plasmoid.configuration.notifyRateLimitEnabled !== false
+    property int notifyRateLimitSeconds: Math.max(0, Plasmoid.configuration.notifyRateLimitSeconds || 120)
+    // key => epoch ms
+    property var notifyLastSent: ({})
+
+    // Compact label mode: "cpu" (default), "running", "error", "lastUpdate"
+    property string compactMode: Plasmoid.configuration.compactMode || "cpu"
+
     // Raw data (updated during fetch)
     property var proxmoxData: null
     property var vmData: []
@@ -52,10 +64,15 @@ PlasmoidItem {
     property bool isRefreshing: false
     property string errorMessage: ""
     property string lastUpdate: ""
-    property bool configured: proxmoxHost !== "" && apiTokenId !== "" && apiTokenSecret !== ""
+    property bool hasCoreConfig: proxmoxHost !== "" && apiTokenId !== ""
+    // "configured" means we have host+tokenId and the secret is ready (from keyring or migrated legacy config).
+    property bool configured: hasCoreConfig && secretState === "ready" && apiTokenSecret !== ""
     property bool defaultsLoaded: false
     property bool devMode: false
     property int footerClickCount: 0
+
+    // Per-item action busy map: key "node:kind:vmid" => true
+    property var actionBusy: ({})
 
     // Multi-node support
     property var nodeList: []
@@ -181,6 +198,37 @@ PlasmoidItem {
 
             scheduleRetry(errorMessage)
         }
+
+        onActionReply: function(seq, actionKind, node, vmid, action, data) {
+            // any action completion clears busy state
+            var key = node + ":" + actionKind + ":" + vmid
+            var newBusy = Object.assign({}, actionBusy)
+            delete newBusy[key]
+            actionBusy = newBusy
+
+            sendNotification(
+                (actionKind === "qemu" ? "VM" : "Container") + " action",
+                actionKind + " " + vmid + " " + action + " OK",
+                "dialog-information",
+                "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":ok"
+            )
+            fetchData()
+        }
+
+        onActionError: function(seq, actionKind, node, vmid, action, message) {
+            var key = node + ":" + actionKind + ":" + vmid
+            var newBusy = Object.assign({}, actionBusy)
+            delete newBusy[key]
+            actionBusy = newBusy
+
+            errorMessage = message || "Action failed"
+            sendNotification(
+                (actionKind === "qemu" ? "VM" : "Container") + " action failed",
+                actionKind + " " + vmid + " " + action + ": " + (message || ""),
+                "dialog-error",
+                "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":err"
+            )
+        }
     }
 
 
@@ -292,10 +340,35 @@ PlasmoidItem {
         id: notifier
     }
 
+    function shouldRateLimitNotify(key) {
+        if (!notifyRateLimitEnabled) return false
+        if (!notifyRateLimitSeconds || notifyRateLimitSeconds <= 0) return false
+        if (!key) return false
+
+        var last = notifyLastSent[key]
+        if (!last) return false
+
+        var now = Date.now()
+        return (now - last) < (notifyRateLimitSeconds * 1000)
+    }
+
+    function markNotifySent(key) {
+        if (!key) return
+        var now = Date.now()
+        var newMap = Object.assign({}, notifyLastSent)
+        newMap[key] = now
+        notifyLastSent = newMap
+    }
+
     // Send desktop notification
-    function sendNotification(title, message, iconName) {
+    function sendNotification(title, message, iconName, rateLimitKey) {
         if (!enableNotifications) {
             logDebug("Notification suppressed (disabled): " + title + " - " + message)
+            return
+        }
+
+        if (rateLimitKey && shouldRateLimitNotify(rateLimitKey)) {
+            logDebug("Notification suppressed (rate-limited): " + rateLimitKey)
             return
         }
 
@@ -308,6 +381,7 @@ PlasmoidItem {
         // Prefer system notification daemon via D-Bus (works on KDE, GNOME, etc).
         // If that fails, fallback to notify-send.
         if (notifier.notify(title, message, iconName || "proxmox-monitor", 5000)) {
+            if (rateLimitKey) markNotifySent(rateLimitKey)
             return
         }
 
@@ -317,12 +391,13 @@ PlasmoidItem {
 
         var notifyCmd = "notify-send -i '" + safeIcon + "' -a 'Proxmox Monitor' '" + safeTitle + "' '" + safeMessage + "'"
         executable.connectSource(notifyCmd)
+        if (rateLimitKey) markNotifySent(rateLimitKey)
     }
 
     // Test notifications function (dev mode)
     function testNotifications() {
         logDebug("Testing notifications...")
-        sendNotification("VM Stopped", "test-vm (100) on pve1 is now stopped", "dialog-warning")
+        sendNotification("VM Stopped", "test-vm (100) on pve1 is now stopped", "dialog-warning", "test:vmStopped")
     }
 
     // Check for state changes and send notifications
@@ -372,13 +447,15 @@ PlasmoidItem {
                         sendNotification(
                             "Node Offline",
                             nodeData.node + " is now " + nodeData.status,
-                            "dialog-error"
+                            "dialog-error",
+                            "node:" + nodeData.node + ":offline"
                         )
                     } else if (prevNodeState !== "online" && nodeData.status === "online") {
                         sendNotification(
                             "Node Online",
                             nodeData.node + " is back online",
-                            "dialog-information"
+                            "dialog-information",
+                            "node:" + nodeData.node + ":online"
                         )
                     }
                 }
@@ -401,13 +478,15 @@ PlasmoidItem {
                         sendNotification(
                             "VM Stopped",
                             vmItem.name + " (" + vmItem.vmid + ") on " + vmItem.node + " is now " + vmItem.status,
-                            "dialog-warning"
+                            "dialog-warning",
+                            "vm:" + vmItem.node + ":" + vmItem.vmid + ":stopped"
                         )
                     } else if (notifyOnStart && prevVmState !== "running" && vmItem.status === "running") {
                         sendNotification(
                             "VM Started",
                             vmItem.name + " (" + vmItem.vmid + ") on " + vmItem.node + " is now running",
-                            "dialog-information"
+                            "dialog-information",
+                            "vm:" + vmItem.node + ":" + vmItem.vmid + ":running"
                         )
                     }
                 } else {
@@ -432,13 +511,15 @@ PlasmoidItem {
                         sendNotification(
                             "Container Stopped",
                             lxcItem.name + " (" + lxcItem.vmid + ") on " + lxcItem.node + " is now " + lxcItem.status,
-                            "dialog-warning"
+                            "dialog-warning",
+                            "lxc:" + lxcItem.node + ":" + lxcItem.vmid + ":stopped"
                         )
                     } else if (notifyOnStart && prevLxcState !== "running" && lxcItem.status === "running") {
                         sendNotification(
                             "Container Started",
                             lxcItem.name + " (" + lxcItem.vmid + ") on " + lxcItem.node + " is now running",
-                            "dialog-information"
+                            "dialog-information",
+                            "lxc:" + lxcItem.node + ":" + lxcItem.vmid + ":running"
                         )
                     }
                 } else {
@@ -505,6 +586,44 @@ PlasmoidItem {
         return count
     }
 
+    function actionKey(nodeName, kind, vmid) {
+        return nodeName + ":" + kind + ":" + vmid
+    }
+
+    function isActionBusy(nodeName, kind, vmid) {
+        return actionBusy[actionKey(nodeName, kind, vmid)] === true
+    }
+
+    function setActionBusy(nodeName, kind, vmid, busy) {
+        var key = actionKey(nodeName, kind, vmid)
+        var newBusy = Object.assign({}, actionBusy)
+        if (busy) {
+            newBusy[key] = true
+        } else {
+            delete newBusy[key]
+        }
+        actionBusy = newBusy
+    }
+
+    function confirmAndRunAction(kind, nodeName, vmid, displayName, action) {
+        pendingAction = {
+            kind: kind,
+            node: nodeName,
+            vmid: vmid,
+            name: displayName || "",
+            action: action
+        }
+        confirmDialog.open()
+    }
+
+    function runPendingAction() {
+        if (!pendingAction) return
+        var a = pendingAction
+        setActionBusy(a.node, a.kind, a.vmid, true)
+        api.requestAction(a.kind, a.node, a.vmid, a.action, ++actionSeq)
+        pendingAction = null
+    }
+
     // Toggle node collapsed state
     function toggleNodeCollapsed(nodeName) {
         var newState = !isNodeCollapsed(nodeName)
@@ -561,33 +680,47 @@ PlasmoidItem {
     function sortByStatus(data) {
         if (!data || data.length === 0) return []
 
+        function nameOf(x) {
+            return (x && (x.name || x.hostname) ? String(x.name || x.hostname) : "")
+        }
+
         return data.slice().sort(function(a, b) {
+            var an = nameOf(a)
+            var bn = nameOf(b)
+
             switch (defaultSorting) {
                 case "status":
                     var aRunning = (a.status === "running") ? 0 : 1
                     var bRunning = (b.status === "running") ? 0 : 1
-                    if (aRunning !== bRunning) {
-                        return aRunning - bRunning
-                    }
-                    return a.name.localeCompare(b.name)
+                    if (aRunning !== bRunning) return aRunning - bRunning
+                    // secondary sort: name, then vmid for stability
+                    var nc = an.localeCompare(bn)
+                    if (nc !== 0) return nc
+                    return (a.vmid || 0) - (b.vmid || 0)
 
                 case "name":
-                    return a.name.localeCompare(b.name)
+                    var c1 = an.localeCompare(bn)
+                    if (c1 !== 0) return c1
+                    return (a.vmid || 0) - (b.vmid || 0)
 
                 case "nameDesc":
-                    return b.name.localeCompare(a.name)
+                    var c2 = bn.localeCompare(an)
+                    if (c2 !== 0) return c2
+                    return (a.vmid || 0) - (b.vmid || 0)
 
                 case "id":
-                    return a.vmid - b.vmid
+                    return (a.vmid || 0) - (b.vmid || 0)
 
                 case "idDesc":
-                    return b.vmid - a.vmid
+                    return (b.vmid || 0) - (a.vmid || 0)
 
                 default:
                     var aRun = (a.status === "running") ? 0 : 1
                     var bRun = (b.status === "running") ? 0 : 1
                     if (aRun !== bRun) return aRun - bRun
-                    return a.name.localeCompare(b.name)
+                    var c3 = an.localeCompare(bn)
+                    if (c3 !== 0) return c3
+                    return (a.vmid || 0) - (b.vmid || 0)
             }
         })
     }
@@ -638,6 +771,35 @@ PlasmoidItem {
     // Sequencing for refreshes so we can ignore late responses from older refresh cycles
     property int refreshSeq: 0
 
+    // Sequencing for actions
+    property int actionSeq: 0
+    property var pendingAction: null
+
+    QQC2.Dialog {
+        id: confirmDialog
+        title: "Confirm action"
+        modal: true
+        standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
+
+        onAccepted: runPendingAction()
+
+        contentItem: ColumnLayout {
+            spacing: 8
+            width: 300
+
+            QQC2.Label {
+                text: pendingAction
+                    ? ("Run " + pendingAction.action + " on "
+                       + (pendingAction.kind === "qemu" ? "VM" : "CT")
+                       + " " + pendingAction.vmid
+                       + (pendingAction.name ? " (" + pendingAction.name + ")" : "")
+                       + " on " + pendingAction.node + "?")
+                    : ""
+                wrapMode: Text.WordWrap
+            }
+        }
+    }
+
     Timer {
         id: refreshWatchdog
         interval: 15000
@@ -645,6 +807,8 @@ PlasmoidItem {
         onTriggered: {
             if (pendingNodeRequests > 0) {
                 logDebug("refreshWatchdog: Timed out, pending requests: " + pendingNodeRequests)
+                // Cancel in-flight requests to avoid late reply storms.
+                api.cancelAll()
                 errorMessage = "Request timed out"
                 pendingNodeRequests = 0
                 isRefreshing = false
@@ -695,6 +859,9 @@ PlasmoidItem {
             logDebug("fetchData: Not configured, skipping")
             return
         }
+
+        // Stop any previous in-flight requests before starting a new refresh.
+        api.cancelAll()
 
         refreshSeq++
 
@@ -749,15 +916,80 @@ PlasmoidItem {
 
     // ==================== INITIALIZATION ====================
 
+    function normalizedHost(h) {
+        return (h || "").trim().toLowerCase()
+    }
+
+    function normalizedTokenId(t) {
+        return (t || "").trim()
+    }
+
+    function keyFor(host, port, tokenId) {
+        return "apiTokenSecret:" + normalizedTokenId(tokenId) + "@" + normalizedHost(host) + ":" + String(port)
+    }
+
+    // Try multiple keys for backwards compatibility (older formatting / pre-normalization).
+    property var secretKeyCandidates: []
+    property int secretKeyCandidateIndex: 0
+
+    function startSecretReadCandidates() {
+        if (!hasCoreConfig) return
+
+        var candidates = []
+        // New canonical key (normalized)
+        candidates.push(keyFor(proxmoxHost, proxmoxPort, apiTokenId))
+        // Legacy exact key (as previously constructed)
+        candidates.push("apiTokenSecret:" + apiTokenId + "@" + proxmoxHost + ":" + proxmoxPort)
+        // Legacy trimmed-only variants (common user input issues)
+        candidates.push("apiTokenSecret:" + normalizedTokenId(apiTokenId) + "@" + proxmoxHost + ":" + proxmoxPort)
+        candidates.push("apiTokenSecret:" + apiTokenId + "@" + normalizedHost(proxmoxHost) + ":" + proxmoxPort)
+
+        // de-dup, preserve order
+        var seen = {}
+        var uniq = []
+        for (var i = 0; i < candidates.length; i++) {
+            var k = candidates[i]
+            if (!k || seen[k]) continue
+            seen[k] = true
+            uniq.push(k)
+        }
+
+        secretKeyCandidates = uniq
+        secretKeyCandidateIndex = 0
+        secretStore.key = secretKeyCandidates[0]
+        secretStore.readSecret()
+    }
+
     ProxMon.SecretStore {
         id: secretStore
         service: "ProxMon"
-        key: "apiTokenSecret:" + apiTokenId + "@" + proxmoxHost + ":" + proxmoxPort
+        // key is set dynamically via startSecretReadCandidates()
+        key: keyFor(proxmoxHost, proxmoxPort, apiTokenId)
 
         onSecretReady: function(secret) {
             if (secret && secret.length > 0) {
+                // If we loaded from a legacy key, migrate into canonical normalized key.
+                var canonicalKey = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
+                if (secretStore.key !== canonicalKey) {
+                    logDebug("secretStore: Migrating secret to canonical key")
+                    var oldKey = secretStore.key
+                    secretStore.key = canonicalKey
+                    secretStore.writeSecret(secret)
+                    secretStore.key = oldKey
+                }
+
                 logDebug("secretStore: Secret loaded from keyring")
                 apiTokenSecret = secret
+                secretState = "ready"
+                return
+            }
+
+            // Try next candidate key if available
+            if (secretKeyCandidates && (secretKeyCandidateIndex + 1) < secretKeyCandidates.length) {
+                secretKeyCandidateIndex += 1
+                secretStore.key = secretKeyCandidates[secretKeyCandidateIndex]
+                logDebug("secretStore: Secret not found, trying next key candidate: " + secretStore.key)
+                secretStore.readSecret()
                 return
             }
 
@@ -765,35 +997,57 @@ PlasmoidItem {
             // migrate it into the keyring and immediately clear the plaintext value.
             if (Plasmoid.configuration.apiTokenSecret && Plasmoid.configuration.apiTokenSecret.length > 0) {
                 logDebug("secretStore: Migrating legacy plaintext secret into keyring")
+                secretStore.key = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
                 secretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
                 apiTokenSecret = Plasmoid.configuration.apiTokenSecret
                 Plasmoid.configuration.apiTokenSecret = ""
+                secretState = "ready"
                 return
             }
 
-            logDebug("secretStore: No keyring secret found (and no legacy secret), staying unconfigured")
+            secretState = "missing"
+            logDebug("secretStore: No keyring secret found (and no legacy secret)")
         }
 
         onWriteFinished: function(ok, error) {
             if (!ok) {
                 logDebug("secretStore: write failed: " + error)
+                // Still treat secret as ready if we already set apiTokenSecret from legacy config;
+                // failing to write just means it won't persist.
             }
         }
 
         onError: function(message) {
+            secretState = "error"
             logDebug("secretStore: " + message)
         }
     }
 
+    function resolveSecretIfNeeded() {
+        if (!hasCoreConfig) {
+            secretState = "idle"
+            return
+        }
+        // If we already have a secret from legacy config binding, consider it ready.
+        // (We still attempt keyring read to migrate/ensure correct secret, but avoid UI flicker.)
+        if (apiTokenSecret && apiTokenSecret.length > 0 && secretState !== "ready") {
+            secretState = "ready"
+        }
+        if (secretState === "loading") return
+        secretState = "loading"
+        startSecretReadCandidates()
+    }
+
+    onProxmoxHostChanged: resolveSecretIfNeeded()
+    onProxmoxPortChanged: resolveSecretIfNeeded()
+    onApiTokenIdChanged: resolveSecretIfNeeded()
+
     Component.onCompleted: {
         logDebug("Component.onCompleted: Plasmoid initialized")
-        // Load secret as early as possible
-        if (apiTokenId && proxmoxHost) {
-            secretStore.readSecret()
-        }
+        resolveSecretIfNeeded()
 
-        if (!configured) {
-            logDebug("Component.onCompleted: Not configured, loading defaults")
+        if (!hasCoreConfig) {
+            logDebug("Component.onCompleted: Missing core config, loading defaults")
             loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
         }
     }
@@ -817,6 +1071,7 @@ PlasmoidItem {
                     if (s.host) Plasmoid.configuration.proxmoxHost = s.host
                     if (s.port) Plasmoid.configuration.proxmoxPort = s.port
                     if (s.tokenId) Plasmoid.configuration.apiTokenId = s.tokenId
+                    // Legacy: keep for migration; will be moved into keyring on first load.
                     if (s.tokenSecret) Plasmoid.configuration.apiTokenSecret = s.tokenSecret
                     if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
                     if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
@@ -826,6 +1081,9 @@ PlasmoidItem {
                     proxmoxPort = s.port || 8006
                     apiTokenId = s.tokenId || ""
                     apiTokenSecret = s.tokenSecret || ""
+                    if (apiTokenSecret && apiTokenSecret.length > 0) {
+                        secretState = "ready"
+                    }
                     refreshInterval = (s.refreshInterval || 30) * 1000
                     ignoreSsl = s.ignoreSsl !== false
                     enableNotifications = s.enableNotifications !== false
@@ -933,7 +1191,28 @@ PlasmoidItem {
                 text: {
                     if (!configured) return "⚙"
                     if (loading) return "..."
+
+                    switch (compactMode) {
+                        case "running":
+                            var running = runningVMs + runningLXC
+                            var total = displayedVmData.length + displayedLxcData.length
+                            return running + "/" + total
+
+                        case "lastUpdate":
+                            return lastUpdate ? lastUpdate : "-"
+
+                        case "error":
+                            if (errorMessage) return "!"
+                            // fallthrough to cpu style
+                            break
+
+                        case "cpu":
+                        default:
+                            break
+                    }
+
                     if (errorMessage) return "!"
+
                     if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
                         var totalCpu = 0
                         for (var i = 0; i < displayedProxmoxData.data.length; i++) {
@@ -1028,7 +1307,7 @@ PlasmoidItem {
             }
         }
 
-        // Not configured message
+        // Not configured / credential loading message
         ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -1046,15 +1325,30 @@ PlasmoidItem {
             }
 
             PlasmaComponents.Label {
-                text: "Not Configured"
+                text: {
+                    if (!hasCoreConfig) return "Not Configured"
+                    if (secretState === "loading") return "Loading Credentials…"
+                    if (secretState === "missing") return "Missing Token Secret"
+                    if (secretState === "error") return "Credentials Error"
+                    return "Not Configured"
+                }
                 font.bold: true
                 Layout.alignment: Qt.AlignHCenter
             }
 
             PlasmaComponents.Label {
-                text: "Right-click → Configure Widget"
+                text: {
+                    if (!hasCoreConfig) return "Right-click → Configure Widget"
+                    if (secretState === "loading") return "Reading API token secret from keyring…"
+                    if (secretState === "missing") return "Open settings and re-enter the API Token Secret."
+                    if (secretState === "error") return "Keyring access failed. Check logs (journalctl --user -f)."
+                    return "Right-click → Configure Widget"
+                }
                 opacity: 0.7
+                wrapMode: Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
                 Layout.alignment: Qt.AlignHCenter
+                Layout.maximumWidth: 320
             }
 
             Item { Layout.fillHeight: true }
@@ -1336,6 +1630,8 @@ PlasmoidItem {
                                             ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15)
                                             : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
 
+                                        property bool busy: isActionBusy(nodeName, "qemu", modelData.vmid)
+
                                         RowLayout {
                                             anchors.fill: parent
                                             anchors.leftMargin: 8
@@ -1356,12 +1652,96 @@ PlasmoidItem {
                                                 font.pixelSize: 11
                                             }
 
-                                            PlasmaComponents.Label {
-                                                text: modelData.status === "running"
-                                                    ? (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G"
-                                                    : modelData.status
-                                                font.pixelSize: 10
-                                                opacity: 0.7
+                                            // Fixed-width stats group: keep CPU|Mem adjacent but align "|" and values across rows
+                                            // (CPU/Mem labels are fixed-width; the displayed text stays adjacent because widths are tight)
+                                            RowLayout {
+                                                // Tighter CPU|Mem grouping (still aligned across rows)
+                                                Layout.preferredWidth: 62
+                                                Layout.minimumWidth: 62
+                                                Layout.maximumWidth: 62
+                                                Layout.alignment: Qt.AlignVCenter
+                                                spacing: 1
+
+                                                PlasmaComponents.Label {
+                                                    text: modelData.status === "running"
+                                                        ? (modelData.cpu * 100).toFixed(0) + "%"
+                                                        : modelData.status
+                                                    font.pixelSize: 10
+                                                    opacity: 0.7
+                                                    horizontalAlignment: Text.AlignRight
+                                                    Layout.preferredWidth: 24
+                                                    Layout.minimumWidth: 24
+                                                    Layout.maximumWidth: 24
+                                                }
+
+                                                PlasmaComponents.Label {
+                                                    text: modelData.status === "running" ? "|" : ""
+                                                    font.pixelSize: 10
+                                                    opacity: 0.7
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    Layout.preferredWidth: 4
+                                                    Layout.minimumWidth: 4
+                                                    Layout.maximumWidth: 4
+                                                }
+
+                                                PlasmaComponents.Label {
+                                                    text: modelData.status === "running"
+                                                        ? (modelData.mem / 1073741824).toFixed(1) + "G"
+                                                        : ""
+                                                    font.pixelSize: 10
+                                                    opacity: 0.7
+                                                    horizontalAlignment: Text.AlignRight
+                                                    Layout.preferredWidth: 32
+                                                    Layout.minimumWidth: 32
+                                                    Layout.maximumWidth: 32
+                                                }
+                                            }
+
+                                            // Fixed-width actions strip (moved to far right, after stats column)
+                                            RowLayout {
+                                                spacing: 2
+                                                Layout.preferredWidth: 70
+                                                Layout.alignment: Qt.AlignVCenter
+                                                Layout.preferredHeight: 28
+                                                Layout.minimumHeight: 28
+                                                Layout.maximumHeight: 28
+
+                                                PlasmaComponents.BusyIndicator {
+                                                    visible: busy
+                                                    running: busy
+                                                    implicitWidth: 16
+                                                    implicitHeight: 16
+                                                }
+
+                                                PlasmaComponents.Button {
+                                                    flat: true
+                                                    icon.name: "media-playback-start"
+                                                    implicitWidth: 22
+                                                    implicitHeight: 22
+                                                    visible: !busy && modelData.status !== "running"
+                                                    onClicked: confirmAndRunAction("qemu", nodeName, modelData.vmid, modelData.name, "start")
+                                                }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status === "running" }
+
+                                                PlasmaComponents.Button {
+                                                    flat: true
+                                                    icon.name: "system-shutdown"
+                                                    implicitWidth: 22
+                                                    implicitHeight: 22
+                                                    visible: !busy && modelData.status === "running"
+                                                    onClicked: confirmAndRunAction("qemu", nodeName, modelData.vmid, modelData.name, "shutdown")
+                                                }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status !== "running" }
+
+                                                PlasmaComponents.Button {
+                                                    flat: true
+                                                    icon.name: "system-reboot"
+                                                    implicitWidth: 22
+                                                    implicitHeight: 22
+                                                    visible: !busy && modelData.status === "running"
+                                                    onClicked: confirmAndRunAction("qemu", nodeName, modelData.vmid, modelData.name, "reboot")
+                                                }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status !== "running" }
                                             }
                                         }
                                     }
@@ -1402,6 +1782,8 @@ PlasmoidItem {
                                             ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
                                             : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
 
+                                        property bool busy: isActionBusy(nodeName, "lxc", modelData.vmid)
+
                                         RowLayout {
                                             anchors.fill: parent
                                             anchors.leftMargin: 8
@@ -1422,12 +1804,96 @@ PlasmoidItem {
                                                 font.pixelSize: 11
                                             }
 
-                                            PlasmaComponents.Label {
-                                                text: modelData.status === "running"
-                                                    ? (modelData.cpu * 100).toFixed(0) + "% | " + (modelData.mem / 1073741824).toFixed(1) + "G"
-                                                    : modelData.status
-                                                font.pixelSize: 10
-                                                opacity: 0.7
+                                            // Fixed-width stats group: keep CPU|Mem adjacent but align "|" and values across rows
+                                            // (CPU/Mem labels are fixed-width; the displayed text stays adjacent because widths are tight)
+                                            RowLayout {
+                                                // Tighter CPU|Mem grouping (still aligned across rows)
+                                                Layout.preferredWidth: 62
+                                                Layout.minimumWidth: 62
+                                                Layout.maximumWidth: 62
+                                                Layout.alignment: Qt.AlignVCenter
+                                                spacing: 1
+
+                                                PlasmaComponents.Label {
+                                                    text: modelData.status === "running"
+                                                        ? (modelData.cpu * 100).toFixed(0) + "%"
+                                                        : modelData.status
+                                                    font.pixelSize: 10
+                                                    opacity: 0.7
+                                                    horizontalAlignment: Text.AlignRight
+                                                    Layout.preferredWidth: 24
+                                                    Layout.minimumWidth: 24
+                                                    Layout.maximumWidth: 24
+                                                }
+
+                                                PlasmaComponents.Label {
+                                                    text: modelData.status === "running" ? "|" : ""
+                                                    font.pixelSize: 10
+                                                    opacity: 0.7
+                                                    horizontalAlignment: Text.AlignHCenter
+                                                    Layout.preferredWidth: 4
+                                                    Layout.minimumWidth: 4
+                                                    Layout.maximumWidth: 4
+                                                }
+
+                                                PlasmaComponents.Label {
+                                                    text: modelData.status === "running"
+                                                        ? (modelData.mem / 1073741824).toFixed(1) + "G"
+                                                        : ""
+                                                    font.pixelSize: 10
+                                                    opacity: 0.7
+                                                    horizontalAlignment: Text.AlignRight
+                                                    Layout.preferredWidth: 32
+                                                    Layout.minimumWidth: 32
+                                                    Layout.maximumWidth: 32
+                                                }
+                                            }
+
+                                            // Fixed-width actions strip (moved to far right, after stats column)
+                                            RowLayout {
+                                                spacing: 2
+                                                Layout.preferredWidth: 70
+                                                Layout.alignment: Qt.AlignVCenter
+                                                Layout.preferredHeight: 28
+                                                Layout.minimumHeight: 28
+                                                Layout.maximumHeight: 28
+
+                                                PlasmaComponents.BusyIndicator {
+                                                    visible: busy
+                                                    running: busy
+                                                    implicitWidth: 16
+                                                    implicitHeight: 16
+                                                }
+
+                                                PlasmaComponents.Button {
+                                                    flat: true
+                                                    icon.name: "media-playback-start"
+                                                    implicitWidth: 22
+                                                    implicitHeight: 22
+                                                    visible: !busy && modelData.status !== "running"
+                                                    onClicked: confirmAndRunAction("lxc", nodeName, modelData.vmid, modelData.name, "start")
+                                                }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status === "running" }
+
+                                                PlasmaComponents.Button {
+                                                    flat: true
+                                                    icon.name: "system-shutdown"
+                                                    implicitWidth: 22
+                                                    implicitHeight: 22
+                                                    visible: !busy && modelData.status === "running"
+                                                    onClicked: confirmAndRunAction("lxc", nodeName, modelData.vmid, modelData.name, "shutdown")
+                                                }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status !== "running" }
+
+                                                PlasmaComponents.Button {
+                                                    flat: true
+                                                    icon.name: "system-reboot"
+                                                    implicitWidth: 22
+                                                    implicitHeight: 22
+                                                    visible: !busy && modelData.status === "running"
+                                                    onClicked: confirmAndRunAction("lxc", nodeName, modelData.vmid, modelData.name, "reboot")
+                                                }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status !== "running" }
                                             }
                                         }
                                     }
