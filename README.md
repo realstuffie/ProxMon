@@ -147,6 +147,8 @@ pveum user token add monitor@pve plasma-monitor
    - **Port**: API port (default: `8006`)
    - **API Token ID**: Format `user@realm!tokenname` (e.g., `root@pam!plasma-monitor`)
    - **API Token Secret**: The secret from token creation
+   - **Update Keyring**: If you changed the secret, click **Update Keyring**. The widget stores it temporarily and migrates it into the system keyring on next load.
+   - **Forget**: Clears the secret field (does **not** delete existing keyring entries).
    - **Refresh Interval**: Update frequency in seconds (default: `30`)
    - **Ignore SSL**: Enable for self-signed certificates
 4. **Behavior tab**:
@@ -196,17 +198,13 @@ Triple-click the footer to enable developer mode:
 
 ### Widget shows "!" or connection error
 
-1. **Check connectivity**:
-   ```bash
-   curl -k -s 'https://YOUR_HOST:8006/api2/json/nodes' \
-     -H 'Authorization: PVEAPIToken=user@realm!token=SECRET'
-   ```
+1. **Verify credentials**:
+   - Ensure token ID format is `user@realm!tokenname`
+   - If you rotated the token secret, re-enter it and click **Update Keyring**, then reopen the widget
 
-2. **Verify credentials**: Ensure token ID format is `user@realm!tokenname`
+2. **SSL issues**: Enable "Ignore SSL" for self-signed certificates
 
-3. **SSL issues**: Enable "Ignore SSL" for self-signed certificates
-
-4. **Firewall**: Ensure port 8006 is accessible
+3. **Firewall**: Ensure port 8006 is accessible
 
 ### Icons not showing
 
