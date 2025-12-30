@@ -85,6 +85,12 @@ PlasmoidItem {
     property var tempVmData: []
     property var tempLxcData: []
 
+    // Per-node request tracking to allow partial failures
+    // node => { qemu: bool, lxc: bool }
+    property var nodePendingMap: ({})
+    // node => string (last error)
+    property var nodeErrors: ({})
+
     // Collapsed state tracking for nodes
     property var collapsedNodes: ({})
 
@@ -156,8 +162,14 @@ PlasmoidItem {
 
                     tempVmData = []
                     tempLxcData = []
-                    pendingNodeRequests = nodeList.length * 2
-    
+
+                    // init per-node pending flags
+                    var pending = {}
+                    for (var p = 0; p < nodeList.length; p++) {
+                        pending[nodeList[p]] = { qemu: true, lxc: true }
+                    }
+                    nodePendingMap = pending
+
                     for (var i = 0; i < nodeList.length; i++) {
                         api.requestQemu(nodeList[i], refreshSeq)
                         api.requestLxc(nodeList[i], refreshSeq)
@@ -173,12 +185,11 @@ PlasmoidItem {
             } else if (kind === "qemu") {
                 if (data && data.data) {
                     for (var j = 0; j < data.data.length; j++) {
-                            data.data[j].node = node
+                        data.data[j].node = node
                         tempVmData.push(data.data[j])
                     }
                 }
-                pendingNodeRequests--
-                checkRequestsComplete()
+                markNodeRequestDone(node, "qemu")
             } else if (kind === "lxc") {
                 if (data && data.data) {
                     for (var k = 0; k < data.data.length; k++) {
@@ -186,8 +197,7 @@ PlasmoidItem {
                         tempLxcData.push(data.data[k])
                     }
                 }
-                pendingNodeRequests--
-                checkRequestsComplete()
+                markNodeRequestDone(node, "lxc")
             }
         }
 
@@ -195,12 +205,20 @@ PlasmoidItem {
             if (seq !== refreshSeq) return
 
             logDebug("api error: " + kind + " " + node + " - " + message)
-            errorMessage = message || "Connection failed"
-            pendingNodeRequests = 0
-            isRefreshing = false
-            loading = false
 
-            scheduleRetry(errorMessage)
+            // Only hard-fail the whole refresh if the nodes list fails.
+            if (kind === "nodes") {
+                errorMessage = message || "Connection failed"
+                pendingNodeRequests = 0
+                isRefreshing = false
+                loading = false
+                scheduleRetry(errorMessage)
+                return
+            }
+
+            // For per-node failures, record error and continue updating other nodes.
+            recordNodeError(node, message || "Request failed")
+            markNodeRequestDone(node, kind)
         }
 
         onActionReply: function(seq, actionKind, node, vmid, action, data) {
@@ -749,39 +767,74 @@ PlasmoidItem {
         return match ? match[1] : ""
     }
 
+    function recordNodeError(nodeName, message) {
+        if (!nodeName) return
+        var newErrors = Object.assign({}, nodeErrors)
+        newErrors[nodeName] = message || "Request failed"
+        nodeErrors = newErrors
+    }
+
+    function markNodeRequestDone(nodeName, kind) {
+        // kind from plugin: "qemu" | "lxc"
+        if (!nodeName || !kind) return
+
+        var pending = Object.assign({}, nodePendingMap)
+        if (!pending[nodeName]) {
+            pending[nodeName] = { qemu: false, lxc: false }
+        }
+
+        if (kind === "qemu") pending[nodeName].qemu = false
+        if (kind === "lxc") pending[nodeName].lxc = false
+
+        nodePendingMap = pending
+        checkRequestsComplete()
+    }
+
+    function allNodeRequestsDone() {
+        if (!nodePendingMap) return true
+        var keys = Object.keys(nodePendingMap)
+        if (keys.length === 0) return true
+
+        for (var i = 0; i < keys.length; i++) {
+            var k = keys[i]
+            var st = nodePendingMap[k]
+            if (!st) continue
+            if (st.qemu || st.lxc) return false
+        }
+        return true
+    }
+
     // Check if all node requests are complete - update displayed data atomically
     function checkRequestsComplete() {
-        logDebug("checkRequestsComplete: Pending requests: " + pendingNodeRequests)
+        if (!allNodeRequestsDone()) return
 
-        if (pendingNodeRequests <= 0) {
-            refreshWatchdog.stop()
+        refreshWatchdog.stop()
 
-            logDebug("checkRequestsComplete: All requests complete")
-            logDebug("checkRequestsComplete: Nodes: " + nodeList.length + ", VMs: " + tempVmData.length + ", LXCs: " + tempLxcData.length)
+        logDebug("checkRequestsComplete: All requests complete (including partial failures)")
+        logDebug("checkRequestsComplete: Nodes: " + nodeList.length + ", VMs: " + tempVmData.length + ", LXCs: " + tempLxcData.length)
 
-            // Atomically update all displayed data at once
-            displayedProxmoxData = proxmoxData
-            displayedNodeList = nodeList.slice()
-            displayedVmData = tempVmData.slice()
-            displayedLxcData = tempLxcData.slice()
+        // Atomically update all displayed data at once
+        displayedProxmoxData = proxmoxData
+        displayedNodeList = nodeList.slice()
+        displayedVmData = tempVmData.slice()
+        displayedLxcData = tempLxcData.slice()
 
-            // Update raw data
-            vmData = tempVmData.slice()
-            lxcData = tempLxcData.slice()
+        // Update raw data
+        vmData = tempVmData.slice()
+        lxcData = tempLxcData.slice()
 
-            // Clear temp data
-            tempVmData = []
-            tempLxcData = []
+        // Clear temp data
+        tempVmData = []
+        tempLxcData = []
 
-            // Mark refresh complete
-            isRefreshing = false
-            loading = false
+        // Mark refresh complete
+        isRefreshing = false
+        loading = false
 
-            logDebug("checkRequestsComplete: Display data updated")
+        logDebug("checkRequestsComplete: Display data updated")
 
-            // Check for state changes and send notifications
-            checkStateChanges()
-        }
+        // Check for state changes and send notifications
+        checkStateChanges()
     }
 
     // ==================== API FUNCTIONS ====================
@@ -896,6 +949,8 @@ PlasmoidItem {
         tempVmData = []
         tempLxcData = []
         errorMessage = ""
+        nodeErrors = ({})
+        nodePendingMap = ({})
 
         refreshWatchdog.restart()
 
@@ -1556,6 +1611,18 @@ PlasmoidItem {
                                             text: modelData.status
                                             color: "white"
                                             font.pixelSize: 9
+                                        }
+                                    }
+
+                                    Kirigami.Icon {
+                                        source: "dialog-warning"
+                                        implicitWidth: 14
+                                        implicitHeight: 14
+                                        visible: nodeErrors && nodeErrors[nodeName]
+                                        opacity: 0.9
+
+                                        PlasmaComponents.ToolTip {
+                                            text: nodeErrors && nodeErrors[nodeName] ? nodeErrors[nodeName] : ""
                                         }
                                     }
 
