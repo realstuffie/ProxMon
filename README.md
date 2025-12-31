@@ -123,11 +123,11 @@ If you want to use the widget’s power actions (Start/Shutdown/Reboot), audit p
 | Permission | Path | Purpose |
 |------------|------|---------|
 | `VM.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot QEMU VMs |
-| `CT.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot LXC containers |
+| `Sys.PowerMgmt` | `/` (or more specific) | Required for power actions in some setups/roles |
 
 Recommended approach:
 - Keep a read-only monitoring token with `Sys.Audit` + `VM.Audit`
-- Create a separate token/user for actions with `VM.PowerMgmt`/`CT.PowerMgmt` at the minimum scope you want
+- Create a separate token/user for actions with `VM.PowerMgmt` + `Sys.PowerMgmt` at the minimum scope you want
 
 ### Example: Create a Dedicated Monitoring User
 
