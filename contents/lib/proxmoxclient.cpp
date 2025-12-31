@@ -119,6 +119,8 @@ QNetworkRequest buildRequest(const QString &host, int port, const QString &path,
     req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("ProxMon"));
     req.setRawHeader("Accept", "application/json");
 
+    // Proxmox expects the token pair as "tokenid=secret" (e.g. root@pam!mytoken=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    // Header format: Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID
     const QByteArray auth = QByteArray("PVEAPIToken=") + tokenId.toUtf8() + "=" + tokenSecret.toUtf8();
     req.setRawHeader("Authorization", auth);
 
