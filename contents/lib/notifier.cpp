@@ -40,8 +40,7 @@ bool Notifier::notify(const QString &title,
     QDBusMessage m = QDBusMessage::createMethodCall(service, path, iface, QStringLiteral("Notify"));
     m.setArguments(args);
 
-    // Best-effort; should be fast for notifications.
-    QDBusPendingReply<uint> reply = QDBusConnection::sessionBus().asyncCall(m);
-    reply.waitForFinished();
-    return !reply.isError();
+    // Best-effort: fire-and-forget. Don't block the UI thread waiting on D-Bus.
+    QDBusConnection::sessionBus().asyncCall(m);
+    return true;
 }

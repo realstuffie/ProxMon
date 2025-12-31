@@ -423,14 +423,16 @@ KCM.SimpleKCM {
                                 onClicked: {
                                     var arr = ensureMultiHostsLen(5)
                                     var key = multiHostSecretKey(arr[idx])
-                                    // store into keyring pipeline: main.qml migrates plaintext config secret for matching host/tokenId/port.
-                                    // We reuse the existing mechanism by temporarily setting apiTokenSecret + swapping core fields is not possible here,
-                                    // so we store a synthetic key/value in defaults file config space:
-                                    // Use dedicated config key map to be migrated later (implemented in main.qml in next step).
+
+                                    // KCM cannot access keyring directly. Stash secrets temporarily in config;
+                                    // the plasmoid runtime migrates them into the system keyring on next load.
                                     var map = {}
                                     try { map = JSON.parse(Plasmoid.configuration.multiHostSecretsJson || "{}") } catch (e) { map = {} }
                                     map[key] = mhSecretField.text
                                     Plasmoid.configuration.multiHostSecretsJson = JSON.stringify(map)
+
+                                    // Reduce risk of the secret lingering on screen / being re-saved accidentally.
+                                    mhSecretField.text = ""
                                 }
                             }
                         }

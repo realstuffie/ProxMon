@@ -103,7 +103,6 @@ PlasmoidItem {
     // Multi-node support
     property var nodeList: []
     property var displayedNodeList: []
-    property var pendingNodeRequests: 0
     property var tempVmData: []
     property var tempLxcData: []
 
@@ -904,12 +903,11 @@ PlasmoidItem {
         interval: 15000
         repeat: false
         onTriggered: {
-            if (pendingNodeRequests > 0) {
-                logDebug("refreshWatchdog: Timed out, pending requests: " + pendingNodeRequests)
+            if (!allNodeRequestsDone()) {
+                logDebug("refreshWatchdog: Timed out, pending nodes: " + Object.keys(nodePendingMap || {}).length)
                 // Cancel in-flight requests to avoid late reply storms.
                 api.cancelAll()
                 errorMessage = "Request timed out"
-                pendingNodeRequests = 0
                 isRefreshing = false
                 loading = false
                 scheduleRetry("Request timed out")
@@ -973,7 +971,6 @@ PlasmoidItem {
         }
 
         // Reset temp state for this refresh cycle
-        pendingNodeRequests = 0
         tempVmData = []
         tempLxcData = []
         errorMessage = ""
