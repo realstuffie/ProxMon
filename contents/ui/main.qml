@@ -1532,7 +1532,7 @@ PlasmoidItem {
             var m = msg.toLowerCase()
 
             if (m.indexOf("authentication failed") !== -1 || m.indexOf("http 401") !== -1 || m.indexOf("http 403") !== -1) {
-                return "Check API Token ID/Secret and that the token has Sys.Audit + VM.Audit permissions."
+                return "Check API Token ID/Secret and that the token has Sys.Audit + VM.Audit permissions (for read). Power actions require VM.PowerMgmt and Sys.PowerMgmt."
             }
             if (m.indexOf("ssl") !== -1 || m.indexOf("tls") !== -1 || m.indexOf("certificate") !== -1) {
                 return "SSL/TLS error. If you use a self-signed cert, enable “Ignore SSL certificate errors”."
