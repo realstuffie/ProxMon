@@ -1486,12 +1486,17 @@ PlasmoidItem {
             Rectangle {
                 anchors.centerIn: parent
                 width: Math.min(parent.width - 20, 340)
+
+                // Ensure the card grows to fit wrapped text + buttons (prevents overlap).
+                implicitHeight: confirmCardLayout.implicitHeight + 24
+
                 radius: 10
                 color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.92)
                 border.color: Kirigami.Theme.disabledTextColor
                 border.width: 1
 
                 ColumnLayout {
+                    id: confirmCardLayout
                     anchors.fill: parent
                     anchors.margins: 12
                     spacing: 10
@@ -1523,11 +1528,15 @@ PlasmoidItem {
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                         Layout.maximumWidth: parent.width
+
+                        // Reserve vertical space for wrapped text so it can't overlap the button row.
+                        Layout.preferredHeight: implicitHeight
                     }
 
                     RowLayout {
                         spacing: 8
-                        Layout.topMargin: 4
+                        Layout.topMargin: 6
+                        Layout.fillWidth: true
 
                         Item { Layout.fillWidth: true }
 
