@@ -1487,7 +1487,7 @@ PlasmoidItem {
                 anchors.centerIn: parent
                 width: Math.min(parent.width - 20, 340)
                 radius: 10
-                color: Kirigami.Theme.backgroundColor
+                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.92)
                 border.color: Kirigami.Theme.disabledTextColor
                 border.width: 1
 
@@ -1522,10 +1522,12 @@ PlasmoidItem {
                             : ""
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
+                        Layout.maximumWidth: parent.width
                     }
 
                     RowLayout {
                         spacing: 8
+                        Layout.topMargin: 4
 
                         Item { Layout.fillWidth: true }
 
