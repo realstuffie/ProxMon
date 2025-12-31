@@ -898,62 +898,6 @@ PlasmoidItem {
     property int actionSeq: 0
     property var pendingAction: null
 
-    // Inline confirmation bar (avoids Plasma popup/dialog glitches)
-    Rectangle {
-        id: inlineConfirmBar
-        visible: inlineConfirmVisible && pendingAction
-        Layout.fillWidth: true
-        Layout.leftMargin: 10
-        Layout.rightMargin: 10
-        Layout.topMargin: 4
-        radius: 6
-        color: Kirigami.Theme.backgroundColor
-        border.color: Kirigami.Theme.disabledTextColor
-        border.width: 1
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 8
-            spacing: 6
-
-            PlasmaComponents.Label {
-                text: pendingAction
-                    ? ("Run " + pendingAction.action + " on "
-                       + (pendingAction.kind === "qemu" ? "VM" : "CT")
-                       + " " + pendingAction.vmid
-                       + (pendingAction.name ? " (" + pendingAction.name + ")" : "")
-                       + " on " + pendingAction.node + "?")
-                    : ""
-                wrapMode: Text.WordWrap
-            }
-
-            RowLayout {
-                spacing: 8
-
-                Item { Layout.fillWidth: true }
-
-                PlasmaComponents.Button {
-                    text: "Cancel"
-                    icon.name: "dialog-cancel"
-                    onClicked: {
-                        if (devMode) console.log("[Proxmox] inlineConfirm: cancel")
-                        pendingAction = null
-                        inlineConfirmVisible = false
-                    }
-                }
-
-                PlasmaComponents.Button {
-                    text: "OK"
-                    icon.name: "dialog-ok"
-                    onClicked: {
-                        if (devMode) console.log("[Proxmox] inlineConfirm: ok")
-                        inlineConfirmVisible = false
-                        runPendingAction()
-                    }
-                }
-            }
-        }
-    }
 
     Timer {
         id: refreshWatchdog
@@ -1514,6 +1458,76 @@ PlasmoidItem {
                 visible: configured && !isRefreshing
                 implicitHeight: 28
                 implicitWidth: 28
+            }
+        }
+
+        // Confirmation popup (rendered inside expanded panel, below header)
+        Rectangle {
+            id: inlineConfirmBar
+            visible: configured && pendingAction && inlineConfirmVisible
+            Layout.fillWidth: true
+            Layout.leftMargin: 10
+            Layout.rightMargin: 10
+            Layout.topMargin: 2
+            Layout.bottomMargin: 2
+            radius: 8
+            color: Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.08)
+            border.color: Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.35)
+            border.width: 1
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                spacing: 6
+
+                RowLayout {
+                    spacing: 8
+
+                    Kirigami.Icon {
+                        source: "dialog-warning"
+                        implicitWidth: 16
+                        implicitHeight: 16
+                        opacity: 0.9
+                    }
+
+                    PlasmaComponents.Label {
+                        text: pendingAction
+                            ? ("Confirm: " + pendingAction.action + " "
+                               + (pendingAction.kind === "qemu" ? "VM" : "CT")
+                               + " " + pendingAction.vmid
+                               + (pendingAction.name ? " (" + pendingAction.name + ")" : "")
+                               + "?")
+                            : ""
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+                }
+
+                RowLayout {
+                    spacing: 8
+
+                    Item { Layout.fillWidth: true }
+
+                    PlasmaComponents.Button {
+                        text: "Cancel"
+                        icon.name: "dialog-cancel"
+                        onClicked: {
+                            if (devMode) console.log("[Proxmox] inlineConfirm: cancel")
+                            pendingAction = null
+                            inlineConfirmVisible = false
+                        }
+                    }
+
+                    PlasmaComponents.Button {
+                        text: "OK"
+                        icon.name: "dialog-ok"
+                        onClicked: {
+                            if (devMode) console.log("[Proxmox] inlineConfirm: ok")
+                            inlineConfirmVisible = false
+                            runPendingAction()
+                        }
+                    }
+                }
             }
         }
 
