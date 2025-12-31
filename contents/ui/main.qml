@@ -680,9 +680,6 @@ PlasmoidItem {
         }
 
         inlineConfirmVisible = true
-
-        // Ensure the expanded popup has enough room to show the confirm banner.
-        fullRep.Layout.preferredHeight = fullRep.Layout.preferredHeight + 60
     }
 
     function runPendingAction() {
@@ -1464,70 +1461,90 @@ PlasmoidItem {
             }
         }
 
-        // Confirmation popup (rendered inside expanded panel, below header)
-        Rectangle {
-            id: inlineConfirmBar
+        // In-popup modal confirmation overlay (keeps everything inside popup bounds)
+        Item {
+            id: confirmOverlay
             visible: configured && pendingAction && inlineConfirmVisible
-            Layout.fillWidth: true
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
-            Layout.topMargin: 2
-            Layout.bottomMargin: 2
-            radius: 8
-            color: Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.08)
-            border.color: Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.35)
-            border.width: 1
+            anchors.fill: parent
+            z: 999
 
-            ColumnLayout {
+            // Backdrop
+            Rectangle {
                 anchors.fill: parent
-                anchors.margins: 8
-                spacing: 6
+                color: Qt.rgba(0, 0, 0, 0.35)
 
-                RowLayout {
-                    spacing: 8
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        pendingAction = null
+                        inlineConfirmVisible = false
+                    }
+                }
+            }
 
-                    Kirigami.Icon {
-                        source: "dialog-warning"
-                        implicitWidth: 16
-                        implicitHeight: 16
-                        opacity: 0.9
+            // Centered confirm card
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 20, 340)
+                radius: 10
+                color: Kirigami.Theme.backgroundColor
+                border.color: Kirigami.Theme.disabledTextColor
+                border.width: 1
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 12
+                    spacing: 10
+
+                    RowLayout {
+                        spacing: 10
+
+                        Kirigami.Icon {
+                            source: "dialog-warning"
+                            implicitWidth: 20
+                            implicitHeight: 20
+                        }
+
+                        PlasmaComponents.Label {
+                            text: "Confirm action"
+                            font.bold: true
+                            Layout.fillWidth: true
+                        }
                     }
 
                     PlasmaComponents.Label {
                         text: pendingAction
-                            ? ("Confirm: " + pendingAction.action + " "
+                            ? ("Run " + pendingAction.action + " on "
                                + (pendingAction.kind === "qemu" ? "VM" : "CT")
                                + " " + pendingAction.vmid
                                + (pendingAction.name ? " (" + pendingAction.name + ")" : "")
-                               + "?")
+                               + " on " + pendingAction.node + "?")
                             : ""
                         wrapMode: Text.WordWrap
                         Layout.fillWidth: true
                     }
-                }
 
-                RowLayout {
-                    spacing: 8
+                    RowLayout {
+                        spacing: 8
 
-                    Item { Layout.fillWidth: true }
+                        Item { Layout.fillWidth: true }
 
-                    PlasmaComponents.Button {
-                        text: "Cancel"
-                        icon.name: "dialog-cancel"
-                        onClicked: {
-                            if (devMode) console.log("[Proxmox] inlineConfirm: cancel")
-                            pendingAction = null
-                            inlineConfirmVisible = false
+                        PlasmaComponents.Button {
+                            text: "Cancel"
+                            icon.name: "dialog-cancel"
+                            onClicked: {
+                                pendingAction = null
+                                inlineConfirmVisible = false
+                            }
                         }
-                    }
 
-                    PlasmaComponents.Button {
-                        text: "OK"
-                        icon.name: "dialog-ok"
-                        onClicked: {
-                            if (devMode) console.log("[Proxmox] inlineConfirm: ok")
-                            inlineConfirmVisible = false
-                            runPendingAction()
+                        PlasmaComponents.Button {
+                            text: "OK"
+                            icon.name: "dialog-ok"
+                            onClicked: {
+                                inlineConfirmVisible = false
+                                runPendingAction()
+                            }
                         }
                     }
                 }
