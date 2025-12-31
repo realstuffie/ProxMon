@@ -667,7 +667,9 @@ PlasmoidItem {
     property bool inlineConfirmVisible: false
 
     function confirmAndRunAction(kind, nodeName, vmid, displayName, action) {
-        console.log("[Proxmox] UI action click: kind=" + kind + " node=" + nodeName + " vmid=" + vmid + " action=" + action)
+        if (devMode) {
+            console.log("[Proxmox] UI action click: kind=" + kind + " node=" + nodeName + " vmid=" + vmid + " action=" + action)
+        }
 
         pendingAction = {
             kind: kind,
@@ -678,6 +680,9 @@ PlasmoidItem {
         }
 
         inlineConfirmVisible = true
+
+        // Ensure the expanded popup has enough room to show the confirm banner.
+        fullRep.Layout.preferredHeight = fullRep.Layout.preferredHeight + 60
     }
 
     function runPendingAction() {
@@ -1463,8 +1468,6 @@ PlasmoidItem {
         Rectangle {
             id: inlineConfirmBar
             visible: configured && pendingAction && inlineConfirmVisible
-            Component.onCompleted: console.log("[Proxmox] inlineConfirmBar created")
-            onVisibleChanged: console.log("[Proxmox] inlineConfirmBar visible=" + visible)
             Layout.fillWidth: true
             Layout.leftMargin: 10
             Layout.rightMargin: 10
