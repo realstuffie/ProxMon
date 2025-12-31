@@ -665,6 +665,10 @@ PlasmoidItem {
     }
 
     function confirmAndRunAction(kind, nodeName, vmid, displayName, action) {
+        if (devMode) {
+            console.log("[Proxmox] UI action click: kind=" + kind + " node=" + nodeName + " vmid=" + vmid + " action=" + action)
+        }
+
         pendingAction = {
             kind: kind,
             node: nodeName,
@@ -676,8 +680,17 @@ PlasmoidItem {
     }
 
     function runPendingAction() {
-        if (!pendingAction) return
+        if (!pendingAction) {
+            if (devMode) console.log("[Proxmox] runPendingAction: no pendingAction")
+            return
+        }
+
         var a = pendingAction
+
+        if (devMode) {
+            console.log("[Proxmox] runPendingAction: sending kind=" + a.kind + " node=" + a.node + " vmid=" + a.vmid + " action=" + a.action + " seq=" + (actionSeq + 1))
+        }
+
         setActionBusy(a.node, a.kind, a.vmid, true)
         api.requestAction(a.kind, a.node, a.vmid, a.action, ++actionSeq)
         pendingAction = null
