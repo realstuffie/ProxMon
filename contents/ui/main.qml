@@ -1690,7 +1690,7 @@ PlasmoidItem {
                                         source: "dialog-warning"
                                         implicitWidth: 14
                                         implicitHeight: 14
-                                        visible: nodeErrors && nodeErrors[nodeName]
+                                        visible: !!(nodeErrors && nodeErrors[nodeName])
                                         opacity: 0.9
 
                                         PlasmaComponents.ToolTip {
