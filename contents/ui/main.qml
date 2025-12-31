@@ -664,6 +664,8 @@ PlasmoidItem {
         actionBusy = newBusy
     }
 
+    property bool inlineConfirmVisible: false
+
     function confirmAndRunAction(kind, nodeName, vmid, displayName, action) {
         if (devMode) {
             console.log("[Proxmox] UI action click: kind=" + kind + " node=" + nodeName + " vmid=" + vmid + " action=" + action)
@@ -676,7 +678,8 @@ PlasmoidItem {
             name: displayName || "",
             action: action
         }
-        confirmDialog.open()
+
+        inlineConfirmVisible = true
     }
 
     function runPendingAction() {
@@ -694,6 +697,7 @@ PlasmoidItem {
         setActionBusy(a.node, a.kind, a.vmid, true)
         api.requestAction(a.kind, a.node, a.vmid, a.action, ++actionSeq)
         pendingAction = null
+        inlineConfirmVisible = false
     }
 
     // Toggle node collapsed state
@@ -894,25 +898,23 @@ PlasmoidItem {
     property int actionSeq: 0
     property var pendingAction: null
 
-    Kirigami.OverlaySheet {
-        id: confirmDialog
-        parent: fullRep
-        title: "Confirm action"
-
-        onOpened: {
-            if (devMode) console.log("[Proxmox] confirmDialog: opened")
-        }
-        onClosed: {
-            // If user closes without confirming, drop the pending action.
-            if (pendingAction) {
-                if (devMode) console.log("[Proxmox] confirmDialog: closed (cancel)")
-                pendingAction = null
-            }
-        }
+    // Inline confirmation bar (avoids Plasma popup/dialog glitches)
+    Rectangle {
+        id: inlineConfirmBar
+        visible: inlineConfirmVisible && pendingAction
+        Layout.fillWidth: true
+        Layout.leftMargin: 10
+        Layout.rightMargin: 10
+        Layout.topMargin: 4
+        radius: 6
+        color: Kirigami.Theme.backgroundColor
+        border.color: Kirigami.Theme.disabledTextColor
+        border.width: 1
 
         ColumnLayout {
-            width: parent ? parent.width : 320
-            spacing: 8
+            anchors.fill: parent
+            anchors.margins: 8
+            spacing: 6
 
             PlasmaComponents.Label {
                 text: pendingAction
@@ -934,9 +936,9 @@ PlasmoidItem {
                     text: "Cancel"
                     icon.name: "dialog-cancel"
                     onClicked: {
-                        if (devMode) console.log("[Proxmox] confirmDialog: cancel clicked")
+                        if (devMode) console.log("[Proxmox] inlineConfirm: cancel")
                         pendingAction = null
-                        confirmDialog.close()
+                        inlineConfirmVisible = false
                     }
                 }
 
@@ -944,8 +946,8 @@ PlasmoidItem {
                     text: "OK"
                     icon.name: "dialog-ok"
                     onClicked: {
-                        if (devMode) console.log("[Proxmox] confirmDialog: ok clicked")
-                        confirmDialog.close()
+                        if (devMode) console.log("[Proxmox] inlineConfirm: ok")
+                        inlineConfirmVisible = false
                         runPendingAction()
                     }
                 }
