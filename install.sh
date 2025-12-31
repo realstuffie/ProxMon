@@ -10,7 +10,7 @@ BUILD_DIR="$(mktemp -d -t proxmon-build-XXXXXX)"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 
 cmake -S contents/lib -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
-cmake --build "$BUILD_DIR"
+cmake --build "$BUILD_DIR" --parallel
 
 # Stage runtime QML module into the plasmoid package
 mkdir -p contents/lib/proxmox

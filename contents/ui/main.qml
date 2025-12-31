@@ -150,14 +150,14 @@ PlasmoidItem {
 
     // ==================== UTILITY FUNCTIONS ====================
 
-        // Shell escape function to prevent command injection
-        function escapeShell(str) {
-            if (!str) return ""
-            return str.replace(/'/g, "'\\''")
-        }
- 
-        // Single-host client (legacy)
-        ProxMon.ProxmoxClient {
+    // Shell escape function to prevent command injection
+    function escapeShell(str) {
+        if (!str) return ""
+        return str.replace(/'/g, "'\\''")
+    }
+
+    // Single-host client (legacy)
+    ProxMon.ProxmoxClient {
         id: api
         host: proxmoxHost
         port: proxmoxPort
@@ -231,7 +231,6 @@ PlasmoidItem {
             // Only hard-fail the whole refresh if the nodes list fails.
             if (kind === "nodes") {
                 errorMessage = message || "Connection failed"
-                pendingNodeRequests = 0
                 isRefreshing = false
                 loading = false
                 scheduleRetry(errorMessage)
@@ -800,12 +799,6 @@ PlasmoidItem {
         })
     }
 
-    // Get node name from API URL
-    function getNodeFromSource(source) {
-        var match = source.match(/\/nodes\/([^\/]+)\//)
-        return match ? match[1] : ""
-    }
-
     function recordNodeError(nodeName, message) {
         if (!nodeName) return
         var newErrors = Object.assign({}, nodeErrors)
@@ -846,6 +839,7 @@ PlasmoidItem {
     // Check if all node requests are complete - update displayed data atomically
     function checkRequestsComplete() {
         if (!allNodeRequestsDone()) return
+        if (connectionMode === "multiHost" && !allMultiHostDone()) return
 
         refreshWatchdog.stop()
 
@@ -1066,25 +1060,10 @@ PlasmoidItem {
     ProxMon.SecretStore {
         id: secretStore
         service: "ProxMon"
-        // key is set dynamically via startSecretReadCandidates() / mhLoadNextSecret()
+        // key is set dynamically via startSecretReadCandidates()
         key: keyFor(proxmoxHost, proxmoxPort, apiTokenId)
 
         onSecretReady: function(secret) {
-            // Multi-host secret loading path
-            if (connectionMode === "multiHost" && mhSecretLoading) {
-                var item = mhSecretQueue[mhSecretQueueIndex]
-                if (item) {
-                    if (secret && secret.length > 0) {
-                        mhSetTokenSecret(item.hostKey, secret)
-                    } else {
-                        mhSetHostError(item.hostKey, "Missing token secret in keyring")
-                    }
-                }
-                mhSecretQueueIndex += 1
-                mhLoadNextSecret()
-                return
-            }
-
             // Single-host path (legacy)
             if (secret && secret.length > 0) {
                 // If we loaded from a legacy key, migrate into canonical normalized key.
@@ -1166,6 +1145,38 @@ PlasmoidItem {
     onProxmoxPortChanged: resolveSecretIfNeeded()
     onApiTokenIdChanged: resolveSecretIfNeeded()
 
+    // Dedicated keyring store for multi-host secret reads/writes (avoid interfering with single-host migration).
+    ProxMon.SecretStore {
+        id: mhSecretStore
+        service: "ProxMon"
+        key: ""
+
+        onSecretReady: function(secret) {
+            if (!mhSecretLoading) return
+
+            var item = mhSecretQueue[mhSecretQueueIndex]
+            if (item) {
+                if (secret && secret.length > 0) {
+                    mhSetTokenSecret(item.hostKey, secret)
+                } else {
+                    mhSetHostError(item.hostKey, "Missing token secret in keyring")
+                }
+            }
+            mhSecretQueueIndex += 1
+            mhLoadNextSecret()
+        }
+
+        onError: function(message) {
+            if (!mhSecretLoading) return
+            var item = mhSecretQueue[mhSecretQueueIndex]
+            if (item) {
+                mhSetHostError(item.hostKey, message || "Keyring error")
+            }
+            mhSecretQueueIndex += 1
+            mhLoadNextSecret()
+        }
+    }
+
     function migrateMultiHostSecretsIfAny() {
         if (!multiHostSecretsJson) return
 
@@ -1179,8 +1190,8 @@ PlasmoidItem {
             var k = keys[i]
             var v = map[k]
             if (!k || !v) continue
-            secretStore.key = k
-            secretStore.writeSecret(v)
+            mhSecretStore.key = k
+            mhSecretStore.writeSecret(v)
         }
 
         // Clear plaintext stash after writes. (If a write fails, user can retry.)
@@ -2383,8 +2394,8 @@ PlasmoidItem {
 
         var item = mhSecretQueue[mhSecretQueueIndex]
         var k = multiKeyFor(item.host, item.port, item.tokenId)
-        secretStore.key = k
-        secretStore.readSecret()
+        mhSecretStore.key = k
+        mhSecretStore.readSecret()
     }
 
     function mhOnAllSecretsLoaded(seq) {
@@ -2398,6 +2409,34 @@ PlasmoidItem {
         }
     }
 
+    // Host-level completion tracking for multi-host mode.
+    // Each hostKey is marked done when its /nodes request succeeds or fails.
+    property var mhHostPending: ({})
+    property int mhPendingHostCount: 0
+
+    function mhResetPendingHosts(entries) {
+        var m = {}
+        for (var i = 0; i < (entries || []).length; i++) {
+            m[hostKey(entries[i])] = true
+        }
+        mhHostPending = m
+        mhPendingHostCount = Object.keys(m).length
+    }
+
+    function mhMarkHostDone(hostK) {
+        if (!hostK) return
+        if (!mhHostPending || !mhHostPending[hostK]) return
+        var m = Object.assign({}, mhHostPending)
+        delete m[hostK]
+        mhHostPending = m
+        mhPendingHostCount = Object.keys(m).length
+        checkRequestsComplete()
+    }
+
+    function allMultiHostDone() {
+        return mhPendingHostCount <= 0
+    }
+
     function fetchDataMultiHost(seq) {
         var entries = mhConfiguredEntries()
         mhClearHostErrors()
@@ -2408,6 +2447,8 @@ PlasmoidItem {
             loading = false
             return
         }
+
+        mhResetPendingHosts(entries)
 
         // reset merged dataset
         proxmoxData = { data: [] }
@@ -2430,6 +2471,9 @@ PlasmoidItem {
             var entry = mhEntryByKey[sessionKey]
 
             if (kind === "nodes") {
+                // host completed successfully (regardless of how many nodes it returned)
+                mhMarkHostDone(sessionKey)
+
                 var nodes = (data && data.data) ? data.data : []
                 for (var n = 0; n < nodes.length; n++) {
                     var nd = Object.assign({}, nodes[n])
@@ -2478,8 +2522,8 @@ PlasmoidItem {
 
             if (kind === "nodes") {
                 mhSetHostError(sessionKey, message || "Host request failed")
-                // Don't stop the whole refresh; just finalize in case other hosts succeed
-                checkRequestsComplete()
+                // host completed with an error; allow refresh to finish based on remaining hosts
+                mhMarkHostDone(sessionKey)
                 return
             }
 

@@ -2,6 +2,8 @@
 
 #include <QObject>
 #include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QSet>
 #include <QVariant>
 
 class ProxmoxClient : public QObject {
