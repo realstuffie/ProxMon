@@ -11,6 +11,10 @@ PlasmoidItem {
     id: root
 
     // Connection properties
+    property string connectionMode: Plasmoid.configuration.connectionMode || "single" // single | multiHost
+    property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
+    property string multiHostSecretsJson: Plasmoid.configuration.multiHostSecretsJson || "{}"
+
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
@@ -23,6 +27,24 @@ PlasmoidItem {
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
+
+    function parseMultiHosts() {
+        try {
+            var arr = JSON.parse(multiHostsJson || "[]")
+            if (!Array.isArray(arr)) return []
+            return arr.slice(0, 5)
+        } catch (e) {
+            return []
+        }
+    }
+
+    function normalizeHostKey(host) {
+        return (host || "").trim().toLowerCase()
+    }
+
+    function multiKeyFor(host, port, tokenId) {
+        return "apiTokenSecret:" + (tokenId || "").trim() + "@" + normalizeHostKey(host) + ":" + String(port || 8006)
+    }
 
     // Auto-retry/backoff
     property bool autoRetry: Plasmoid.configuration.autoRetry !== false
@@ -135,6 +157,7 @@ PlasmoidItem {
             return str.replace(/'/g, "'\\''")
         }
  
+        // Single-host client (legacy)
         ProxMon.ProxmoxClient {
         id: api
         host: proxmoxHost
@@ -954,6 +977,11 @@ PlasmoidItem {
 
         refreshWatchdog.restart()
 
+        if (connectionMode === "multiHost") {
+            fetchDataMultiHost(refreshSeq)
+            return
+        }
+
         logDebug("fetchData: Requesting /nodes from " + proxmoxHost + ":" + proxmoxPort)
         api.requestNodes(refreshSeq)
     }
@@ -1036,10 +1064,26 @@ PlasmoidItem {
     ProxMon.SecretStore {
         id: secretStore
         service: "ProxMon"
-        // key is set dynamically via startSecretReadCandidates()
+        // key is set dynamically via startSecretReadCandidates() / mhLoadNextSecret()
         key: keyFor(proxmoxHost, proxmoxPort, apiTokenId)
 
         onSecretReady: function(secret) {
+            // Multi-host secret loading path
+            if (connectionMode === "multiHost" && mhSecretLoading) {
+                var item = mhSecretQueue[mhSecretQueueIndex]
+                if (item) {
+                    if (secret && secret.length > 0) {
+                        mhSetTokenSecret(item.hostKey, secret)
+                    } else {
+                        mhSetHostError(item.hostKey, "Missing token secret in keyring")
+                    }
+                }
+                mhSecretQueueIndex += 1
+                mhLoadNextSecret()
+                return
+            }
+
+            // Single-host path (legacy)
             if (secret && secret.length > 0) {
                 // If we loaded from a legacy key, migrate into canonical normalized key.
                 var canonicalKey = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
@@ -1097,6 +1141,11 @@ PlasmoidItem {
     }
 
     function resolveSecretIfNeeded() {
+        if (connectionMode === "multiHost") {
+            // multi-host does its own keyring reads per host; consider configured if we have at least one host entry.
+            secretState = "ready"
+            return
+        }
         if (!hasCoreConfig) {
             secretState = "idle"
             return
@@ -1115,8 +1164,31 @@ PlasmoidItem {
     onProxmoxPortChanged: resolveSecretIfNeeded()
     onApiTokenIdChanged: resolveSecretIfNeeded()
 
+    function migrateMultiHostSecretsIfAny() {
+        if (!multiHostSecretsJson) return
+
+        var map = {}
+        try { map = JSON.parse(multiHostSecretsJson || "{}") } catch (e) { map = {} }
+        var keys = Object.keys(map || {})
+        if (!keys || keys.length === 0) return
+
+        logDebug("migrateMultiHostSecretsIfAny: migrating " + keys.length + " secrets into keyring")
+        for (var i = 0; i < keys.length; i++) {
+            var k = keys[i]
+            var v = map[k]
+            if (!k || !v) continue
+            secretStore.key = k
+            secretStore.writeSecret(v)
+        }
+
+        // Clear plaintext stash after writes. (If a write fails, user can retry.)
+        Plasmoid.configuration.multiHostSecretsJson = "{}"
+        multiHostSecretsJson = "{}"
+    }
+
     Component.onCompleted: {
         logDebug("Component.onCompleted: Plasmoid initialized")
+        migrateMultiHostSecretsIfAny()
         resolveSecretIfNeeded()
 
         if (!hasCoreConfig) {
@@ -2111,6 +2183,213 @@ PlasmoidItem {
     }
 
     // ==================== REFRESH TIMER ====================
+
+    // -------------------- Multi-host runtime (up to 5) --------------------
+    function hostKey(entry) {
+        var host = entry && entry.host ? entry.host : ""
+        var port = entry && entry.port ? entry.port : 8006
+        return normalizeHostKey(host) + ":" + String(port)
+    }
+
+    function hostLabel(entry) {
+        var n = entry && entry.name ? String(entry.name).trim() : ""
+        if (n) return n
+        return (entry && entry.host) ? String(entry.host) : "host"
+    }
+
+    function mergeNodeName(entry, nodeName) {
+        return hostLabel(entry) + "/" + nodeName
+    }
+
+    property var mhEntries: []
+    // hostKey => entry
+    property var mhEntryByKey: ({})
+
+    // hostKey => tokenSecret (resolved from keyring in main.qml and cached)
+    property var mhTokenSecrets: ({})
+
+    // hostKey => error (nodes-level)
+    property var mhHostErrors: ({})
+
+    function mhConfiguredEntries() {
+        var entries = parseMultiHosts().filter(function(e) {
+            return e && e.host && e.tokenId
+        }).slice(0, 5)
+
+        mhEntries = entries
+
+        var map = {}
+        for (var i = 0; i < entries.length; i++) {
+            map[hostKey(entries[i])] = entries[i]
+        }
+        mhEntryByKey = map
+
+        return entries
+    }
+
+    function mhSetHostError(hostK, msg) {
+        var m = Object.assign({}, mhHostErrors)
+        m[hostK] = msg
+        mhHostErrors = m
+    }
+
+    function mhClearHostErrors() {
+        mhHostErrors = ({})
+    }
+
+    function mhSetTokenSecret(hostK, secret) {
+        var m = Object.assign({}, mhTokenSecrets)
+        m[hostK] = secret
+        mhTokenSecrets = m
+    }
+
+    function mhGetTokenSecret(hostK) {
+        return mhTokenSecrets && mhTokenSecrets[hostK] ? mhTokenSecrets[hostK] : ""
+    }
+
+    // Async multi-host secret read queue (reads keyring via SecretStore sequentially)
+    property var mhSecretQueue: []
+    property int mhSecretQueueIndex: 0
+    property int mhSecretQueueSeq: 0
+    property bool mhSecretLoading: false
+
+    function mhStartSecretLoad(entries, seq) {
+        mhSecretQueue = (entries || []).map(function(e) {
+            return {
+                hostKey: hostKey(e),
+                host: e.host,
+                port: e.port || 8006,
+                tokenId: e.tokenId
+            }
+        })
+        mhSecretQueueIndex = 0
+        mhSecretQueueSeq = seq
+        mhSecretLoading = true
+
+        mhTokenSecrets = ({}) // reset cache each refresh
+        mhLoadNextSecret()
+    }
+
+    function mhLoadNextSecret() {
+        if (!mhSecretLoading) return
+        if (mhSecretQueueIndex >= mhSecretQueue.length) {
+            mhSecretLoading = false
+            mhOnAllSecretsLoaded(mhSecretQueueSeq)
+            return
+        }
+
+        var item = mhSecretQueue[mhSecretQueueIndex]
+        var k = multiKeyFor(item.host, item.port, item.tokenId)
+        secretStore.key = k
+        secretStore.readSecret()
+    }
+
+    function mhOnAllSecretsLoaded(seq) {
+        // Now that secrets are loaded, start per-host nodes requests.
+        var entries = mhConfiguredEntries()
+        for (var i = 0; i < entries.length; i++) {
+            var e = entries[i]
+            var hk = hostKey(e)
+            var secret = mhGetTokenSecret(hk)
+            api.requestNodesFor(hk, e.host, e.port || 8006, e.tokenId, secret, ignoreSsl, seq)
+        }
+    }
+
+    function fetchDataMultiHost(seq) {
+        var entries = mhConfiguredEntries()
+        mhClearHostErrors()
+
+        if (!entries || entries.length === 0) {
+            errorMessage = "No multi-host endpoints configured"
+            isRefreshing = false
+            loading = false
+            return
+        }
+
+        // reset merged dataset
+        proxmoxData = { data: [] }
+        nodeList = []
+        tempVmData = []
+        tempLxcData = []
+        nodePendingMap = ({})
+        nodeErrors = ({})
+
+        mhStartSecretLoad(entries, seq)
+    }
+
+    Connections {
+        target: api
+
+        function onReplyFor(seq, sessionKey, kind, node, data) {
+            if (seq !== refreshSeq) return
+            if (!mhEntryByKey || !mhEntryByKey[sessionKey]) return
+
+            var entry = mhEntryByKey[sessionKey]
+
+            if (kind === "nodes") {
+                var nodes = (data && data.data) ? data.data : []
+                for (var n = 0; n < nodes.length; n++) {
+                    var nd = Object.assign({}, nodes[n])
+                    var mergedNode = mergeNodeName(entry, nd.node)
+                    nd.node = mergedNode
+
+                    proxmoxData.data.push(nd)
+                    nodeList.push(mergedNode)
+
+                    // mark pending for this merged node
+                    var pending = Object.assign({}, nodePendingMap)
+                    pending[mergedNode] = { qemu: true, lxc: true }
+                    nodePendingMap = pending
+
+                    var secret = mhGetTokenSecret(sessionKey)
+                    api.requestQemuFor(sessionKey, entry.host, entry.port || 8006, entry.tokenId, secret, ignoreSsl, node, seq)
+                    api.requestLxcFor(sessionKey, entry.host, entry.port || 8006, entry.tokenId, secret, ignoreSsl, node, seq)
+                }
+
+                if (nodes.length === 0) {
+                    checkRequestsComplete()
+                }
+            } else if (kind === "qemu") {
+                if (data && data.data) {
+                    for (var j = 0; j < data.data.length; j++) {
+                        var v = Object.assign({}, data.data[j])
+                        v.node = mergeNodeName(entry, node)
+                        tempVmData.push(v)
+                    }
+                }
+                markNodeRequestDone(mergeNodeName(entry, node), "qemu")
+            } else if (kind === "lxc") {
+                if (data && data.data) {
+                    for (var k = 0; k < data.data.length; k++) {
+                        var c = Object.assign({}, data.data[k])
+                        c.node = mergeNodeName(entry, node)
+                        tempLxcData.push(c)
+                    }
+                }
+                markNodeRequestDone(mergeNodeName(entry, node), "lxc")
+            }
+        }
+
+        function onErrorFor(seq, sessionKey, kind, node, message) {
+            if (seq !== refreshSeq) return
+
+            if (kind === "nodes") {
+                mhSetHostError(sessionKey, message || "Host request failed")
+                // Don't stop the whole refresh; just finalize in case other hosts succeed
+                checkRequestsComplete()
+                return
+            }
+
+            // qemu/lxc per-node errors
+            var entry = mhEntryByKey && mhEntryByKey[sessionKey] ? mhEntryByKey[sessionKey] : null
+            if (entry) {
+                recordNodeError(mergeNodeName(entry, node), message || "Request failed")
+                markNodeRequestDone(mergeNodeName(entry, node), kind)
+            } else {
+                checkRequestsComplete()
+            }
+        }
+    }
 
     Timer {
         interval: refreshInterval > 0 ? refreshInterval : 30000
