@@ -894,18 +894,25 @@ PlasmoidItem {
     property int actionSeq: 0
     property var pendingAction: null
 
-    PlasmaComponents.Dialog {
+    Kirigami.OverlaySheet {
         id: confirmDialog
+        parent: fullRep
         title: "Confirm action"
-        modal: true
-        standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
 
-        onAccepted: runPendingAction()
-        onRejected: pendingAction = null
+        onOpened: {
+            if (devMode) console.log("[Proxmox] confirmDialog: opened")
+        }
+        onClosed: {
+            // If user closes without confirming, drop the pending action.
+            if (pendingAction) {
+                if (devMode) console.log("[Proxmox] confirmDialog: closed (cancel)")
+                pendingAction = null
+            }
+        }
 
-        contentItem: ColumnLayout {
+        ColumnLayout {
+            width: parent ? parent.width : 320
             spacing: 8
-            width: 300
 
             PlasmaComponents.Label {
                 text: pendingAction
@@ -916,6 +923,32 @@ PlasmoidItem {
                        + " on " + pendingAction.node + "?")
                     : ""
                 wrapMode: Text.WordWrap
+            }
+
+            RowLayout {
+                spacing: 8
+
+                Item { Layout.fillWidth: true }
+
+                PlasmaComponents.Button {
+                    text: "Cancel"
+                    icon.name: "dialog-cancel"
+                    onClicked: {
+                        if (devMode) console.log("[Proxmox] confirmDialog: cancel clicked")
+                        pendingAction = null
+                        confirmDialog.close()
+                    }
+                }
+
+                PlasmaComponents.Button {
+                    text: "OK"
+                    icon.name: "dialog-ok"
+                    onClicked: {
+                        if (devMode) console.log("[Proxmox] confirmDialog: ok clicked")
+                        confirmDialog.close()
+                        runPendingAction()
+                    }
+                }
             }
         }
     }
