@@ -894,19 +894,20 @@ PlasmoidItem {
     property int actionSeq: 0
     property var pendingAction: null
 
-    QQC2.Dialog {
+    PlasmaComponents.Dialog {
         id: confirmDialog
         title: "Confirm action"
         modal: true
         standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
 
         onAccepted: runPendingAction()
+        onRejected: pendingAction = null
 
         contentItem: ColumnLayout {
             spacing: 8
             width: 300
 
-            QQC2.Label {
+            PlasmaComponents.Label {
                 text: pendingAction
                     ? ("Run " + pendingAction.action + " on "
                        + (pendingAction.kind === "qemu" ? "VM" : "CT")
