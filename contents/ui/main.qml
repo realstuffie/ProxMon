@@ -856,6 +856,18 @@ PlasmoidItem {
 
         logDebug("checkRequestsComplete: Display data updated")
 
+        // Dev-mode: dump nodeErrors to plasmashell journal once per refresh (helps debugging partial failures)
+        if (devMode && nodeErrors) {
+            var keys = Object.keys(nodeErrors)
+            if (keys.length > 0) {
+                console.log("[Proxmox] Node errors (" + keys.length + "):")
+                for (var i = 0; i < keys.length; i++) {
+                    var k = keys[i]
+                    console.log("[Proxmox]  - " + k + ": " + nodeErrors[k])
+                }
+            }
+        }
+
         // Check for state changes and send notifications
         checkStateChanges()
     }
