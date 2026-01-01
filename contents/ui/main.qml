@@ -94,6 +94,14 @@ PlasmoidItem {
         }
     }
 
+    /*
+      NOTE (Qt Quick Controls 2 docs):
+      - Popup is designed to be used with a Window/ApplicationWindow.
+      - Overlay.overlay-based parenting assumes a compatible QQC2 overlay layer exists.
+      In Plasma plasmoids, that overlay layer may not exist / may not stack correctly,
+      so we avoid Popup/Dialog confirmations and use the two-click confirmation instead.
+    */
+
     // Multi-node support
     property var nodeList: []
     property var displayedNodeList: []
@@ -229,7 +237,7 @@ PlasmoidItem {
 
             sendNotification(
                 (actionKind === "qemu" ? "VM" : "Container") + " action",
-                actionKind + " " + vmid + " " + action + " OK",
+                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + " OK",
                 "dialog-information",
                 "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":ok"
             )
@@ -249,7 +257,7 @@ PlasmoidItem {
             var m = (message || "").toLowerCase()
             if (!actionPermHintShown && (m.indexOf("http 401") !== -1 || m.indexOf("http 403") !== -1 || m.indexOf("authentication failed") !== -1 || m.indexOf("permission") !== -1 || m.indexOf("forbidden") !== -1)) {
                 actionPermHintShown = true
-                actionPermHint = "Power actions require Proxmox permissions: VM.PowerMgmt (for VMs) and CT.PowerMgmt (for containers)."
+                actionPermHint = "Power actions require Proxmox permission: VM.PowerMgmt (scope /vms or /vms/{vmid})."
                 sendNotification(
                     "Missing permissions for actions",
                     actionPermHint,
@@ -260,7 +268,7 @@ PlasmoidItem {
 
             sendNotification(
                 (actionKind === "qemu" ? "VM" : "Container") + " action failed",
-                actionKind + " " + vmid + " " + action + ": " + (message || ""),
+                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + ": " + (message || ""),
                 "dialog-error",
                 "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":err"
             )
