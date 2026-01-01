@@ -17,7 +17,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Planned Features
 
-- [ ] Remote commands (Start, Stop, Restart)
+- [ ] Remote commands (Start, Stop, Restart) *(implemented; docs/UI polish still ongoing)*
 - [ ] Resource usage graphs
 - [ ] Storage monitoring
 - [ ] Backup status
@@ -114,7 +114,8 @@ If using privilege separation, the token needs:
 | Permission | Path | Purpose |
 |------------|------|---------|
 | `Sys.Audit` | `/` | Read node status |
-| `VM.Audit` | `/vms` | Read VM/CT status |
+| `VM.Audit` | `/vms` | Read VM status (QEMU) |
+| `CT.Audit` | `/vms` | Read container status (LXC) *(some setups/roles require this separately)* |
 
 ### Optional: Permissions for Start/Stop/Reboot actions
 
@@ -123,11 +124,15 @@ If you want to use the widget’s power actions (Start/Shutdown/Reboot), audit p
 | Permission | Path | Purpose |
 |------------|------|---------|
 | `VM.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot QEMU VMs |
+| `CT.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot LXC containers *(some setups/roles require this separately)* |
 | `Sys.PowerMgmt` | `/` (or more specific) | Required for power actions in some setups/roles |
 
 Recommended approach:
-- Keep a read-only monitoring token with `Sys.Audit` + `VM.Audit`
-- Create a separate token/user for actions with `VM.PowerMgmt` + `Sys.PowerMgmt` at the minimum scope you want
+- Keep a read-only monitoring token with `Sys.Audit` + `VM.Audit` (+ `CT.Audit` if needed)
+- Create a separate token/user for actions with `VM.PowerMgmt` (+ `CT.PowerMgmt` if needed) + `Sys.PowerMgmt` at the minimum scope you want
+
+#### Note on Privilege Separation (common misconfiguration)
+If you create the API token with **Privilege Separation** enabled (`-privsep 1`), the token will *not* automatically inherit the user's ACLs.\n\nPer Proxmox docs, the effective permissions are the **intersection** of the user permissions and the token permissions. This means you must grant roles to both the **user** and the **token** (or disable privilege separation for “full privileges”).\n\nExample:\n```bash\n# Create token with separated privileges\npveum user token add joe@pve monitoring -privsep 1\n\n# Grant read-only role to the token (and ensure the user also has it)\npveum acl modify /vms -token 'joe@pve!monitoring' -role PVEAuditor\n```
 
 ### Example: Create a Dedicated Monitoring User
 

@@ -618,8 +618,10 @@ KCM.SimpleKCM {
             text: "1. Log into Proxmox web interface\n" +
                   "2. Go to Datacenter → Permissions → API Tokens\n" +
                   "3. Click 'Add' and create a token\n" +
-                  "4. Uncheck 'Privilege Separation' for full access\n" +
-                  "5. Copy the Token ID and Secret"
+                  "4. Token ID must be in the format: user@realm!tokenname\n" +
+                  "5. IMPORTANT: If you enable 'Privilege Separation', you must grant permissions to BOTH the user and the token.\n" +
+                  "   Proxmox calculates effective permissions as the intersection of user + token ACLs.\n" +
+                  "6. Copy the token secret immediately (it is shown only once)"
             font.pixelSize: 11
             opacity: 0.7
             wrapMode: Text.WordWrap
