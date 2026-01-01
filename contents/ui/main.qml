@@ -235,9 +235,20 @@ PlasmoidItem {
             delete newBusy[key]
             actionBusy = newBusy
 
+            var upid = ""
+            try {
+                if (data && data.data && typeof data.data === "string") {
+                    upid = data.data
+                }
+            } catch (e) { upid = "" }
+
+            if (devMode && upid) {
+                console.log("[Proxmox] Action UPID: " + upid)
+            }
+
             sendNotification(
                 (actionKind === "qemu" ? "VM" : "Container") + " action",
-                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + " OK",
+                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + " OK" + (upid ? (" (task " + upid + ")") : ""),
                 "dialog-information",
                 "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":ok"
             )

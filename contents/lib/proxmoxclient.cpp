@@ -339,7 +339,9 @@ void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind
             return;
         }
 
-        // Actions typically return {"data":null} on success. Still parse JSON when possible.
+        // Actions can return {"data":"<UPID>"} (task id) or {"data":null}.
+        // Proxmox tasks can be inspected via node task status/log endpoints (see pvenode task status/log docs).
+        // We parse JSON when possible so QML can surface the returned UPID if present.
         QJsonParseError pe;
         const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
         if (pe.error == QJsonParseError::NoError && !doc.isNull()) {
