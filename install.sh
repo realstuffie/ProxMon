@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 printf '%s\n' "Installing Proxmox Monitor Plasmoid..."
 
@@ -9,12 +10,15 @@ BUILD_DIR="$(mktemp -d -t proxmon-build-XXXXXX)"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 
 cmake -S contents/lib -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release || exit 1
-cmake --build "$BUILD_DIR" || exit 1
+
+# Build in parallel (CMake will choose a sensible default; we also pass an explicit -j as a hint)
+JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+cmake --build "$BUILD_DIR" -- -j"$JOBS" || exit 1
 
 # Stage runtime QML module into the plasmoid package
 mkdir -p contents/lib/proxmox
 # qmldir is already in the package; avoid copying file onto itself
-cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/ || exit 1
+cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/
 
 printf '%s\n' "Native plugin staged: contents/lib/proxmox/libproxmoxclientplugin.so"
 

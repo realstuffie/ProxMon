@@ -17,7 +17,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Planned Features
 
-- [ ] Remote commands (Start, Stop, Restart)
+- [ ] Remote commands (Start, Stop, Restart) *(implemented; docs/UI polish still ongoing)*
 - [ ] Resource usage graphs
 - [ ] Storage monitoring
 - [ ] Backup status
@@ -114,7 +114,7 @@ If using privilege separation, the token needs:
 | Permission | Path | Purpose |
 |------------|------|---------|
 | `Sys.Audit` | `/` | Read node status |
-| `VM.Audit` | `/vms` | Read VM/CT status |
+| `VM.Audit` | `/vms` | Read VM & container status (QEMU + LXC) |
 
 ### Optional: Permissions for Start/Stop/Reboot actions
 
@@ -122,12 +122,17 @@ If you want to use the widget’s power actions (Start/Shutdown/Reboot), audit p
 
 | Permission | Path | Purpose |
 |------------|------|---------|
-| `VM.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot QEMU VMs |
-| `CT.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot LXC containers |
+| `VM.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot VMs and containers (QEMU + LXC) |
+| `Sys.PowerMgmt` | `/` (or more specific) | Required for power actions in some setups/roles |
 
 Recommended approach:
 - Keep a read-only monitoring token with `Sys.Audit` + `VM.Audit`
-- Create a separate token/user for actions with `VM.PowerMgmt`/`CT.PowerMgmt` at the minimum scope you want
+- Create a separate token/user for actions with `VM.PowerMgmt` (+ `Sys.PowerMgmt` only if required in your ACL/role setup) at the minimum scope you want
+
+Note: Proxmox ships built-in roles like `PVEAuditor` (read-only) and `PVEVMUser` (includes `VM.PowerMgmt`). You can also create minimal custom roles, e.g.:\n\n```bash\npveum role add VM_Power-only --privs \"VM.PowerMgmt VM.Console\"\n```\n\nAlso see Proxmox docs for templated ACL paths like `/vms/{vmid}` and `/nodes/{node}` when scoping permissions.
+
+#### Note on Privilege Separation (common misconfiguration)
+If you create the API token with **Privilege Separation** enabled (`-privsep 1`), the token will *not* automatically inherit the user's ACLs.\n\nPer Proxmox docs, the effective permissions are the **intersection** of the user permissions and the token permissions. This means you must grant roles to both the **user** and the **token** (or disable privilege separation for “full privileges”).\n\nExample:\n```bash\n# Create token with separated privileges\npveum user token add joe@pve monitoring -privsep 1\n\n# Grant read-only role to the token (and ensure the user also has it)\npveum acl modify /vms -token 'joe@pve!monitoring' -role PVEAuditor\n```
 
 ### Example: Create a Dedicated Monitoring User
 
@@ -147,6 +152,8 @@ pveum user token add monitor@pve plasma-monitor
    - **Port**: API port (default: `8006`)
    - **API Token ID**: Format `user@realm!tokenname` (e.g., `root@pam!plasma-monitor`)
    - **API Token Secret**: The secret from token creation
+   - **Update Keyring**: If you changed the secret, click **Update Keyring**. The widget stores it temporarily and migrates it into the system keyring on next load.
+   - **Forget**: Clears the secret field (does **not** delete existing keyring entries).
    - **Refresh Interval**: Update frequency in seconds (default: `30`)
    - **Ignore SSL**: Enable for self-signed certificates
 4. **Behavior tab**:
@@ -196,17 +203,13 @@ Triple-click the footer to enable developer mode:
 
 ### Widget shows "!" or connection error
 
-1. **Check connectivity**:
-   ```bash
-   curl -k -s 'https://YOUR_HOST:8006/api2/json/nodes' \
-     -H 'Authorization: PVEAPIToken=user@realm!token=SECRET'
-   ```
+1. **Verify credentials**:
+   - Ensure token ID format is `user@realm!tokenname`
+   - If you rotated the token secret, re-enter it and click **Update Keyring**, then reopen the widget
 
-2. **Verify credentials**: Ensure token ID format is `user@realm!tokenname`
+2. **SSL issues**: Enable "Ignore SSL" for self-signed certificates
 
-3. **SSL issues**: Enable "Ignore SSL" for self-signed certificates
-
-4. **Firewall**: Ensure port 8006 is accessible
+3. **Firewall**: Ensure port 8006 is accessible
 
 ### Icons not showing
 

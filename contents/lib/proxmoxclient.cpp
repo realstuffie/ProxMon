@@ -60,6 +60,38 @@ void ProxmoxClient::requestLxc(const QString &node, int seq) {
     request(QStringLiteral("/nodes/%1/lxc").arg(node), seq, QStringLiteral("lxc"), node);
 }
 
+void ProxmoxClient::requestNodesFor(const QString &sessionKey,
+                                    const QString &host,
+                                    int port,
+                                    const QString &tokenId,
+                                    const QString &tokenSecret,
+                                    bool ignoreSslErrors,
+                                    int seq) {
+    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, QStringLiteral("/nodes"), seq, QStringLiteral("nodes"), QString());
+}
+
+void ProxmoxClient::requestQemuFor(const QString &sessionKey,
+                                   const QString &host,
+                                   int port,
+                                   const QString &tokenId,
+                                   const QString &tokenSecret,
+                                   bool ignoreSslErrors,
+                                   const QString &node,
+                                   int seq) {
+    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, QStringLiteral("/nodes/%1/qemu").arg(node), seq, QStringLiteral("qemu"), node);
+}
+
+void ProxmoxClient::requestLxcFor(const QString &sessionKey,
+                                  const QString &host,
+                                  int port,
+                                  const QString &tokenId,
+                                  const QString &tokenSecret,
+                                  bool ignoreSslErrors,
+                                  const QString &node,
+                                  int seq) {
+    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, QStringLiteral("/nodes/%1/lxc").arg(node), seq, QStringLiteral("lxc"), node);
+}
+
 void ProxmoxClient::requestAction(const QString &kind, const QString &node, int vmid, const QString &action, int seq) {
     if (kind != QStringLiteral("qemu") && kind != QStringLiteral("lxc")) {
         emit actionError(seq, kind, node, vmid, action, QStringLiteral("Invalid kind"));
@@ -87,6 +119,8 @@ QNetworkRequest buildRequest(const QString &host, int port, const QString &path,
     req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("ProxMon"));
     req.setRawHeader("Accept", "application/json");
 
+    // Proxmox expects the token pair as "tokenid=secret" (e.g. root@pam!mytoken=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    // Header format: Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID
     const QByteArray auth = QByteArray("PVEAPIToken=") + tokenId.toUtf8() + "=" + tokenSecret.toUtf8();
     req.setRawHeader("Authorization", auth);
 
@@ -118,12 +152,38 @@ QString extractJsonMessage(const QByteArray &body) {
 } // namespace
 
 void ProxmoxClient::request(const QString &path, int seq, const QString &kind, const QString &node) {
-    if (m_host.isEmpty() || m_tokenId.isEmpty() || m_tokenSecret.isEmpty()) {
-        emit error(seq, kind, node, QStringLiteral("Not configured"));
+    requestFor(QString(),
+               m_host,
+               m_port,
+               m_tokenId,
+               m_tokenSecret,
+               m_ignoreSslErrors,
+               path,
+               seq,
+               kind,
+               node);
+}
+
+void ProxmoxClient::requestFor(const QString &sessionKey,
+                               const QString &host,
+                               int port,
+                               const QString &tokenId,
+                               const QString &tokenSecret,
+                               bool ignoreSslErrors,
+                               const QString &path,
+                               int seq,
+                               const QString &kind,
+                               const QString &node) {
+    if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
+        if (sessionKey.isEmpty()) {
+            emit error(seq, kind, node, QStringLiteral("Not configured"));
+        } else {
+            emit errorFor(seq, sessionKey, kind, node, QStringLiteral("Not configured"));
+        }
         return;
     }
 
-    QNetworkRequest req = buildRequest(m_host, m_port, path, m_tokenId, m_tokenSecret);
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret);
     QNetworkReply *r = m_nam.get(req);
 
     m_inFlight.insert(r);
@@ -131,18 +191,33 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
         m_inFlight.remove(r);
     });
 
-    if (m_ignoreSslErrors) {
+    if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
             r->ignoreSslErrors();
         });
     }
 
-    QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, kind, node]() {
+    QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, sessionKey, kind, node]() {
         // Remove early so cancelAll() never sees a finished reply.
         m_inFlight.remove(r);
 
         const int httpStatus = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray body = r->readAll();
+
+        auto emitErr = [&](const QString &msg) {
+            if (sessionKey.isEmpty()) {
+                emit error(seq, kind, node, msg);
+            } else {
+                emit errorFor(seq, sessionKey, kind, node, msg);
+            }
+        };
+        auto emitOk = [&](const QVariant &data) {
+            if (sessionKey.isEmpty()) {
+                emit reply(seq, kind, node, data);
+            } else {
+                emit replyFor(seq, sessionKey, kind, node, data);
+            }
+        };
 
         // Qt network error (DNS, TLS, connection refused, etc)
         if (r->error() != QNetworkReply::NoError) {
@@ -157,7 +232,7 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
             if (!jsonMsg.isEmpty()) {
                 msg += QStringLiteral(" - ") + jsonMsg;
             }
-            emit error(seq, kind, node, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+            emitErr(QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
             r->deleteLater();
             return;
         }
@@ -169,7 +244,7 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
             if (!jsonMsg.isEmpty()) {
                 msg += QStringLiteral(" - ") + jsonMsg;
             }
-            emit error(seq, kind, node, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+            emitErr(QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
             r->deleteLater();
             return;
         }
@@ -179,7 +254,7 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
             if (!jsonMsg.isEmpty()) {
                 msg += QStringLiteral(" - ") + jsonMsg;
             }
-            emit error(seq, kind, node, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+            emitErr(QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
             r->deleteLater();
             return;
         }
@@ -187,12 +262,12 @@ void ProxmoxClient::request(const QString &path, int seq, const QString &kind, c
         QJsonParseError pe;
         const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
         if (pe.error != QJsonParseError::NoError || doc.isNull()) {
-            emit error(seq, kind, node, QStringLiteral("JSON parse error: %1").arg(pe.errorString()));
+            emitErr(QStringLiteral("JSON parse error: %1").arg(pe.errorString()));
             r->deleteLater();
             return;
         }
 
-        emit reply(seq, kind, node, doc.toVariant());
+        emitOk(doc.toVariant());
         r->deleteLater();
     });
 }
@@ -264,7 +339,9 @@ void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind
             return;
         }
 
-        // Actions typically return {"data":null} on success. Still parse JSON when possible.
+        // Actions can return {"data":"<UPID>"} (task id) or {"data":null}.
+        // Proxmox tasks can be inspected via node task status/log endpoints (see pvenode task status/log docs).
+        // We parse JSON when possible so QML can surface the returned UPID if present.
         QJsonParseError pe;
         const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
         if (pe.error == QJsonParseError::NoError && !doc.isNull()) {

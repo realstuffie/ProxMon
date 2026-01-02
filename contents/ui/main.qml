@@ -1,3 +1,4 @@
+pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls as QQC2
@@ -10,16 +11,35 @@ import "../lib/proxmox" as ProxMon
 PlasmoidItem {
     id: root
 
-    // Connection properties
+    // ==================== CONNECTION / MODE ====================
+
+    // Connection mode: "single" | "multiHost"
+    property string connectionMode: Plasmoid.configuration.connectionMode || "single"
+
+    // Single-host connection properties
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
     // Secret is stored in the system keyring via SecretStore (QtKeychain).
     // Keep Plasmoid.configuration.apiTokenSecret as a backward-compatible fallback only.
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
-    // Tracks keyring resolution state to avoid a "Not Configured" flicker while loading.
+
+    // Multi-host config (KCM stores these)
+    property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
+    // Temporary plaintext stash written by KCM "Update Keyring" buttons; runtime migrates into keyring and clears it.
+    property string multiHostSecretsJson: Plasmoid.configuration.multiHostSecretsJson || "{}"
+
+    // Tracks credential resolution state to avoid a "Not Configured" flicker while loading.
     // Values: "idle" | "loading" | "ready" | "missing" | "error"
     property string secretState: "idle"
+
+    // Endpoints resolved in multi-host mode:
+    // [{ sessionKey, label, host, port, tokenId, secret, ignoreSsl }]
+    property var endpoints: []
+    // Per-endpoint secret load progress
+    property int secretsResolved: 0
+    property int secretsTotal: 0
+
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
@@ -50,29 +70,85 @@ PlasmoidItem {
     property string compactMode: Plasmoid.configuration.compactMode || "cpu"
 
     // Raw data (updated during fetch)
+    // Single-host legacy (kept for compatibility while wiring multi-host)
     property var proxmoxData: null
     property var vmData: []
     property var lxcData: []
 
     // Displayed data (only updated when all requests complete)
+    // Single-host legacy (kept for compatibility while wiring multi-host)
     property var displayedProxmoxData: null
     property var displayedVmData: []
     property var displayedLxcData: []
+
+    // Multi-host displayed buckets (preferred when connectionMode === "multiHost")
+    // [{ sessionKey, label, host, port, nodes: [...], vms: [...], lxcs: [...] }]
+    property var displayedEndpoints: []
 
     // State properties
     property bool loading: false
     property bool isRefreshing: false
     property string errorMessage: ""
     property string lastUpdate: ""
-    property bool hasCoreConfig: proxmoxHost !== "" && apiTokenId !== ""
-    // "configured" means we have host+tokenId and the secret is ready (from keyring or migrated legacy config).
-    property bool configured: hasCoreConfig && secretState === "ready" && apiTokenSecret !== ""
+
+    // One-time hint to guide users when action permissions are missing
+    property bool actionPermHintShown: false
+    property string actionPermHint: ""
+
+    property bool hasCoreConfig: {
+        if (connectionMode === "multiHost") {
+            // core config is at least one endpoint entry (host + tokenId)
+            try {
+                var arr = JSON.parse(multiHostsJson || "[]")
+                if (!Array.isArray(arr)) return false
+                for (var i = 0; i < arr.length; i++) {
+                    var e = arr[i] || {}
+                    var h = (e.host || "").trim()
+                    var t = (e.tokenId || "").trim()
+                    if (h !== "" && t !== "") return true
+                }
+            } catch (e2) {}
+            return false
+        }
+        return proxmoxHost !== "" && apiTokenId !== ""
+    }
+
+    // "configured" means we have at least one usable endpoint and secrets resolved.
+    property bool configured: {
+        if (connectionMode === "multiHost") {
+            return secretState === "ready" && endpoints && endpoints.length > 0
+        }
+        return hasCoreConfig && secretState === "ready" && apiTokenSecret !== ""
+    }
     property bool defaultsLoaded: false
     property bool devMode: false
     property int footerClickCount: 0
 
     // Per-item action busy map: key "node:kind:vmid" => true
     property var actionBusy: ({})
+
+    // Two-click confirmation state (works in plasmoids where popups/dialogs may not render reliably)
+    // If the same action is clicked again while the timer is running, it executes.
+    property string armedActionKey: ""
+    property string armedLabel: ""
+
+    Timer {
+        id: armedTimer
+        interval: 5000
+        repeat: false
+        onTriggered: {
+            armedActionKey = ""
+            armedLabel = ""
+        }
+    }
+
+    /*
+      NOTE (Qt Quick Controls 2 docs):
+      - Popup is designed to be used with a Window/ApplicationWindow.
+      - Overlay.overlay-based parenting assumes a compatible QQC2 overlay layer exists.
+      In Plasma plasmoids, that overlay layer may not exist / may not stack correctly,
+      so we avoid Popup/Dialog confirmations and use the two-click confirmation instead.
+    */
 
     // Multi-node support
     property var nodeList: []
@@ -127,6 +203,8 @@ PlasmoidItem {
  
         ProxMon.ProxmoxClient {
         id: api
+        // Single-host properties for legacy calls + actions.
+        // For multi-host fetching we use requestNodesFor/requestQemuFor/requestLxcFor.
         host: proxmoxHost
         port: proxmoxPort
         tokenId: apiTokenId
@@ -136,6 +214,8 @@ PlasmoidItem {
         onReply: function(seq, kind, node, data) {
             // Ignore late responses from older refresh cycles
             if (seq !== refreshSeq) return
+            // Single-host only
+            if (connectionMode !== "single") return
 
             if (kind === "nodes") {
                 if (!displayedProxmoxData) {
@@ -189,6 +269,7 @@ PlasmoidItem {
 
         onError: function(seq, kind, node, message) {
             if (seq !== refreshSeq) return
+            if (connectionMode !== "single") return
 
             logDebug("api error: " + kind + " " + node + " - " + message)
             errorMessage = message || "Connection failed"
@@ -199,16 +280,40 @@ PlasmoidItem {
             scheduleRetry(errorMessage)
         }
 
+        onReplyFor: function(seq, sessionKey, kind, node, data) {
+            if (seq !== refreshSeq) return
+            if (connectionMode !== "multiHost") return
+            handleMultiReply(sessionKey, kind, node, data)
+        }
+
+        onErrorFor: function(seq, sessionKey, kind, node, message) {
+            if (seq !== refreshSeq) return
+            if (connectionMode !== "multiHost") return
+            handleMultiError(sessionKey, kind, node, message)
+        }
+
         onActionReply: function(seq, actionKind, node, vmid, action, data) {
+            logDebug("onActionReply: " + actionKind + " " + node + " " + vmid + " " + action)
             // any action completion clears busy state
             var key = node + ":" + actionKind + ":" + vmid
             var newBusy = Object.assign({}, actionBusy)
             delete newBusy[key]
             actionBusy = newBusy
 
+            var upid = ""
+            try {
+                if (data && data.data && typeof data.data === "string") {
+                    upid = data.data
+                }
+            } catch (e) { upid = "" }
+
+            if (devMode && upid) {
+                console.log("[Proxmox] Action UPID: " + upid)
+            }
+
             sendNotification(
                 (actionKind === "qemu" ? "VM" : "Container") + " action",
-                actionKind + " " + vmid + " " + action + " OK",
+                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + " OK" + (upid ? (" (task " + upid + ")") : ""),
                 "dialog-information",
                 "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":ok"
             )
@@ -216,15 +321,30 @@ PlasmoidItem {
         }
 
         onActionError: function(seq, actionKind, node, vmid, action, message) {
+            logDebug("onActionError: " + actionKind + " " + node + " " + vmid + " " + action + " - " + (message || ""))
             var key = node + ":" + actionKind + ":" + vmid
             var newBusy = Object.assign({}, actionBusy)
             delete newBusy[key]
             actionBusy = newBusy
 
             errorMessage = message || "Action failed"
+
+            // Detect common permission failures and show a one-time actionable hint.
+            var m = (message || "").toLowerCase()
+            if (!actionPermHintShown && (m.indexOf("http 401") !== -1 || m.indexOf("http 403") !== -1 || m.indexOf("authentication failed") !== -1 || m.indexOf("permission") !== -1 || m.indexOf("forbidden") !== -1)) {
+                actionPermHintShown = true
+                actionPermHint = "Power actions require Proxmox permission: VM.PowerMgmt (scope /vms or /vms/{vmid})."
+                sendNotification(
+                    "Missing permissions for actions",
+                    actionPermHint,
+                    "dialog-warning",
+                    "permhint:actions"
+                )
+            }
+
             sendNotification(
                 (actionKind === "qemu" ? "VM" : "Container") + " action failed",
-                actionKind + " " + vmid + " " + action + ": " + (message || ""),
+                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + ": " + (message || ""),
                 "dialog-error",
                 "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":err"
             )
@@ -233,18 +353,17 @@ PlasmoidItem {
 
 
     // Verbose logging function
+    // NOTE: For action debugging we always log (actions are non-secret). Use devMode to gate high-volume logs only.
     function logDebug(message) {
-        if (devMode) {
-            var now = new Date()
-            var timestamp = now.getFullYear() + "-" +
-                (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
-                now.getDate().toString().padStart(2, '0') + " " +
-                now.getHours().toString().padStart(2, '0') + ":" +
-                now.getMinutes().toString().padStart(2, '0') + ":" +
-                now.getSeconds().toString().padStart(2, '0') + "." +
-                now.getMilliseconds().toString().padStart(3, '0')
-            console.log("[Proxmox " + timestamp + "] " + message)
-        }
+        var now = new Date()
+        var timestamp = now.getFullYear() + "-" +
+            (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
+            now.getDate().toString().padStart(2, '0') + " " +
+            now.getHours().toString().padStart(2, '0') + ":" +
+            now.getMinutes().toString().padStart(2, '0') + ":" +
+            now.getSeconds().toString().padStart(2, '0') + "." +
+            now.getMilliseconds().toString().padStart(3, '0')
+        console.log("[Proxmox " + timestamp + "] " + message)
     }
 
     function buildDebugInfo() {
@@ -542,12 +661,38 @@ PlasmoidItem {
         return sortByStatus(nodeVms)
     }
 
+    function getVmsForNodeMulti(sessionKey, nodeName) {
+        var arr = []
+        for (var i = 0; i < displayedEndpoints.length; i++) {
+            var b = displayedEndpoints[i]
+            if (!b || b.sessionKey !== sessionKey) continue
+            arr = b.vms.filter(function(vm) {
+                return vm.node === nodeName
+            })
+            break
+        }
+        return sortByStatus(arr)
+    }
+
     // Get LXCs for a specific node (use displayed data)
     function getLxcForNode(nodeName) {
         var nodeLxc = displayedLxcData.filter(function(lxc) {
             return lxc.node === nodeName
         })
         return sortByStatus(nodeLxc)
+    }
+
+    function getLxcForNodeMulti(sessionKey, nodeName) {
+        var arr2 = []
+        for (var i2 = 0; i2 < displayedEndpoints.length; i2++) {
+            var b2 = displayedEndpoints[i2]
+            if (!b2 || b2.sessionKey !== sessionKey) continue
+            arr2 = b2.lxcs.filter(function(lxc) {
+                return lxc.node === nodeName
+            })
+            break
+        }
+        return sortByStatus(arr2)
     }
 
     // Get running VM count for a node (use displayed data)
@@ -559,6 +704,15 @@ PlasmoidItem {
         return count
     }
 
+    function getRunningVmsForNodeMulti(sessionKey, nodeName) {
+        var vms = getVmsForNodeMulti(sessionKey, nodeName)
+        var c = 0
+        for (var i = 0; i < vms.length; i++) {
+            if (vms[i].status === "running") c++
+        }
+        return c
+    }
+
     // Get running LXC count for a node (use displayed data)
     function getRunningLxcForNode(nodeName) {
         var count = 0
@@ -566,6 +720,15 @@ PlasmoidItem {
             if (displayedLxcData[i].node === nodeName && displayedLxcData[i].status === "running") count++
         }
         return count
+    }
+
+    function getRunningLxcForNodeMulti(sessionKey, nodeName) {
+        var lxcs = getLxcForNodeMulti(sessionKey, nodeName)
+        var c2 = 0
+        for (var i2 = 0; i2 < lxcs.length; i2++) {
+            if (lxcs[i2].status === "running") c2++
+        }
+        return c2
     }
 
     // Get total VM count for a node (use displayed data)
@@ -577,6 +740,10 @@ PlasmoidItem {
         return count
     }
 
+    function getTotalVmsForNodeMulti(sessionKey, nodeName) {
+        return getVmsForNodeMulti(sessionKey, nodeName).length
+    }
+
     // Get total LXC count for a node (use displayed data)
     function getTotalLxcForNode(nodeName) {
         var count = 0
@@ -584,6 +751,10 @@ PlasmoidItem {
             if (displayedLxcData[i].node === nodeName) count++
         }
         return count
+    }
+
+    function getTotalLxcForNodeMulti(sessionKey, nodeName) {
+        return getLxcForNodeMulti(sessionKey, nodeName).length
     }
 
     function actionKey(nodeName, kind, vmid) {
@@ -606,36 +777,51 @@ PlasmoidItem {
     }
 
     function confirmAndRunAction(kind, nodeName, vmid, displayName, action) {
-        pendingAction = {
-            kind: kind,
-            node: nodeName,
-            vmid: vmid,
-            name: displayName || "",
-            action: action
+        // Plasma sometimes doesn't show QQC2.Popup/Overlay in plasmoids (no window overlay layer).
+        // Use a safe "two-step confirmation" instead:
+        //  - First click arms the action for a short time and changes the icon to "dialog-ok"
+        //  - Second click within the window executes the action
+        logDebug("confirmAndRunAction: " + kind + " " + nodeName + " " + vmid + " " + action)
+
+        var key = kind + ":" + nodeName + ":" + vmid + ":" + action
+        if (armedActionKey === key && armedTimer.running) {
+            // confirmed
+            armedActionKey = ""
+            armedTimer.stop()
+            setActionBusy(nodeName, kind, vmid, true)
+            api.requestAction(kind, nodeName, vmid, action, ++actionSeq)
+            return
         }
-        confirmDialog.open()
+
+        // arm
+        armedActionKey = key
+        armedLabel = "Click again to confirm " + action + " (" + kind + " " + vmid + ")"
+        armedTimer.restart()
     }
 
+    // Backwards-compatible helper (no longer used by action flow, but kept to avoid dangling references)
     function runPendingAction() {
         if (!pendingAction) return
         var a = pendingAction
+        pendingAction = null
         setActionBusy(a.node, a.kind, a.vmid, true)
         api.requestAction(a.kind, a.node, a.vmid, a.action, ++actionSeq)
-        pendingAction = null
     }
 
     // Toggle node collapsed state
-    function toggleNodeCollapsed(nodeName) {
-        var newState = !isNodeCollapsed(nodeName)
-        logDebug("toggleNodeCollapsed: " + nodeName + " -> " + (newState ? "collapsed" : "expanded"))
+    function toggleNodeCollapsed(nodeName, sessionKey) {
+        var k = (connectionMode === "multiHost" && sessionKey) ? endpointNodeKey(sessionKey, nodeName) : nodeName
+        var newState = !isNodeCollapsed(nodeName, sessionKey)
+        logDebug("toggleNodeCollapsed: " + k + " -> " + (newState ? "collapsed" : "expanded"))
         var newCollapsed = Object.assign({}, collapsedNodes)
-        newCollapsed[nodeName] = newState
+        newCollapsed[k] = newState
         collapsedNodes = newCollapsed
     }
 
     // Check if node is collapsed
-    function isNodeCollapsed(nodeName) {
-        return collapsedNodes[nodeName] === true
+    function isNodeCollapsed(nodeName, sessionKey) {
+        var k2 = (connectionMode === "multiHost" && sessionKey) ? endpointNodeKey(sessionKey, nodeName) : nodeName
+        return collapsedNodes[k2] === true
     }
 
     // ==================== ANONYMIZATION FUNCTIONS ====================
@@ -773,32 +959,12 @@ PlasmoidItem {
 
     // Sequencing for actions
     property int actionSeq: 0
+
+    // Confirmation prompt state
     property var pendingAction: null
 
-    QQC2.Dialog {
-        id: confirmDialog
-        title: "Confirm action"
-        modal: true
-        standardButtons: QQC2.Dialog.Ok | QQC2.Dialog.Cancel
-
-        onAccepted: runPendingAction()
-
-        contentItem: ColumnLayout {
-            spacing: 8
-            width: 300
-
-            QQC2.Label {
-                text: pendingAction
-                    ? ("Run " + pendingAction.action + " on "
-                       + (pendingAction.kind === "qemu" ? "VM" : "CT")
-                       + " " + pendingAction.vmid
-                       + (pendingAction.name ? " (" + pendingAction.name + ")" : "")
-                       + " on " + pendingAction.node + "?")
-                    : ""
-                wrapMode: Text.WordWrap
-            }
-        }
-    }
+    // NOTE: QQC2.Popup/Overlay-based confirmations do not render reliably in some Plasma widget environments.
+    // We keep the code path as "two-click to confirm" instead (see confirmAndRunAction()).
 
     Timer {
         id: refreshWatchdog
@@ -865,7 +1031,14 @@ PlasmoidItem {
 
         refreshSeq++
 
-        if (!displayedProxmoxData) {
+        var isInitial = false
+        if (connectionMode === "multiHost") {
+            isInitial = displayedEndpoints.length === 0
+        } else {
+            isInitial = !displayedProxmoxData
+        }
+
+        if (isInitial) {
             loading = true
             logDebug("fetchData: Initial load started")
         } else {
@@ -879,7 +1052,20 @@ PlasmoidItem {
         tempLxcData = []
         errorMessage = ""
 
+        resetMultiTempData()
+
         refreshWatchdog.restart()
+
+        if (connectionMode === "multiHost") {
+            // One pending for each /nodes call; node child calls added when nodes replies arrive
+            pendingNodeRequests = endpoints.length
+            for (var i = 0; i < endpoints.length; i++) {
+                var e = endpoints[i]
+                logDebug("fetchData(multi): /nodes from " + e.host + ":" + e.port + " (" + (e.label || e.sessionKey) + ")")
+                api.requestNodesFor(e.sessionKey, e.host, e.port, e.tokenId, e.secret, e.ignoreSsl, refreshSeq)
+            }
+            return
+        }
 
         logDebug("fetchData: Requesting /nodes from " + proxmoxHost + ":" + proxmoxPort)
         api.requestNodes(refreshSeq)
@@ -928,6 +1114,219 @@ PlasmoidItem {
         return "apiTokenSecret:" + normalizedTokenId(tokenId) + "@" + normalizedHost(host) + ":" + String(port)
     }
 
+    function endpointNodeKey(sessionKey, nodeName) {
+        return String(sessionKey) + "::" + String(nodeName || "")
+    }
+
+    // ---------- Multi-host: parse config + resolve secrets (sequential queue) ----------
+
+    property var secretQueue: []
+    property int secretQueueIndex: 0
+    property var tempEndpoints: []
+
+    function parseMultiHosts() {
+        try {
+            var arr = JSON.parse(multiHostsJson || "[]")
+            if (!Array.isArray(arr)) return []
+            return arr.slice(0, 5)
+        } catch (e) {
+            return []
+        }
+    }
+
+    function buildSecretQueue() {
+        var raw = parseMultiHosts()
+        var q = []
+        for (var i = 0; i < raw.length; i++) {
+            var e = raw[i] || {}
+            var host = (e.host || "").trim()
+            var tokenId = (e.tokenId || "").trim()
+            if (!host || !tokenId) continue
+            var port = (e.port !== undefined && e.port !== null) ? Number(e.port) : 8006
+            if (!port) port = 8006
+            var label = (e.name || "").trim()
+            var sessionKey = keyFor(host, port, tokenId)
+            q.push({ sessionKey: sessionKey, label: label, host: host, port: port, tokenId: tokenId })
+        }
+        return q
+    }
+
+    function parseSecretsMap() {
+        try {
+            var m = JSON.parse(Plasmoid.configuration.multiHostSecretsJson || "{}")
+            if (m && typeof m === "object") return m
+        } catch (e) {}
+        return {}
+    }
+
+    function writeSecretsMap(m) {
+        Plasmoid.configuration.multiHostSecretsJson = JSON.stringify(m || {})
+        multiHostSecretsJson = Plasmoid.configuration.multiHostSecretsJson
+    }
+
+    function startMultiSecretResolution() {
+        secretsResolved = 0
+        tempEndpoints = []
+        secretQueue = buildSecretQueue()
+        secretsTotal = secretQueue.length
+        secretQueueIndex = 0
+
+        if (secretsTotal === 0) {
+            endpoints = []
+            secretState = hasCoreConfig ? "missing" : "idle"
+            return
+        }
+
+        secretState = "loading"
+        readNextMultiSecret()
+    }
+
+    function readNextMultiSecret() {
+        if (secretQueueIndex >= secretQueue.length) {
+            // done
+            endpoints = tempEndpoints.slice()
+            secretState = (endpoints.length > 0) ? "ready" : "missing"
+            return
+        }
+
+        var item = secretQueue[secretQueueIndex]
+        secretStore.key = item.sessionKey
+        secretStore.readSecret()
+    }
+
+    // ---------- Multi-host: fetching / aggregation ----------
+
+    property var tempEndpointsData: ({})
+
+    function resetMultiTempData() {
+        tempEndpointsData = ({})
+    }
+
+    function ensureEndpointBucket(sessionKey) {
+        var b = tempEndpointsData[sessionKey]
+        if (b) return b
+        // find meta
+        var meta = null
+        for (var i = 0; i < endpoints.length; i++) {
+            if (endpoints[i].sessionKey === sessionKey) {
+                meta = endpoints[i]
+                break
+            }
+        }
+        b = {
+            sessionKey: sessionKey,
+            label: meta ? meta.label : "",
+            host: meta ? meta.host : "",
+            port: meta ? meta.port : 8006,
+            nodes: [],
+            vms: [],
+            lxcs: []
+        }
+        var newMap = Object.assign({}, tempEndpointsData)
+        newMap[sessionKey] = b
+        tempEndpointsData = newMap
+        return b
+    }
+
+    function bucketsToArray(map) {
+        var arr = []
+        var keys = Object.keys(map || {})
+        // stable order: by label then host
+        keys.sort(function(a, b) {
+            var aa = map[a] || {}
+            var bb = map[b] || {}
+            var la = (aa.label || aa.host || aa.sessionKey || "")
+            var lb = (bb.label || bb.host || bb.sessionKey || "")
+            return String(la).localeCompare(String(lb))
+        })
+        for (var i = 0; i < keys.length; i++) {
+            arr.push(map[keys[i]])
+        }
+        return arr
+    }
+
+    function handleMultiReply(sessionKey, kind, node, data) {
+        if (!sessionKey) return
+        if (kind === "nodes") {
+            var bucket = ensureEndpointBucket(sessionKey)
+            var list = (data && data.data) ? data.data.slice() : []
+            // annotate nodes with sessionKey for uniqueness/collapsing
+            for (var i = 0; i < list.length; i++) {
+                list[i].sessionKey = sessionKey
+            }
+            bucket.nodes = list
+
+            // Schedule per-node QEMU/LXC
+            var nodeNames = list.map(function(n) { return n.node })
+            pendingNodeRequests += nodeNames.length * 2
+            for (var ni = 0; ni < nodeNames.length; ni++) {
+                var ep = endpointBySession(sessionKey)
+                if (!ep) continue
+                api.requestQemuFor(sessionKey, ep.host, ep.port, ep.tokenId, ep.secret, ep.ignoreSsl, nodeNames[ni], refreshSeq)
+                api.requestLxcFor(sessionKey, ep.host, ep.port, ep.tokenId, ep.secret, ep.ignoreSsl, nodeNames[ni], refreshSeq)
+            }
+
+            // nodes call itself counts as one pending completion
+            pendingNodeRequests--
+            checkMultiRequestsComplete()
+            return
+        }
+
+        if (kind === "qemu" || kind === "lxc") {
+            var bucket2 = ensureEndpointBucket(sessionKey)
+            var items = (data && data.data) ? data.data : []
+            for (var j = 0; j < items.length; j++) {
+                var it = items[j]
+                it.node = node
+                it.sessionKey = sessionKey
+                if (kind === "qemu") bucket2.vms.push(it)
+                else bucket2.lxcs.push(it)
+            }
+            pendingNodeRequests--
+            checkMultiRequestsComplete()
+        }
+    }
+
+    function handleMultiError(sessionKey, kind, node, message) {
+        logDebug("api error (multi): " + sessionKey + " " + kind + " " + node + " - " + message)
+        errorMessage = message || "Connection failed"
+        pendingNodeRequests = 0
+        isRefreshing = false
+        loading = false
+        scheduleRetry(errorMessage)
+    }
+
+    function endpointBySession(sessionKey) {
+        for (var i = 0; i < endpoints.length; i++) {
+            if (endpoints[i].sessionKey === sessionKey) return endpoints[i]
+        }
+        return null
+    }
+
+    function checkMultiRequestsComplete() {
+        if (pendingNodeRequests > 0) return
+
+        refreshWatchdog.stop()
+
+        displayedEndpoints = bucketsToArray(tempEndpointsData)
+
+        // Single-host legacy view state cleared
+        displayedProxmoxData = null
+        displayedNodeList = []
+        displayedVmData = []
+        displayedLxcData = []
+
+        // Derive last update and reset retry
+        errorMessage = ""
+        lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
+        resetRetryState()
+
+        isRefreshing = false
+        loading = false
+
+        // TODO: state change notifications across endpoints (future); for now, reuse existing logic only for single-host.
+    }
+
     // Try multiple keys for backwards compatibility (older formatting / pre-normalization).
     property var secretKeyCandidates: []
     property int secretKeyCandidateIndex: 0
@@ -963,10 +1362,64 @@ PlasmoidItem {
     ProxMon.SecretStore {
         id: secretStore
         service: "ProxMon"
-        // key is set dynamically via startSecretReadCandidates()
+        // key is set dynamically via startSecretReadCandidates() / startMultiSecretResolution()
         key: keyFor(proxmoxHost, proxmoxPort, apiTokenId)
 
         onSecretReady: function(secret) {
+            // Multi-host path (queue-driven)
+            if (connectionMode === "multiHost" && secretState === "loading" && secretQueue && secretQueue.length > 0) {
+                var item = secretQueue[secretQueueIndex]
+                var sessionKey = item ? item.sessionKey : ""
+
+                if (secret && secret.length > 0) {
+                    tempEndpoints.push({
+                        sessionKey: sessionKey,
+                        label: item.label,
+                        host: item.host,
+                        port: item.port,
+                        tokenId: item.tokenId,
+                        secret: secret,
+                        ignoreSsl: ignoreSsl
+                    })
+                    secretsResolved += 1
+                    secretQueueIndex += 1
+                    readNextMultiSecret()
+                    return
+                }
+
+                // No keyring entry. If KCM stashed a plaintext secret for this endpoint, migrate it.
+                var map = parseSecretsMap()
+                var stashed = map[sessionKey]
+                if (stashed && String(stashed).length > 0) {
+                    logDebug("secretStore: Migrating multi-host plaintext secret into keyring: " + sessionKey)
+                    // write it and record endpoint immediately
+                    secretStore.writeSecret(String(stashed))
+                    delete map[sessionKey]
+                    writeSecretsMap(map)
+
+                    tempEndpoints.push({
+                        sessionKey: sessionKey,
+                        label: item.label,
+                        host: item.host,
+                        port: item.port,
+                        tokenId: item.tokenId,
+                        secret: String(stashed),
+                        ignoreSsl: ignoreSsl
+                    })
+                    secretsResolved += 1
+                    secretQueueIndex += 1
+                    readNextMultiSecret()
+                    return
+                }
+
+                // Not found; skip this endpoint
+                secretsResolved += 1
+                secretQueueIndex += 1
+                readNextMultiSecret()
+                return
+            }
+
+            // Single-host path (legacy candidates)
             if (secret && secret.length > 0) {
                 // If we loaded from a legacy key, migrate into canonical normalized key.
                 var canonicalKey = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
@@ -1025,9 +1478,17 @@ PlasmoidItem {
 
     function resolveSecretIfNeeded() {
         if (!hasCoreConfig) {
+            endpoints = []
             secretState = "idle"
             return
         }
+
+        if (connectionMode === "multiHost") {
+            startMultiSecretResolution()
+            return
+        }
+
+        // Single-host legacy:
         // If we already have a secret from legacy config binding, consider it ready.
         // (We still attempt keyring read to migrate/ensure correct secret, but avoid UI flicker.)
         if (apiTokenSecret && apiTokenSecret.length > 0 && secretState !== "ready") {
@@ -1038,15 +1499,17 @@ PlasmoidItem {
         startSecretReadCandidates()
     }
 
-    onProxmoxHostChanged: resolveSecretIfNeeded()
-    onProxmoxPortChanged: resolveSecretIfNeeded()
-    onApiTokenIdChanged: resolveSecretIfNeeded()
+    onProxmoxHostChanged: if (connectionMode === "single") resolveSecretIfNeeded()
+    onProxmoxPortChanged: if (connectionMode === "single") resolveSecretIfNeeded()
+    onApiTokenIdChanged: if (connectionMode === "single") resolveSecretIfNeeded()
+    onMultiHostsJsonChanged: if (connectionMode === "multiHost") resolveSecretIfNeeded()
+    onConnectionModeChanged: resolveSecretIfNeeded()
 
     Component.onCompleted: {
         logDebug("Component.onCompleted: Plasmoid initialized")
         resolveSecretIfNeeded()
 
-        if (!hasCoreConfig) {
+        if (!hasCoreConfig && connectionMode === "single") {
             logDebug("Component.onCompleted: Missing core config, loading defaults")
             loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
         }
@@ -1189,6 +1652,10 @@ PlasmoidItem {
 
             PlasmaComponents.Label {
                 text: {
+                    // Distinguish states in compact mode to avoid confusing "Not configured" flicker.
+                    if (!hasCoreConfig) return "⚙"
+                    if (secretState === "loading") return "..."
+                    if (secretState === "missing" || secretState === "error") return "!"
                     if (!configured) return "⚙"
                     if (loading) return "..."
 
@@ -1435,6 +1902,24 @@ PlasmoidItem {
                 horizontalAlignment: Text.AlignHCenter
             }
 
+            PlasmaComponents.Label {
+                text: armedLabel
+                visible: armedLabel !== ""
+                opacity: 0.9
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            PlasmaComponents.Label {
+                text: actionPermHint
+                visible: actionPermHintShown && actionPermHint !== ""
+                opacity: 0.9
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+            }
+
             PlasmaComponents.Button {
                 text: "Retry"
                 icon.name: "view-refresh"
@@ -1462,6 +1947,7 @@ PlasmoidItem {
                 spacing: 8
 
                 Repeater {
+                    visible: connectionMode === "single"
                     model: displayedProxmoxData && displayedProxmoxData.data ? displayedProxmoxData.data : []
 
                     delegate: ColumnLayout {
@@ -1469,10 +1955,25 @@ PlasmoidItem {
                         Layout.fillWidth: true
                         spacing: 4
 
-                        property string nodeName: modelData.node
+                        // Per Qt docs, Repeater delegates get `index` and (for array/object-list models) `modelData`.
+                        // Plasma should follow this; using captured outer arrays can lead to all delegates showing the same element.
+                        required property int index
+                        required property var modelData
+
+                        readonly property int nodeIndex: index
+                        readonly property var nodeModel: modelData
+
+                        property string nodeName: nodeModel ? nodeModel.node : ""
                         property var nodeVms: getVmsForNode(nodeName)
                         property var nodeLxc: getLxcForNode(nodeName)
                         property bool isCollapsed: isNodeCollapsed(nodeName)
+
+                        // Force relayout when collapsing/expanding nodes so the footer doesn't "float" visually
+                        // (ScrollView/ColumnLayout can otherwise keep a stale implicit height briefly).
+                        onIsCollapsedChanged: {
+                            scrollView.forceLayout()
+                            fullRep.forceLayout()
+                        }
 
                         // Node card
                         Rectangle {
@@ -1510,19 +2011,19 @@ PlasmoidItem {
                                     }
 
                                     PlasmaComponents.Label {
-                                        text: anonymizeNodeName(modelData.node, index)
+                                        text: anonymizeNodeName(nodeModel.node, nodeIndex)
                                         font.bold: true
                                     }
 
                                     Rectangle {
-                                        width: 52
-                                        height: 16
+                                        implicitWidth: 52
+                                        implicitHeight: 16
                                         radius: 8
-                                        color: modelData.status === "online" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+                                        color: nodeModel.status === "online" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
 
                                         PlasmaComponents.Label {
                                             anchors.centerIn: parent
-                                            text: modelData.status
+                                            text: nodeModel.status
                                             color: "white"
                                             font.pixelSize: 9
                                         }
@@ -1548,7 +2049,7 @@ PlasmoidItem {
                                             opacity: 0.7
                                         }
 
-                                        Item { width: 4 }
+                                        Item { implicitWidth: 4 }
 
                                         Kirigami.Icon {
                                             source: "lxc"
@@ -1569,19 +2070,19 @@ PlasmoidItem {
                                     spacing: 12
 
                                     PlasmaComponents.Label {
-                                        text: "CPU: " + (modelData.cpu * 100).toFixed(1) + "%"
+                                        text: "CPU: " + (nodeModel.cpu * 100).toFixed(1) + "%"
                                         font.pixelSize: 12
                                     }
 
                                     PlasmaComponents.Label {
-                                        text: "Mem: " + (modelData.mem / 1073741824).toFixed(1) + "/" + (modelData.maxmem / 1073741824).toFixed(1) + "G"
+                                        text: "Mem: " + (nodeModel.mem / 1073741824).toFixed(1) + "/" + (nodeModel.maxmem / 1073741824).toFixed(1) + "G"
                                         font.pixelSize: 12
                                     }
 
                                     Item { Layout.fillWidth: true }
 
                                     PlasmaComponents.Label {
-                                        text: Math.floor(modelData.uptime / 86400) + "d " + Math.floor((modelData.uptime % 86400) / 3600) + "h"
+                                        text: Math.floor(nodeModel.uptime / 86400) + "d " + Math.floor((nodeModel.uptime % 86400) / 3600) + "h"
                                         font.pixelSize: 11
                                         opacity: 0.7
                                     }
@@ -1626,11 +2127,18 @@ PlasmoidItem {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 28
                                         radius: 4
-                                        color: modelData.status === "running"
+
+                                        required property int index
+                                        required property var modelData
+
+                                        readonly property int vmIndex: index
+                                        readonly property var vmModel: modelData
+
+                                        color: vmModel && vmModel.status === "running"
                                             ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15)
                                             : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
 
-                                        property bool busy: isActionBusy(nodeName, "qemu", modelData.vmid)
+                                        property bool busy: vmModel ? isActionBusy(nodeName, "qemu", vmModel.vmid) : false
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -1639,14 +2147,16 @@ PlasmoidItem {
                                             spacing: 6
 
                                             Rectangle {
-                                                width: 8
-                                                height: 8
+                                                implicitWidth: 8
+                                                implicitHeight: 8
                                                 radius: 4
-                                                color: modelData.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                                                color: vmModel && vmModel.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
                                             }
 
                                             PlasmaComponents.Label {
-                                                text: anonymizeVmId(modelData.vmid, index) + ": " + anonymizeVmName(modelData.name, index)
+                                                text: vmModel
+                                                    ? (anonymizeVmId(vmModel.vmid, vmIndex) + ": " + anonymizeVmName(vmModel.name, vmIndex))
+                                                    : ""
                                                 Layout.fillWidth: true
                                                 elide: Text.ElideRight
                                                 font.pixelSize: 11
@@ -1663,9 +2173,11 @@ PlasmoidItem {
                                                 spacing: 1
 
                                                 PlasmaComponents.Label {
-                                                    text: modelData.status === "running"
-                                                        ? (modelData.cpu * 100).toFixed(0) + "%"
-                                                        : modelData.status
+                                                    text: vmModel
+                                                        ? (vmModel.status === "running"
+                                                           ? (vmModel.cpu * 100).toFixed(0) + "%"
+                                                           : vmModel.status)
+                                                        : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
                                                     horizontalAlignment: Text.AlignRight
@@ -1675,7 +2187,7 @@ PlasmoidItem {
                                                 }
 
                                                 PlasmaComponents.Label {
-                                                    text: modelData.status === "running" ? "|" : ""
+                                                    text: vmModel && vmModel.status === "running" ? "|" : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
                                                     horizontalAlignment: Text.AlignHCenter
@@ -1685,8 +2197,8 @@ PlasmoidItem {
                                                 }
 
                                                 PlasmaComponents.Label {
-                                                    text: modelData.status === "running"
-                                                        ? (modelData.mem / 1073741824).toFixed(1) + "G"
+                                                    text: vmModel && vmModel.status === "running"
+                                                        ? (vmModel.mem / 1073741824).toFixed(1) + "G"
                                                         : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
@@ -1715,33 +2227,39 @@ PlasmoidItem {
 
                                                 PlasmaComponents.Button {
                                                     flat: true
-                                                    icon.name: "media-playback-start"
+                                                    icon.name: (armedActionKey === ("qemu:" + nodeName + ":" + vmModel.vmid + ":start") && armedTimer.running)
+                                                        ? "dialog-ok"
+                                                        : "media-playback-start"
                                                     implicitWidth: 22
                                                     implicitHeight: 22
-                                                    visible: !busy && modelData.status !== "running"
-                                                    onClicked: confirmAndRunAction("qemu", nodeName, modelData.vmid, modelData.name, "start")
+                                                    visible: vmModel && !busy && vmModel.status !== "running"
+                                                    onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "start")
                                                 }
-                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status === "running" }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status === "running" }
 
                                                 PlasmaComponents.Button {
                                                     flat: true
-                                                    icon.name: "system-shutdown"
+                                                    icon.name: (armedActionKey === ("qemu:" + nodeName + ":" + vmModel.vmid + ":shutdown") && armedTimer.running)
+                                                        ? "dialog-ok"
+                                                        : "system-shutdown"
                                                     implicitWidth: 22
                                                     implicitHeight: 22
-                                                    visible: !busy && modelData.status === "running"
-                                                    onClicked: confirmAndRunAction("qemu", nodeName, modelData.vmid, modelData.name, "shutdown")
+                                                    visible: vmModel && !busy && vmModel.status === "running"
+                                                    onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "shutdown")
                                                 }
-                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status !== "running" }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status !== "running" }
 
                                                 PlasmaComponents.Button {
                                                     flat: true
-                                                    icon.name: "system-reboot"
+                                                    icon.name: (armedActionKey === ("qemu:" + nodeName + ":" + vmModel.vmid + ":reboot") && armedTimer.running)
+                                                        ? "dialog-ok"
+                                                        : "system-reboot"
                                                     implicitWidth: 22
                                                     implicitHeight: 22
-                                                    visible: !busy && modelData.status === "running"
-                                                    onClicked: confirmAndRunAction("qemu", nodeName, modelData.vmid, modelData.name, "reboot")
+                                                    visible: vmModel && !busy && vmModel.status === "running"
+                                                    onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "reboot")
                                                 }
-                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status !== "running" }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status !== "running" }
                                             }
                                         }
                                     }
@@ -1778,11 +2296,18 @@ PlasmoidItem {
                                         Layout.fillWidth: true
                                         Layout.preferredHeight: 28
                                         radius: 4
-                                        color: modelData.status === "running"
+
+                                        required property int index
+                                        required property var modelData
+
+                                        readonly property int ctIndex: index
+                                        readonly property var ctModel: modelData
+
+                                        color: ctModel && ctModel.status === "running"
                                             ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
                                             : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
 
-                                        property bool busy: isActionBusy(nodeName, "lxc", modelData.vmid)
+                                        property bool busy: ctModel ? isActionBusy(nodeName, "lxc", ctModel.vmid) : false
 
                                         RowLayout {
                                             anchors.fill: parent
@@ -1791,14 +2316,16 @@ PlasmoidItem {
                                             spacing: 6
 
                                             Rectangle {
-                                                width: 8
-                                                height: 8
+                                                implicitWidth: 8
+                                                implicitHeight: 8
                                                 radius: 4
-                                                color: modelData.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                                                color: ctModel && ctModel.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
                                             }
 
                                             PlasmaComponents.Label {
-                                                text: anonymizeVmId(modelData.vmid, index) + ": " + anonymizeLxcName(modelData.name, index)
+                                                text: ctModel
+                                                    ? (anonymizeVmId(ctModel.vmid, ctIndex) + ": " + anonymizeLxcName(ctModel.name, ctIndex))
+                                                    : ""
                                                 Layout.fillWidth: true
                                                 elide: Text.ElideRight
                                                 font.pixelSize: 11
@@ -1815,9 +2342,11 @@ PlasmoidItem {
                                                 spacing: 1
 
                                                 PlasmaComponents.Label {
-                                                    text: modelData.status === "running"
-                                                        ? (modelData.cpu * 100).toFixed(0) + "%"
-                                                        : modelData.status
+                                                    text: ctModel
+                                                        ? (ctModel.status === "running"
+                                                           ? (ctModel.cpu * 100).toFixed(0) + "%"
+                                                           : ctModel.status)
+                                                        : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
                                                     horizontalAlignment: Text.AlignRight
@@ -1827,7 +2356,7 @@ PlasmoidItem {
                                                 }
 
                                                 PlasmaComponents.Label {
-                                                    text: modelData.status === "running" ? "|" : ""
+                                                    text: ctModel && ctModel.status === "running" ? "|" : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
                                                     horizontalAlignment: Text.AlignHCenter
@@ -1837,8 +2366,8 @@ PlasmoidItem {
                                                 }
 
                                                 PlasmaComponents.Label {
-                                                    text: modelData.status === "running"
-                                                        ? (modelData.mem / 1073741824).toFixed(1) + "G"
+                                                    text: ctModel && ctModel.status === "running"
+                                                        ? (ctModel.mem / 1073741824).toFixed(1) + "G"
                                                         : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
@@ -1867,33 +2396,39 @@ PlasmoidItem {
 
                                                 PlasmaComponents.Button {
                                                     flat: true
-                                                    icon.name: "media-playback-start"
+                                                    icon.name: (armedActionKey === ("lxc:" + nodeName + ":" + ctModel.vmid + ":start") && armedTimer.running)
+                                                        ? "dialog-ok"
+                                                        : "media-playback-start"
                                                     implicitWidth: 22
                                                     implicitHeight: 22
-                                                    visible: !busy && modelData.status !== "running"
-                                                    onClicked: confirmAndRunAction("lxc", nodeName, modelData.vmid, modelData.name, "start")
+                                                    visible: ctModel && !busy && ctModel.status !== "running"
+                                                    onClicked: confirmAndRunAction("lxc", nodeName, ctModel.vmid, ctModel.name, "start")
                                                 }
-                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status === "running" }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status === "running" }
 
                                                 PlasmaComponents.Button {
                                                     flat: true
-                                                    icon.name: "system-shutdown"
+                                                    icon.name: (armedActionKey === ("lxc:" + nodeName + ":" + ctModel.vmid + ":shutdown") && armedTimer.running)
+                                                        ? "dialog-ok"
+                                                        : "system-shutdown"
                                                     implicitWidth: 22
                                                     implicitHeight: 22
-                                                    visible: !busy && modelData.status === "running"
-                                                    onClicked: confirmAndRunAction("lxc", nodeName, modelData.vmid, modelData.name, "shutdown")
+                                                    visible: ctModel && !busy && ctModel.status === "running"
+                                                    onClicked: confirmAndRunAction("lxc", nodeName, ctModel.vmid, ctModel.name, "shutdown")
                                                 }
-                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status !== "running" }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status !== "running" }
 
                                                 PlasmaComponents.Button {
                                                     flat: true
-                                                    icon.name: "system-reboot"
+                                                    icon.name: (armedActionKey === ("lxc:" + nodeName + ":" + ctModel.vmid + ":reboot") && armedTimer.running)
+                                                        ? "dialog-ok"
+                                                        : "system-reboot"
                                                     implicitWidth: 22
                                                     implicitHeight: 22
-                                                    visible: !busy && modelData.status === "running"
-                                                    onClicked: confirmAndRunAction("lxc", nodeName, modelData.vmid, modelData.name, "reboot")
+                                                    visible: ctModel && !busy && ctModel.status === "running"
+                                                    onClicked: confirmAndRunAction("lxc", nodeName, ctModel.vmid, ctModel.name, "reboot")
                                                 }
-                                                Item { implicitWidth: 22; implicitHeight: 22; visible: busy || modelData.status !== "running" }
+                                                Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status !== "running" }
                                             }
                                         }
                                     }
@@ -1916,8 +2451,362 @@ PlasmoidItem {
                             Layout.preferredHeight: 1
                             color: Kirigami.Theme.disabledTextColor
                             opacity: 0.3
-                            visible: index < (displayedProxmoxData.data.length - 1)
+                            visible: nodeIndex < (root.displayedProxmoxData.data.length - 1)
                             Layout.topMargin: 4
+                        }
+                    }
+                }
+
+                // Multi-host view (group by endpoint)
+                Repeater {
+                    visible: connectionMode === "multiHost"
+                    model: displayedEndpoints
+
+                    delegate: ColumnLayout {
+                        id: endpointDelegate
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        required property int index
+                        required property var modelData
+
+                        readonly property var endpoint: modelData
+                        readonly property string sessionKey: endpoint ? endpoint.sessionKey : ""
+                        readonly property string endpointLabel: endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : "")
+                        readonly property var nodes: endpoint && endpoint.nodes ? endpoint.nodes : []
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 34
+                            radius: 6
+                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12)
+                            border.color: Kirigami.Theme.disabledTextColor
+                            border.width: 1
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                spacing: 6
+
+                                Kirigami.Icon {
+                                    source: "server-database"
+                                    implicitWidth: 16
+                                    implicitHeight: 16
+                                    opacity: 0.7
+                                }
+
+                                PlasmaComponents.Label {
+                                    text: endpointLabel
+                                    font.bold: true
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+
+                                PlasmaComponents.Label {
+                                    text: endpoint ? (endpoint.host + ":" + endpoint.port) : ""
+                                    opacity: 0.7
+                                    font.pixelSize: 10
+                                }
+                            }
+                        }
+
+                        Repeater {
+                            model: nodes
+
+                            delegate: ColumnLayout {
+                                id: multiNodeDelegate
+                                Layout.fillWidth: true
+                                spacing: 4
+
+                                required property int index
+                                required property var modelData
+
+                                readonly property var nodeModel: modelData
+                                readonly property string nodeName: nodeModel ? nodeModel.node : ""
+                                readonly property var nodeVms: getVmsForNodeMulti(sessionKey, nodeName)
+                                readonly property var nodeLxc: getLxcForNodeMulti(sessionKey, nodeName)
+                                property bool isCollapsed: isNodeCollapsed(nodeName, sessionKey)
+
+                                onIsCollapsedChanged: {
+                                    scrollView.forceLayout()
+                                    fullRep.forceLayout()
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 70
+                                    radius: 6
+                                    color: Kirigami.Theme.backgroundColor
+                                    border.color: Kirigami.Theme.disabledTextColor
+                                    border.width: 1
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: toggleNodeCollapsed(nodeName, sessionKey)
+                                        cursorShape: Qt.PointingHandCursor
+                                    }
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        spacing: 4
+
+                                        RowLayout {
+                                            spacing: 8
+
+                                            Kirigami.Icon {
+                                                source: isCollapsed ? "arrow-right" : "arrow-down"
+                                                implicitWidth: 14
+                                                implicitHeight: 14
+                                            }
+
+                                            Kirigami.Icon {
+                                                source: "computer"
+                                                implicitWidth: 18
+                                                implicitHeight: 18
+                                            }
+
+                                            PlasmaComponents.Label {
+                                                text: anonymizeNodeName(nodeName, index)
+                                                font.bold: true
+                                            }
+
+                                            Rectangle {
+                                                implicitWidth: 52
+                                                implicitHeight: 16
+                                                radius: 8
+                                                color: nodeModel && nodeModel.status === "online" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+
+                                                PlasmaComponents.Label {
+                                                    anchors.centerIn: parent
+                                                    text: nodeModel ? nodeModel.status : ""
+                                                    color: "white"
+                                                    font.pixelSize: 9
+                                                }
+                                            }
+
+                                            Item { Layout.fillWidth: true }
+
+                                            RowLayout {
+                                                spacing: 4
+                                                visible: isCollapsed
+
+                                                Kirigami.Icon {
+                                                    source: "computer-symbolic"
+                                                    implicitWidth: 12
+                                                    implicitHeight: 12
+                                                    opacity: 0.7
+                                                }
+
+                                                PlasmaComponents.Label {
+                                                    text: getRunningVmsForNodeMulti(sessionKey, nodeName) + "/" + getTotalVmsForNodeMulti(sessionKey, nodeName)
+                                                    font.pixelSize: 10
+                                                    opacity: 0.7
+                                                }
+
+                                                Item { implicitWidth: 4 }
+
+                                                Kirigami.Icon {
+                                                    source: "lxc"
+                                                    implicitWidth: 12
+                                                    implicitHeight: 12
+                                                    opacity: 0.7
+                                                }
+
+                                                PlasmaComponents.Label {
+                                                    text: getRunningLxcForNodeMulti(sessionKey, nodeName) + "/" + getTotalLxcForNodeMulti(sessionKey, nodeName)
+                                                    font.pixelSize: 10
+                                                    opacity: 0.7
+                                                }
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 12
+
+                                            PlasmaComponents.Label {
+                                                text: nodeModel ? ("CPU: " + (nodeModel.cpu * 100).toFixed(1) + "%") : ""
+                                                font.pixelSize: 12
+                                            }
+
+                                            PlasmaComponents.Label {
+                                                text: nodeModel ? ("Mem: " + (nodeModel.mem / 1073741824).toFixed(1) + "/" + (nodeModel.maxmem / 1073741824).toFixed(1) + "G") : ""
+                                                font.pixelSize: 12
+                                            }
+
+                                            Item { Layout.fillWidth: true }
+
+                                            PlasmaComponents.Label {
+                                                text: nodeModel ? (Math.floor(nodeModel.uptime / 86400) + "d " + Math.floor((nodeModel.uptime % 86400) / 3600) + "h") : ""
+                                                font.pixelSize: 11
+                                                opacity: 0.7
+                                            }
+                                        }
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.leftMargin: 12
+                                    visible: !isCollapsed
+                                    spacing: 4
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: nodeVms.length > 0
+                                        spacing: 2
+
+                                        RowLayout {
+                                            Layout.preferredHeight: 22
+                                            spacing: 6
+
+                                            Kirigami.Icon {
+                                                source: "computer-symbolic"
+                                                implicitWidth: 14
+                                                implicitHeight: 14
+                                            }
+
+                                            PlasmaComponents.Label {
+                                                text: "VMs (" + getRunningVmsForNodeMulti(sessionKey, nodeName) + "/" + nodeVms.length + ")"
+                                                font.bold: true
+                                                font.pixelSize: 11
+                                            }
+                                        }
+
+                                        Repeater {
+                                            model: nodeVms
+
+                                            delegate: Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 28
+                                                radius: 4
+
+                                                required property int index
+                                                required property var modelData
+
+                                                readonly property var vmModel: modelData
+
+                                                color: vmModel && vmModel.status === "running"
+                                                    ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15)
+                                                    : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 8
+                                                    spacing: 6
+
+                                                    Rectangle {
+                                                        implicitWidth: 8
+                                                        implicitHeight: 8
+                                                        radius: 4
+                                                        color: vmModel && vmModel.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                                                    }
+
+                                                    PlasmaComponents.Label {
+                                                        text: vmModel ? (anonymizeVmId(vmModel.vmid, index) + ": " + anonymizeVmName(vmModel.name, index)) : ""
+                                                        Layout.fillWidth: true
+                                                        elide: Text.ElideRight
+                                                        font.pixelSize: 11
+                                                    }
+
+                                                    // Actions disabled in multi-host mode for now
+                                                    PlasmaComponents.Label {
+                                                        text: ""
+                                                        Layout.preferredWidth: 70
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        visible: nodeLxc.length > 0
+                                        spacing: 2
+
+                                        RowLayout {
+                                            Layout.preferredHeight: 22
+                                            spacing: 6
+
+                                            Kirigami.Icon {
+                                                source: "lxc"
+                                                implicitWidth: 14
+                                                implicitHeight: 14
+                                            }
+
+                                            PlasmaComponents.Label {
+                                                text: "Containers (" + getRunningLxcForNodeMulti(sessionKey, nodeName) + "/" + nodeLxc.length + ")"
+                                                font.bold: true
+                                                font.pixelSize: 11
+                                            }
+                                        }
+
+                                        Repeater {
+                                            model: nodeLxc
+
+                                            delegate: Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 28
+                                                radius: 4
+
+                                                required property int index
+                                                required property var modelData
+
+                                                readonly property var ctModel: modelData
+
+                                                color: ctModel && ctModel.status === "running"
+                                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
+                                                    : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 8
+                                                    spacing: 6
+
+                                                    Rectangle {
+                                                        implicitWidth: 8
+                                                        implicitHeight: 8
+                                                        radius: 4
+                                                        color: ctModel && ctModel.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+                                                    }
+
+                                                    PlasmaComponents.Label {
+                                                        text: ctModel ? (anonymizeVmId(ctModel.vmid, index) + ": " + anonymizeLxcName(ctModel.name, index)) : ""
+                                                        Layout.fillWidth: true
+                                                        elide: Text.ElideRight
+                                                        font.pixelSize: 11
+                                                    }
+
+                                                    // Actions disabled in multi-host mode for now
+                                                    PlasmaComponents.Label {
+                                                        text: ""
+                                                        Layout.preferredWidth: 70
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    PlasmaComponents.Label {
+                                        text: "No VMs or Containers"
+                                        visible: nodeVms.length === 0 && nodeLxc.length === 0
+                                        opacity: 0.5
+                                        font.pixelSize: 10
+                                        Layout.leftMargin: 4
+                                    }
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 1
+                                    color: Kirigami.Theme.disabledTextColor
+                                    opacity: 0.3
+                                    visible: index < (nodes.length - 1)
+                                    Layout.topMargin: 4
+                                }
+                            }
                         }
                     }
                 }
@@ -1925,7 +2814,9 @@ PlasmoidItem {
                 // Empty state
                 PlasmaComponents.Label {
                     text: "No nodes found"
-                    visible: !displayedProxmoxData || !displayedProxmoxData.data || displayedProxmoxData.data.length === 0
+                    visible: (connectionMode === "single")
+                        ? (!displayedProxmoxData || !displayedProxmoxData.data || displayedProxmoxData.data.length === 0)
+                        : (displayedEndpoints.length === 0)
                     opacity: 0.6
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -1938,7 +2829,7 @@ PlasmoidItem {
             }
         }
 
-        // Footer
+        // Footer (keep it pinned to the bottom of the panel; prevent "floating" during ScrollView relayout)
         RowLayout {
             Layout.fillWidth: true
             Layout.leftMargin: 10
@@ -1946,12 +2837,15 @@ PlasmoidItem {
             Layout.topMargin: 4
             Layout.bottomMargin: 8
             Layout.preferredHeight: 24
-            visible: configured
+            Layout.minimumHeight: 24
+            Layout.maximumHeight: 24
+            Layout.alignment: Qt.AlignBottom
+            visible: root.configured
 
             MouseArea {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                onClicked: handleFooterClick()
+                onClicked: root.handleFooterClick()
 
                 RowLayout {
                     anchors.fill: parent
@@ -1965,12 +2859,12 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.Label {
-                        text: displayedNodeList.length + (displayedNodeList.length === 1 ? " node" : " nodes")
+                        text: root.displayedNodeList.length + (root.displayedNodeList.length === 1 ? " node" : " nodes")
                         font.pixelSize: 10
                         opacity: 0.6
                     }
 
-                    Item { width: 8 }
+                    Item { implicitWidth: 8 }
 
                     Kirigami.Icon {
                         source: "computer-symbolic"
@@ -1980,12 +2874,12 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.Label {
-                        text: runningVMs + "/" + displayedVmData.length
+                        text: root.runningVMs + "/" + root.displayedVmData.length
                         font.pixelSize: 10
                         opacity: 0.6
                     }
 
-                    Item { width: 8 }
+                    Item { implicitWidth: 8 }
 
                     Kirigami.Icon {
                         source: "lxc"
@@ -1995,7 +2889,7 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.Label {
-                        text: runningLXC + "/" + displayedLxcData.length
+                        text: root.runningLXC + "/" + root.displayedLxcData.length
                         font.pixelSize: 10
                         opacity: 0.6
                     }
@@ -2003,7 +2897,7 @@ PlasmoidItem {
                     Item { Layout.fillWidth: true }
 
                     PlasmaComponents.Label {
-                        text: lastUpdate ? "Updated: " + lastUpdate : ""
+                        text: root.lastUpdate ? "Updated: " + root.lastUpdate : ""
                         font.pixelSize: 10
                         opacity: 0.6
                     }
@@ -2015,10 +2909,10 @@ PlasmoidItem {
     // ==================== REFRESH TIMER ====================
 
     Timer {
-        interval: refreshInterval > 0 ? refreshInterval : 30000
-        running: configured
+        interval: root.refreshInterval > 0 ? root.refreshInterval : 30000
+        running: root.configured
         repeat: true
         triggeredOnStart: true
-        onTriggered: fetchData()
+        onTriggered: root.fetchData()
     }
 }

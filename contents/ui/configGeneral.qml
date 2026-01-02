@@ -23,6 +23,10 @@ KCM.SimpleKCM {
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
     property alias cfg_enableNotifications: enableNotificationsCheck.checked
 
+    // Multi-host mode
+    property string cfg_connectionMode: Plasmoid.configuration.connectionMode || "single"
+    property string cfg_multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
+
     // Auto-retry (handled in main.qml)
     property alias cfg_autoRetry: autoRetryCheck.checked
     property alias cfg_retryStartSeconds: retryStartSpin.value
@@ -33,6 +37,9 @@ KCM.SimpleKCM {
     property int cfg_proxmoxPortDefault: 8006
     property string cfg_apiTokenIdDefault: ""
     property string cfg_apiTokenSecretDefault: ""
+
+    property string cfg_connectionModeDefault: "single"
+    property string cfg_multiHostsJsonDefault: "[]"
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
     property bool cfg_enableNotificationsDefault: true
@@ -109,6 +116,36 @@ KCM.SimpleKCM {
         return str.replace(/\\/g, "\\\\").replace(/'/g, "'\\''")
     }
 
+    function parseMultiHosts() {
+        try {
+            var arr = JSON.parse(cfg_multiHostsJson || "[]")
+            if (!Array.isArray(arr)) return []
+            return arr.slice(0, 5)
+        } catch (e) {
+            return []
+        }
+    }
+
+    function saveMultiHosts(arr) {
+        cfg_multiHostsJson = JSON.stringify((arr || []).slice(0, 5))
+        Plasmoid.configuration.multiHostsJson = cfg_multiHostsJson
+    }
+
+    function ensureMultiHostsLen(n) {
+        var arr = parseMultiHosts()
+        while (arr.length < n) {
+            arr.push({ name: "", host: "", port: 8006, tokenId: "" })
+        }
+        return arr.slice(0, n)
+    }
+
+    function multiHostSecretKey(entry) {
+        var host = (entry && entry.host) ? String(entry.host).trim().toLowerCase() : ""
+        var port = (entry && entry.port) ? String(entry.port) : "8006"
+        var tokenId = (entry && entry.tokenId) ? String(entry.tokenId).trim() : ""
+        return "apiTokenSecret:" + tokenId + "@" + host + ":" + port
+    }
+
     /*
       Keyring handling is done by the plasmoid runtime (main.qml), which can load the
       native plugin. Keep the KCM simple and always loadable.
@@ -127,11 +164,45 @@ KCM.SimpleKCM {
             level: 2
         }
 
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10
+
+            QQC2.Label {
+                text: "Mode:"
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            QQC2.ComboBox {
+                id: connectionModeCombo
+                model: [
+                    { text: "Single host", value: "single" },
+                    { text: "Multi-host (up to 5)", value: "multiHost" }
+                ]
+                textRole: "text"
+                valueRole: "value"
+                Layout.fillWidth: true
+
+                Component.onCompleted: {
+                    var v = Plasmoid.configuration.connectionMode || "single"
+                    currentIndex = (v === "multiHost") ? 1 : 0
+                }
+
+                onActivated: {
+                    var v2 = model[currentIndex].value
+                    Plasmoid.configuration.connectionMode = v2
+                    cfg_connectionMode = v2
+                }
+            }
+        }
+
         GridLayout {
+            id: singleHostGrid
             columns: 2
             columnSpacing: 15
             rowSpacing: 12
             Layout.fillWidth: true
+            visible: (Plasmoid.configuration.connectionMode || "single") === "single"
 
             QQC2.Label {
                 text: "Host:"
@@ -169,11 +240,42 @@ KCM.SimpleKCM {
                 text: "API Token Secret:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
-            QQC2.TextField {
-                id: tokenSecretField
+            RowLayout {
                 Layout.fillWidth: true
-                echoMode: TextInput.Password
-                placeholderText: "Stored in keyring after Apply"
+                spacing: 8
+
+                QQC2.TextField {
+                    id: tokenSecretField
+                    Layout.fillWidth: true
+                    echoMode: TextInput.Password
+                    placeholderText: "Stored in keyring after Apply"
+                }
+
+                QQC2.Button {
+                    text: "Update Keyring"
+                    icon.name: "dialog-password"
+                    enabled: tokenSecretField.text && tokenSecretField.text.trim() !== ""
+                    onClicked: {
+                        // KCM cannot access keyring directly. This stores the secret temporarily in config;
+                        // the plasmoid runtime migrates it into keyring on next load and clears the plaintext.
+                        Plasmoid.configuration.apiTokenSecret = tokenSecretField.text
+                    }
+
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "Stores the secret temporarily; the widget will move it into the keyring on next load."
+                }
+
+                QQC2.Button {
+                    text: "Forget"
+                    icon.name: "edit-clear"
+                    onClicked: {
+                        tokenSecretField.text = ""
+                        Plasmoid.configuration.apiTokenSecret = ""
+                    }
+
+                    QQC2.ToolTip.visible: hovered
+                    QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
+                }
             }
 
             QQC2.Label {
@@ -213,6 +315,129 @@ KCM.SimpleKCM {
                 id: enableNotificationsCheck
                 checked: true
                 text: "Enable desktop notifications"
+            }
+        }
+
+        // Multi-host configuration
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: (Plasmoid.configuration.connectionMode || "single") === "multiHost"
+            spacing: 10
+
+            QQC2.Label {
+                text: "Configure up to 5 Proxmox endpoints. Secrets are stored in the system keyring after Apply."
+                font.pixelSize: 11
+                opacity: 0.7
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+
+            Repeater {
+                model: 5
+
+                delegate: Kirigami.Card {
+                    Layout.fillWidth: true
+
+                    property int idx: index
+                    property var entry: (ensureMultiHostsLen(5)[idx])
+
+                    contentItem: ColumnLayout {
+                        spacing: 8
+
+                        RowLayout {
+                            spacing: 8
+                            QQC2.Label { text: "Label:"; Layout.preferredWidth: 60 }
+                            QQC2.TextField {
+                                Layout.fillWidth: true
+                                text: entry.name || ""
+                                placeholderText: "e.g. Home / Work"
+                                onTextChanged: {
+                                    var arr = ensureMultiHostsLen(5)
+                                    arr[idx].name = text
+                                    saveMultiHosts(arr)
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            spacing: 8
+                            QQC2.Label { text: "Host:"; Layout.preferredWidth: 60 }
+                            QQC2.TextField {
+                                Layout.fillWidth: true
+                                text: entry.host || ""
+                                placeholderText: "192.168.1.100 or proxmox.local"
+                                onTextChanged: {
+                                    var arr = ensureMultiHostsLen(5)
+                                    arr[idx].host = text
+                                    saveMultiHosts(arr)
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            spacing: 8
+                            QQC2.Label { text: "Port:"; Layout.preferredWidth: 60 }
+                            QQC2.SpinBox {
+                                from: 1
+                                to: 65535
+                                value: entry.port || 8006
+                                editable: true
+                                onValueModified: {
+                                    var arr = ensureMultiHostsLen(5)
+                                    arr[idx].port = value
+                                    saveMultiHosts(arr)
+                                }
+                            }
+                            Item { Layout.fillWidth: true }
+                        }
+
+                        RowLayout {
+                            spacing: 8
+                            QQC2.Label { text: "Token ID:"; Layout.preferredWidth: 60 }
+                            QQC2.TextField {
+                                Layout.fillWidth: true
+                                text: entry.tokenId || ""
+                                placeholderText: "user@realm!tokenname"
+                                onTextChanged: {
+                                    var arr = ensureMultiHostsLen(5)
+                                    arr[idx].tokenId = text
+                                    saveMultiHosts(arr)
+                                }
+                            }
+                        }
+
+                        RowLayout {
+                            spacing: 8
+                            QQC2.Label { text: "Secret:"; Layout.preferredWidth: 60 }
+                            QQC2.TextField {
+                                id: mhSecretField
+                                Layout.fillWidth: true
+                                echoMode: TextInput.Password
+                                placeholderText: "Stored in keyring after Apply"
+                            }
+
+                            QQC2.Button {
+                                text: "Update Keyring"
+                                icon.name: "dialog-password"
+                                enabled: mhSecretField.text && mhSecretField.text.trim() !== ""
+                                onClicked: {
+                                    var arr = ensureMultiHostsLen(5)
+                                    var key = multiHostSecretKey(arr[idx])
+
+                                    // KCM cannot access keyring directly. Stash secrets temporarily in config;
+                                    // the plasmoid runtime migrates them into the system keyring on next load.
+                                    var map = {}
+                                    try { map = JSON.parse(Plasmoid.configuration.multiHostSecretsJson || "{}") } catch (e) { map = {} }
+                                    map[key] = mhSecretField.text
+                                    Plasmoid.configuration.multiHostSecretsJson = JSON.stringify(map)
+
+                                    // Reduce risk of the secret lingering on screen / being re-saved accidentally.
+                                    mhSecretField.text = ""
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -393,8 +618,10 @@ KCM.SimpleKCM {
             text: "1. Log into Proxmox web interface\n" +
                   "2. Go to Datacenter → Permissions → API Tokens\n" +
                   "3. Click 'Add' and create a token\n" +
-                  "4. Uncheck 'Privilege Separation' for full access\n" +
-                  "5. Copy the Token ID and Secret"
+                  "4. Token ID must be in the format: user@realm!tokenname\n" +
+                  "5. IMPORTANT: If you enable 'Privilege Separation', you must grant permissions to BOTH the user and the token.\n" +
+                  "   Proxmox calculates effective permissions as the intersection of user + token ACLs.\n" +
+                  "6. Copy the token secret immediately (it is shown only once)"
             font.pixelSize: 11
             opacity: 0.7
             wrapMode: Text.WordWrap

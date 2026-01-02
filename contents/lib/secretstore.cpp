@@ -25,7 +25,12 @@ void SecretStore::readSecret() {
     connect(job, &Job::finished, this, [this, job]() {
         if (job->error()) {
             // NotFound is common on first run; emit empty secret and no hard error.
-            // Still surface the message via error() so QML can decide what to do.
+            if (job->error() == QKeychain::EntryNotFound) {
+                emit secretReady(QString());
+                job->deleteLater();
+                return;
+            }
+
             emit error(job->errorString());
             emit secretReady(QString());
             job->deleteLater();

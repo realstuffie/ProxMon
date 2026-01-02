@@ -2,6 +2,8 @@
 
 #include <QObject>
 #include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QSet>
 #include <QVariant>
 
 class ProxmoxClient : public QObject {
@@ -31,9 +33,36 @@ public:
     bool ignoreSslErrors() const { return m_ignoreSslErrors; }
     void setIgnoreSslErrors(bool v);
 
+    // Single-session (legacy)
     Q_INVOKABLE void requestNodes(int seq);
     Q_INVOKABLE void requestQemu(const QString &node, int seq);
     Q_INVOKABLE void requestLxc(const QString &node, int seq);
+
+    // Multi-session: provide per-call connection info, without mutating object-wide properties.
+    // sessionKey is returned in reply/error so QML can merge results.
+    Q_INVOKABLE void requestNodesFor(const QString &sessionKey,
+                                     const QString &host,
+                                     int port,
+                                     const QString &tokenId,
+                                     const QString &tokenSecret,
+                                     bool ignoreSslErrors,
+                                     int seq);
+    Q_INVOKABLE void requestQemuFor(const QString &sessionKey,
+                                    const QString &host,
+                                    int port,
+                                    const QString &tokenId,
+                                    const QString &tokenSecret,
+                                    bool ignoreSslErrors,
+                                    const QString &node,
+                                    int seq);
+    Q_INVOKABLE void requestLxcFor(const QString &sessionKey,
+                                   const QString &host,
+                                   int port,
+                                   const QString &tokenId,
+                                   const QString &tokenSecret,
+                                   bool ignoreSslErrors,
+                                   const QString &node,
+                                   int seq);
 
     // VM/CT actions: kind: "qemu" | "lxc"; action: "start" | "shutdown" | "reboot"
     Q_INVOKABLE void requestAction(const QString &kind, const QString &node, int vmid, const QString &action, int seq);
@@ -52,6 +81,10 @@ signals:
     void reply(int seq, const QString &kind, const QString &node, const QVariant &data);
     void error(int seq, const QString &kind, const QString &node, const QString &message);
 
+    // Multi-session variants include sessionKey
+    void replyFor(int seq, const QString &sessionKey, const QString &kind, const QString &node, const QVariant &data);
+    void errorFor(int seq, const QString &sessionKey, const QString &kind, const QString &node, const QString &message);
+
     // actionKind: "qemu" | "lxc", action: "start" | "shutdown" | "reboot"
     void actionReply(int seq,
                      const QString &actionKind,
@@ -68,6 +101,17 @@ signals:
 
 private:
     void request(const QString &path, int seq, const QString &kind, const QString &node);
+    void requestFor(const QString &sessionKey,
+                    const QString &host,
+                    int port,
+                    const QString &tokenId,
+                    const QString &tokenSecret,
+                    bool ignoreSslErrors,
+                    const QString &path,
+                    int seq,
+                    const QString &kind,
+                    const QString &node);
+
     void post(const QString &path,
               int seq,
               const QString &actionKind,

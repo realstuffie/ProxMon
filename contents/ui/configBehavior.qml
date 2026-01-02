@@ -7,37 +7,38 @@ import org.kde.kcmutils as KCM
 KCM.SimpleKCM {
     id: root
 
-    // Sorting properties
-    property string cfg_defaultSorting: "status"
+    // Bind cfg_* keys to the actual controls (KDE Plasma config convention).
+    // This ensures Apply/Cancel works and values persist via Plasmoid.configuration.
+    property alias cfg_defaultSorting: sortingCombo.selectedValue
     property string cfg_defaultSortingDefault: "status"
 
     // Compact label mode: "cpu" (default), "running", "error", "lastUpdate"
-    property string cfg_compactMode: "cpu"
+    property alias cfg_compactMode: compactModeCombo.currentValue
     property string cfg_compactModeDefault: "cpu"
 
     // Notification properties
-    property bool cfg_enableNotifications: true
+    property alias cfg_enableNotifications: enableNotificationsCheck.checked
     property bool cfg_enableNotificationsDefault: true
 
-    property string cfg_notifyMode: "all"
+    property alias cfg_notifyMode: notifyModeValue.value
     property string cfg_notifyModeDefault: "all"
 
-    property string cfg_notifyFilter: ""
+    property alias cfg_notifyFilter: filterField.text
     property string cfg_notifyFilterDefault: ""
 
-    property bool cfg_notifyOnStart: true
+    property alias cfg_notifyOnStart: notifyOnStartCheck.checked
     property bool cfg_notifyOnStartDefault: true
 
-    property bool cfg_notifyOnStop: true
+    property alias cfg_notifyOnStop: notifyOnStopCheck.checked
     property bool cfg_notifyOnStopDefault: true
 
-    property bool cfg_notifyOnNodeChange: true
+    property alias cfg_notifyOnNodeChange: notifyOnNodeChangeCheck.checked
     property bool cfg_notifyOnNodeChangeDefault: true
 
     // Notification rate limiting
-    property bool cfg_notifyRateLimitEnabled: true
+    property alias cfg_notifyRateLimitEnabled: rateLimitEnabledCheck.checked
     property bool cfg_notifyRateLimitEnabledDefault: true
-    property int cfg_notifyRateLimitSeconds: 120
+    property alias cfg_notifyRateLimitSeconds: rateLimitSecondsSpin.value
     property int cfg_notifyRateLimitSecondsDefault: 120
 
     ColumnLayout {
@@ -65,6 +66,14 @@ KCM.SimpleKCM {
             QQC2.ComboBox {
                 id: sortingCombo
                 Layout.fillWidth: true
+
+                // Expose selected value for cfg_ alias binding
+                // NOTE: `currentValue` is a FINAL property on QQC2.ComboBox in some versions.
+                // Using a different name avoids "Cannot override FINAL property".
+                property string selectedValue: (currentIndex >= 0 && currentIndex < sortingModel.count)
+                    ? sortingModel.get(currentIndex).value
+                    : "status"
+
                 model: ListModel {
                     id: sortingModel
                     ListElement { text: "Status (Running first)"; value: "status" }
@@ -75,18 +84,13 @@ KCM.SimpleKCM {
                 }
                 textRole: "text"
 
+                // When KCM loads, cfg_defaultSorting already contains the saved value.
                 Component.onCompleted: {
                     for (var i = 0; i < sortingModel.count; i++) {
-                        if (sortingModel.get(i).value === cfg_defaultSorting) {
+                        if (sortingModel.get(i).value === root.cfg_defaultSorting) {
                             currentIndex = i
                             break
                         }
-                    }
-                }
-
-                onCurrentIndexChanged: {
-                    if (currentIndex >= 0) {
-                        cfg_defaultSorting = sortingModel.get(currentIndex).value
                     }
                 }
             }
@@ -105,7 +109,7 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             Layout.topMargin: 10
             Layout.bottomMargin: 10
-            height: 1
+            implicitHeight: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.3
         }
@@ -130,6 +134,12 @@ KCM.SimpleKCM {
             QQC2.ComboBox {
                 id: compactModeCombo
                 Layout.fillWidth: true
+
+                // Expose selected value for cfg_ alias binding
+                property string currentValue: (currentIndex >= 0 && currentIndex < compactModeModel.count)
+                    ? compactModeModel.get(currentIndex).value
+                    : "cpu"
+
                 model: ListModel {
                     id: compactModeModel
                     ListElement { text: "Avg CPU %"; value: "cpu" }
@@ -139,18 +149,13 @@ KCM.SimpleKCM {
                 }
                 textRole: "text"
 
+                // When KCM loads, cfg_compactMode already contains the saved value.
                 Component.onCompleted: {
                     for (var i = 0; i < compactModeModel.count; i++) {
-                        if (compactModeModel.get(i).value === cfg_compactMode) {
+                        if (compactModeModel.get(i).value === root.cfg_compactMode) {
                             currentIndex = i
                             break
                         }
-                    }
-                }
-
-                onCurrentIndexChanged: {
-                    if (currentIndex >= 0) {
-                        cfg_compactMode = compactModeModel.get(currentIndex).value
                     }
                 }
             }
@@ -161,7 +166,7 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             Layout.topMargin: 10
             Layout.bottomMargin: 10
-            height: 1
+            implicitHeight: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.3
         }
@@ -176,8 +181,8 @@ KCM.SimpleKCM {
         QQC2.CheckBox {
             id: enableNotificationsCheck
             text: "Enable desktop notifications"
-            checked: cfg_enableNotifications
-            onCheckedChanged: cfg_enableNotifications = checked
+            checked: root.cfg_enableNotifications
+            onCheckedChanged: root.cfg_enableNotifications = checked
         }
 
         // Separator
@@ -185,18 +190,18 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             Layout.topMargin: 5
             Layout.bottomMargin: 5
-            height: 1
+            implicitHeight: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.2
-            visible: cfg_enableNotifications
+            visible: root.cfg_enableNotifications
         }
 
         // Event Type Toggles
         Kirigami.Heading {
             text: "Notify On"
             level: 4
-            visible: cfg_enableNotifications
-            opacity: cfg_enableNotifications ? 1.0 : 0.5
+            visible: root.cfg_enableNotifications
+            opacity: root.cfg_enableNotifications ? 1.0 : 0.5
         }
 
         GridLayout {
@@ -204,31 +209,31 @@ KCM.SimpleKCM {
             columnSpacing: 20
             rowSpacing: 8
             Layout.fillWidth: true
-            visible: cfg_enableNotifications
-            opacity: cfg_enableNotifications ? 1.0 : 0.5
+            visible: root.cfg_enableNotifications
+            opacity: root.cfg_enableNotifications ? 1.0 : 0.5
 
             QQC2.CheckBox {
                 id: notifyOnStartCheck
                 text: "VM/Container started"
-                checked: cfg_notifyOnStart
-                onCheckedChanged: cfg_notifyOnStart = checked
-                enabled: cfg_enableNotifications
+                checked: root.cfg_notifyOnStart
+                onCheckedChanged: root.cfg_notifyOnStart = checked
+                enabled: root.cfg_enableNotifications
             }
 
             QQC2.CheckBox {
                 id: notifyOnStopCheck
                 text: "VM/Container stopped"
-                checked: cfg_notifyOnStop
-                onCheckedChanged: cfg_notifyOnStop = checked
-                enabled: cfg_enableNotifications
+                checked: root.cfg_notifyOnStop
+                onCheckedChanged: root.cfg_notifyOnStop = checked
+                enabled: root.cfg_enableNotifications
             }
 
             QQC2.CheckBox {
                 id: notifyOnNodeChangeCheck
                 text: "Node online/offline"
-                checked: cfg_notifyOnNodeChange
-                onCheckedChanged: cfg_notifyOnNodeChange = checked
-                enabled: cfg_enableNotifications
+                checked: root.cfg_notifyOnNodeChange
+                onCheckedChanged: root.cfg_notifyOnNodeChange = checked
+                enabled: root.cfg_enableNotifications
             }
         }
 
@@ -237,34 +242,34 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             Layout.topMargin: 10
             Layout.bottomMargin: 5
-            height: 1
+            implicitHeight: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.2
-            visible: cfg_enableNotifications
+            visible: root.cfg_enableNotifications
         }
 
         // Rate limiting
         Kirigami.Heading {
             text: "Rate Limiting"
             level: 4
-            visible: cfg_enableNotifications
-            opacity: cfg_enableNotifications ? 1.0 : 0.5
+            visible: root.cfg_enableNotifications
+            opacity: root.cfg_enableNotifications ? 1.0 : 0.5
         }
 
         QQC2.CheckBox {
             id: rateLimitEnabledCheck
             text: "Rate limit duplicate notifications"
-            checked: cfg_notifyRateLimitEnabled
-            onCheckedChanged: cfg_notifyRateLimitEnabled = checked
-            enabled: cfg_enableNotifications
-            visible: cfg_enableNotifications
+            checked: root.cfg_notifyRateLimitEnabled
+            onCheckedChanged: root.cfg_notifyRateLimitEnabled = checked
+            enabled: root.cfg_enableNotifications
+            visible: root.cfg_enableNotifications
         }
 
         RowLayout {
             spacing: 8
-            visible: cfg_enableNotifications
-            opacity: (cfg_enableNotifications && cfg_notifyRateLimitEnabled) ? 1.0 : 0.6
-            enabled: cfg_enableNotifications && cfg_notifyRateLimitEnabled
+            visible: root.cfg_enableNotifications
+            opacity: (root.cfg_enableNotifications && root.cfg_notifyRateLimitEnabled) ? 1.0 : 0.6
+            enabled: root.cfg_enableNotifications && root.cfg_notifyRateLimitEnabled
 
             QQC2.Label {
                 text: "Minimum interval:"
@@ -275,9 +280,9 @@ KCM.SimpleKCM {
                 id: rateLimitSecondsSpin
                 from: 0
                 to: 3600
-                value: cfg_notifyRateLimitSeconds
+                value: root.cfg_notifyRateLimitSeconds
                 editable: true
-                onValueChanged: cfg_notifyRateLimitSeconds = value
+                onValueChanged: root.cfg_notifyRateLimitSeconds = value
             }
 
             QQC2.Label {
@@ -292,15 +297,15 @@ KCM.SimpleKCM {
             opacity: 0.6
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            visible: cfg_enableNotifications
+            visible: root.cfg_enableNotifications
         }
 
         // Filter Mode
         Kirigami.Heading {
             text: "Filter Mode"
             level: 4
-            visible: cfg_enableNotifications
-            opacity: cfg_enableNotifications ? 1.0 : 0.5
+            visible: root.cfg_enableNotifications
+            opacity: root.cfg_enableNotifications ? 1.0 : 0.5
         }
 
         QQC2.Label {
@@ -309,23 +314,30 @@ KCM.SimpleKCM {
             opacity: 0.6
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            visible: cfg_enableNotifications
+            visible: root.cfg_enableNotifications
         }
 
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 8
-            visible: cfg_enableNotifications
-            opacity: cfg_enableNotifications ? 1.0 : 0.5
+            visible: root.cfg_enableNotifications
+            opacity: root.cfg_enableNotifications ? 1.0 : 0.5
+
+            // Single source of truth for cfg_notifyMode alias binding.
+            // Avoids binding loops between RadioButtons and cfg_ values.
+            QtObject {
+                id: notifyModeValue
+                property string value: "all"
+            }
 
             QQC2.RadioButton {
                 id: modeAllRadio
                 text: "All VMs and containers"
-                checked: cfg_notifyMode === "all"
+                checked: notifyModeValue.value === "all"
                 onCheckedChanged: {
-                    if (checked) cfg_notifyMode = "all"
+                    if (checked) notifyModeValue.value = "all"
                 }
-                enabled: cfg_enableNotifications
+                enabled: root.cfg_enableNotifications
             }
 
             QQC2.Label {
@@ -338,11 +350,11 @@ KCM.SimpleKCM {
             QQC2.RadioButton {
                 id: modeWhitelistRadio
                 text: "Only specified (Whitelist)"
-                checked: cfg_notifyMode === "whitelist"
+                checked: notifyModeValue.value === "whitelist"
                 onCheckedChanged: {
-                    if (checked) cfg_notifyMode = "whitelist"
+                    if (checked) notifyModeValue.value = "whitelist"
                 }
-                enabled: cfg_enableNotifications
+                enabled: root.cfg_enableNotifications
             }
 
             QQC2.Label {
@@ -355,11 +367,11 @@ KCM.SimpleKCM {
             QQC2.RadioButton {
                 id: modeBlacklistRadio
                 text: "All except specified (Blacklist)"
-                checked: cfg_notifyMode === "blacklist"
+                checked: notifyModeValue.value === "blacklist"
                 onCheckedChanged: {
-                    if (checked) cfg_notifyMode = "blacklist"
+                    if (checked) notifyModeValue.value = "blacklist"
                 }
-                enabled: cfg_enableNotifications
+                enabled: root.cfg_enableNotifications
             }
 
             QQC2.Label {
@@ -374,11 +386,11 @@ KCM.SimpleKCM {
         ColumnLayout {
             Layout.fillWidth: true
             spacing: 8
-            visible: cfg_enableNotifications && cfg_notifyMode !== "all"
+            visible: root.cfg_enableNotifications && notifyModeValue.value !== "all"
             Layout.topMargin: 12
 
             Kirigami.Heading {
-                text: cfg_notifyMode === "whitelist" ? "Whitelist Filter" : "Blacklist Filter"
+                text: notifyModeValue.value === "whitelist" ? "Whitelist Filter" : "Blacklist Filter"
                 level: 4
             }
 
@@ -386,8 +398,8 @@ KCM.SimpleKCM {
                 id: filterField
                 Layout.fillWidth: true
                 placeholderText: "web-server, 100, database*, *-prod"
-                text: cfg_notifyFilter
-                onTextChanged: cfg_notifyFilter = text
+                text: root.cfg_notifyFilter
+                onTextChanged: root.cfg_notifyFilter = text
             }
 
             QQC2.Label {
@@ -402,7 +414,7 @@ KCM.SimpleKCM {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.topMargin: 8
-                height: examplesColumn.implicitHeight + 16
+                Layout.preferredHeight: examplesColumn.implicitHeight + 16
                 radius: 4
                 color: Kirigami.Theme.backgroundColor
                 border.color: Kirigami.Theme.disabledTextColor
@@ -457,9 +469,17 @@ KCM.SimpleKCM {
         // Separator
         Rectangle {
             Layout.fillWidth: true
+            Layout.topMargin: 10
+            Layout.bottomMargin: 10
+            implicitHeight: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.3
+        }
+        Rectangle {
+            Layout.fillWidth: true
             Layout.topMargin: 15
             Layout.bottomMargin: 10
-            height: 1
+            implicitHeight: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.3
         }

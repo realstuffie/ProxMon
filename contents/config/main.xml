@@ -22,6 +22,20 @@
             <default>true</default>
         </entry>
 
+        <!-- Connection Mode -->
+        <entry name="connectionMode" type="String">
+            <default>single</default>
+        </entry>
+        <!-- JSON array: [{name,host,port,tokenId}] (secrets stored in keyring) -->
+        <entry name="multiHostsJson" type="String">
+            <default>[]</default>
+        </entry>
+        <!-- Temporary plaintext stash written by KCM "Update Keyring" buttons.
+             Runtime migrates these into keyring and clears this map. -->
+        <entry name="multiHostSecretsJson" type="String">
+            <default>{}</default>
+        </entry>
+
         <!-- Behavior Settings -->
         <entry name="defaultSorting" type="String">
             <default>status</default>
