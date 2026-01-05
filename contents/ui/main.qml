@@ -1941,6 +1941,18 @@ PlasmoidItem {
             QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
             QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
 
+            // Reserve space for the vertical scrollbar. On Plasma, the scrollbar is often an overlay,
+            // so without this the right-most row actions can end up under the scrollbar.
+            //
+            // We keep the overall content width unchanged (so node cards and rows stay aligned),
+            // and instead add right-side padding inside row contents where buttons live.
+            // NOTE: On Plasma styles the attached ScrollBar width can be reported as 0 while still rendering
+            // an overlay scrollbar. Use a conservative reserve width so there's always a visible gutter.
+            // Increase gutter so it's visually obvious even with narrow overlay scrollbars.
+            // Reduced now that row gutters/margins are applied consistently.
+            readonly property int __scrollbarGap: 6
+            readonly property int __scrollbarReserve: 14 + __scrollbarGap
+
             ColumnLayout {
                 id: mainContentColumn
                 width: scrollView.availableWidth
@@ -1978,6 +1990,10 @@ PlasmoidItem {
                         // Node card
                         Rectangle {
                             Layout.fillWidth: true
+                            // Keep a gutter so the right border doesn't sit under the overlay scrollbar
+                            // and keep the node card aligned with the VM/CT row block.
+                            Layout.leftMargin: 12
+                            Layout.rightMargin: scrollView.__scrollbarReserve
                             Layout.preferredHeight: 70
                             radius: 6
                             color: Kirigami.Theme.backgroundColor
@@ -2093,7 +2109,9 @@ PlasmoidItem {
                         // Expanded content (VMs and LXCs)
                         ColumnLayout {
                             Layout.fillWidth: true
+                            // Match node card edges (same overall width)
                             Layout.leftMargin: 12
+                            Layout.rightMargin: scrollView.__scrollbarReserve
                             visible: !isCollapsed
                             spacing: 4
 
@@ -2260,6 +2278,13 @@ PlasmoidItem {
                                                     onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "reboot")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status !== "running" }
+                                            }
+
+                                            // Keep the row background aligned with node cards, but reserve space on the
+                                            // far right so the overlay scrollbar doesn't cover the action buttons.
+                                            Item {
+                                                Layout.preferredWidth: scrollView.__scrollbarReserve
+                                                Layout.minimumWidth: scrollView.__scrollbarReserve
                                             }
                                         }
                                     }
@@ -2430,6 +2455,13 @@ PlasmoidItem {
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status !== "running" }
                                             }
+
+                                            // Keep the row background aligned with node cards, but reserve space on the
+                                            // far right so the overlay scrollbar doesn't cover the action buttons.
+                                            Item {
+                                                Layout.preferredWidth: scrollView.__scrollbarReserve
+                                                Layout.minimumWidth: scrollView.__scrollbarReserve
+                                            }
                                         }
                                     }
                                 }
@@ -2448,6 +2480,8 @@ PlasmoidItem {
                         // Node separator
                         Rectangle {
                             Layout.fillWidth: true
+                            // Keep a gutter so the separator line doesn't run under the overlay scrollbar
+                            Layout.rightMargin: scrollView.__scrollbarReserve
                             Layout.preferredHeight: 1
                             color: Kirigami.Theme.disabledTextColor
                             opacity: 0.3
@@ -2477,6 +2511,8 @@ PlasmoidItem {
 
                         Rectangle {
                             Layout.fillWidth: true
+                            // Keep a gutter so the right border doesn't sit under the overlay scrollbar
+                            Layout.rightMargin: scrollView.__scrollbarReserve
                             Layout.preferredHeight: 34
                             radius: 6
                             color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12)
