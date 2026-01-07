@@ -1009,6 +1009,32 @@ PlasmoidItem {
         retryTimer.stop()
     }
 
+    // Debounce refresh when config changes (avoids hammering API while user is typing).
+    Timer {
+        id: configRefreshDebounce
+        interval: 600
+        repeat: false
+        onTriggered: {
+            logDebug("configRefreshDebounce: triggering refresh after config change")
+            fetchData()
+        }
+    }
+
+    function triggerRefreshFromConfigChange(reason) {
+        logDebug("config change: " + (reason || "unknown"))
+        // Cancel in-flight requests and retry timers so we restart cleanly.
+        api.cancelAll()
+        resetRetryState()
+        errorMessage = ""
+        retryStatusText = ""
+        armedActionKey = ""
+        armedLabel = ""
+        // If secrets need re-resolving (e.g. token changed), resolveSecretIfNeeded() handlers will do it.
+        // Only refresh if we are configured.
+        if (!configured) return
+        configRefreshDebounce.restart()
+    }
+
     function fetchData() {
         if (!configured) {
             logDebug("fetchData: Not configured, skipping")
@@ -1488,11 +1514,42 @@ PlasmoidItem {
         startSecretReadCandidates()
     }
 
-    onProxmoxHostChanged: if (connectionMode === "single") resolveSecretIfNeeded()
-    onProxmoxPortChanged: if (connectionMode === "single") resolveSecretIfNeeded()
-    onApiTokenIdChanged: if (connectionMode === "single") resolveSecretIfNeeded()
-    onMultiHostsJsonChanged: if (connectionMode === "multiHost") resolveSecretIfNeeded()
-    onConnectionModeChanged: resolveSecretIfNeeded()
+    onProxmoxHostChanged: {
+        if (connectionMode === "single") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("proxmoxHost")
+    }
+    onProxmoxPortChanged: {
+        if (connectionMode === "single") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("proxmoxPort")
+    }
+    onApiTokenIdChanged: {
+        if (connectionMode === "single") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("apiTokenId")
+    }
+    onMultiHostsJsonChanged: {
+        if (connectionMode === "multiHost") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("multiHostsJson")
+    }
+    onConnectionModeChanged: {
+        resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("connectionMode")
+    }
+
+    onRefreshIntervalChanged: triggerRefreshFromConfigChange("refreshInterval")
+    onIgnoreSslChanged: triggerRefreshFromConfigChange("ignoreSsl")
+    onDefaultSortingChanged: triggerRefreshFromConfigChange("defaultSorting")
+    onAutoRetryChanged: triggerRefreshFromConfigChange("autoRetry")
+    onRetryStartMsChanged: triggerRefreshFromConfigChange("retryStartMs")
+    onRetryMaxMsChanged: triggerRefreshFromConfigChange("retryMaxMs")
+    onEnableNotificationsChanged: triggerRefreshFromConfigChange("enableNotifications")
+    onNotifyModeChanged: triggerRefreshFromConfigChange("notifyMode")
+    onNotifyFilterChanged: triggerRefreshFromConfigChange("notifyFilter")
+    onNotifyOnStopChanged: triggerRefreshFromConfigChange("notifyOnStop")
+    onNotifyOnStartChanged: triggerRefreshFromConfigChange("notifyOnStart")
+    onNotifyOnNodeChangeChanged: triggerRefreshFromConfigChange("notifyOnNodeChange")
+    onNotifyRateLimitEnabledChanged: triggerRefreshFromConfigChange("notifyRateLimitEnabled")
+    onNotifyRateLimitSecondsChanged: triggerRefreshFromConfigChange("notifyRateLimitSeconds")
+    onCompactModeChanged: triggerRefreshFromConfigChange("compactMode")
 
     Component.onCompleted: {
         logDebug("Component.onCompleted: Plasmoid initialized")
