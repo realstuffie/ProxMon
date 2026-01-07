@@ -291,6 +291,12 @@ See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v4.1
+- Packaging: native QML plugin is now staged under `contents/qml/org/kde/plasma/proxmox/` (more reliable module discovery on Plasma 6)
+- Install script: cross-distro improvements (kpackagetool 5/6 support, safer option detection, XDG icon paths)
+- Install script: optional `--install-deps` mode with root escalation via root/sudo/doas/su (best-effort, distro-dependent package names)
+- Docs: added dev notes on QML module packaging and verification
+
 ### v0.4.0
 - Reliability: cancel/abort in-flight requests during refresh/timeouts
 - Credentials: keyring secret lookup normalized + legacy key auto-migration
