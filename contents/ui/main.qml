@@ -20,17 +20,15 @@ PlasmoidItem {
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
-    // Secret is stored in the system keyring via SecretStore (QtKeychain).
-    // Keep Plasmoid.configuration.apiTokenSecret as a backward-compatible fallback only.
+    // Token secret lives in keyring (SecretStore); this is legacy fallback only.
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
 
     // Multi-host config (KCM stores these)
     property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
-    // Temporary plaintext stash written by KCM "Update Keyring" buttons; runtime migrates into keyring and clears it.
+    // Plaintext stash from KCM; runtime migrates to keyring and clears it.
     property string multiHostSecretsJson: Plasmoid.configuration.multiHostSecretsJson || "{}"
 
-    // Tracks credential resolution state to avoid a "Not Configured" flicker while loading.
-    // Values: "idle" | "loading" | "ready" | "missing" | "error"
+    // secretState: idle|loading|ready|missing|error
     property string secretState: "idle"
 
     // Endpoints resolved in multi-host mode:
@@ -142,13 +140,7 @@ PlasmoidItem {
         }
     }
 
-    /*
-      NOTE (Qt Quick Controls 2 docs):
-      - Popup is designed to be used with a Window/ApplicationWindow.
-      - Overlay.overlay-based parenting assumes a compatible QQC2 overlay layer exists.
-      In Plasma plasmoids, that overlay layer may not exist / may not stack correctly,
-      so we avoid Popup/Dialog confirmations and use the two-click confirmation instead.
-    */
+    // Avoid QQC2 Popup/Dialog in plasmoids (overlay may not exist); use two-click confirm.
 
     // Multi-node support
     property var nodeList: []
@@ -186,7 +178,7 @@ PlasmoidItem {
         return Math.max(200, Math.min(h, 600))
     }
 
-    // Static timer for footer click detection (replaces dynamic timer creation)
+    // Footer click sequence timer (dev mode toggle)
     Timer {
         id: footerClickTimer
         interval: 1000
@@ -195,8 +187,8 @@ PlasmoidItem {
 
     // ==================== UTILITY FUNCTIONS ====================
 
-        // Shell escape function to prevent command injection
-        function escapeShell(str) {
+    // Shell-escape for executable datasource usage
+    function escapeShell(str) {
             if (!str) return ""
             return str.replace(/'/g, "'\\''")
         }
@@ -352,8 +344,7 @@ PlasmoidItem {
     }
 
 
-    // Verbose logging function
-    // NOTE: For action debugging we always log (actions are non-secret). Use devMode to gate high-volume logs only.
+    // Debug logging (actions always log; devMode gates noisy logs elsewhere)
     function logDebug(message) {
         var now = new Date()
         var timestamp = now.getFullYear() + "-" +
@@ -389,7 +380,7 @@ PlasmoidItem {
     function copyDebugInfo() {
         var text = buildDebugInfo()
 
-        // Copy to clipboard via wl-copy/xclip. (No secrets included.)
+        // Copy debug info to clipboard (no secrets)
         var cmd = "sh -lc " + "'" +
             "if command -v wl-copy >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | wl-copy; " +
             "elif command -v xclip >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | xclip -selection clipboard; " +
@@ -402,7 +393,7 @@ PlasmoidItem {
 
     // ==================== NOTIFICATION FUNCTIONS ====================
 
-    // Escape regex special chars except "*" (handled as wildcard)
+    // Escape regex special chars except "*" (wildcard)
     function escapeRegexPattern(str) {
         if (!str) return ""
         // Escape everything that has meaning in a regex
@@ -497,8 +488,7 @@ PlasmoidItem {
 
         logDebug("Notification: " + title + " - " + message)
 
-        // Prefer system notification daemon via D-Bus (works on KDE, GNOME, etc).
-        // If that fails, fallback to notify-send.
+        // Prefer D-Bus notifier; fallback to notify-send.
         if (notifier.notify(title, message, iconName || "proxmox-monitor", 5000)) {
             if (rateLimitKey) markNotifySent(rateLimitKey)
             return
@@ -917,7 +907,7 @@ PlasmoidItem {
         return match ? match[1] : ""
     }
 
-    // Check if all node requests are complete - update displayed data atomically
+        // Atomically swap displayed data when all requests finish
     function checkRequestsComplete() {
         logDebug("checkRequestsComplete: Pending requests: " + pendingNodeRequests)
 
@@ -963,8 +953,7 @@ PlasmoidItem {
     // Confirmation prompt state
     property var pendingAction: null
 
-    // NOTE: QQC2.Popup/Overlay-based confirmations do not render reliably in some Plasma widget environments.
-    // We keep the code path as "two-click to confirm" instead (see confirmAndRunAction()).
+    // Confirm is two-click (see confirmAndRunAction()); QQC2.Popup overlays are unreliable in plasmoids.
 
     Timer {
         id: refreshWatchdog
@@ -1018,6 +1007,32 @@ PlasmoidItem {
         retryNextDelayMs = 0
         retryStatusText = ""
         retryTimer.stop()
+    }
+
+    // Debounce refresh when config changes (avoids hammering API while user is typing).
+    Timer {
+        id: configRefreshDebounce
+        interval: 600
+        repeat: false
+        onTriggered: {
+            logDebug("configRefreshDebounce: triggering refresh after config change")
+            fetchData()
+        }
+    }
+
+    function triggerRefreshFromConfigChange(reason) {
+        logDebug("config change: " + (reason || "unknown"))
+        // Cancel in-flight requests and retry timers so we restart cleanly.
+        api.cancelAll()
+        resetRetryState()
+        errorMessage = ""
+        retryStatusText = ""
+        armedActionKey = ""
+        armedLabel = ""
+        // If secrets need re-resolving (e.g. token changed), resolveSecretIfNeeded() handlers will do it.
+        // Only refresh if we are configured.
+        if (!configured) return
+        configRefreshDebounce.restart()
     }
 
     function fetchData() {
@@ -1499,11 +1514,42 @@ PlasmoidItem {
         startSecretReadCandidates()
     }
 
-    onProxmoxHostChanged: if (connectionMode === "single") resolveSecretIfNeeded()
-    onProxmoxPortChanged: if (connectionMode === "single") resolveSecretIfNeeded()
-    onApiTokenIdChanged: if (connectionMode === "single") resolveSecretIfNeeded()
-    onMultiHostsJsonChanged: if (connectionMode === "multiHost") resolveSecretIfNeeded()
-    onConnectionModeChanged: resolveSecretIfNeeded()
+    onProxmoxHostChanged: {
+        if (connectionMode === "single") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("proxmoxHost")
+    }
+    onProxmoxPortChanged: {
+        if (connectionMode === "single") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("proxmoxPort")
+    }
+    onApiTokenIdChanged: {
+        if (connectionMode === "single") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("apiTokenId")
+    }
+    onMultiHostsJsonChanged: {
+        if (connectionMode === "multiHost") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("multiHostsJson")
+    }
+    onConnectionModeChanged: {
+        resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("connectionMode")
+    }
+
+    onRefreshIntervalChanged: triggerRefreshFromConfigChange("refreshInterval")
+    onIgnoreSslChanged: triggerRefreshFromConfigChange("ignoreSsl")
+    onDefaultSortingChanged: triggerRefreshFromConfigChange("defaultSorting")
+    onAutoRetryChanged: triggerRefreshFromConfigChange("autoRetry")
+    onRetryStartMsChanged: triggerRefreshFromConfigChange("retryStartMs")
+    onRetryMaxMsChanged: triggerRefreshFromConfigChange("retryMaxMs")
+    onEnableNotificationsChanged: triggerRefreshFromConfigChange("enableNotifications")
+    onNotifyModeChanged: triggerRefreshFromConfigChange("notifyMode")
+    onNotifyFilterChanged: triggerRefreshFromConfigChange("notifyFilter")
+    onNotifyOnStopChanged: triggerRefreshFromConfigChange("notifyOnStop")
+    onNotifyOnStartChanged: triggerRefreshFromConfigChange("notifyOnStart")
+    onNotifyOnNodeChangeChanged: triggerRefreshFromConfigChange("notifyOnNodeChange")
+    onNotifyRateLimitEnabledChanged: triggerRefreshFromConfigChange("notifyRateLimitEnabled")
+    onNotifyRateLimitSecondsChanged: triggerRefreshFromConfigChange("notifyRateLimitSeconds")
+    onCompactModeChanged: triggerRefreshFromConfigChange("compactMode")
 
     Component.onCompleted: {
         logDebug("Component.onCompleted: Plasmoid initialized")
@@ -1652,7 +1698,7 @@ PlasmoidItem {
 
             PlasmaComponents.Label {
                 text: {
-                    // Distinguish states in compact mode to avoid confusing "Not configured" flicker.
+                    // Avoid "Not configured" flicker while secrets load.
                     if (!hasCoreConfig) return "⚙"
                     if (secretState === "loading") return "..."
                     if (secretState === "missing" || secretState === "error") return "!"
@@ -1941,6 +1987,10 @@ PlasmoidItem {
             QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
             QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
 
+            // Reserve width for overlay scrollbar so right-side actions aren't covered.
+            readonly property int __scrollbarGap: 6
+            readonly property int __scrollbarReserve: 14 + __scrollbarGap
+
             ColumnLayout {
                 id: mainContentColumn
                 width: scrollView.availableWidth
@@ -1968,8 +2018,7 @@ PlasmoidItem {
                         property var nodeLxc: getLxcForNode(nodeName)
                         property bool isCollapsed: isNodeCollapsed(nodeName)
 
-                        // Force relayout when collapsing/expanding nodes so the footer doesn't "float" visually
-                        // (ScrollView/ColumnLayout can otherwise keep a stale implicit height briefly).
+                        // Force relayout on collapse/expand (prevents footer "float" glitches)
                         onIsCollapsedChanged: {
                             scrollView.forceLayout()
                             fullRep.forceLayout()
@@ -1978,6 +2027,9 @@ PlasmoidItem {
                         // Node card
                         Rectangle {
                             Layout.fillWidth: true
+                            // Keep scrollbar gutter + align with VM/CT rows
+                            Layout.leftMargin: 12
+                            Layout.rightMargin: scrollView.__scrollbarReserve
                             Layout.preferredHeight: 70
                             radius: 6
                             color: Kirigami.Theme.backgroundColor
@@ -2093,7 +2145,9 @@ PlasmoidItem {
                         // Expanded content (VMs and LXCs)
                         ColumnLayout {
                             Layout.fillWidth: true
+                            // Match node card edges
                             Layout.leftMargin: 12
+                            Layout.rightMargin: scrollView.__scrollbarReserve
                             visible: !isCollapsed
                             spacing: 4
 
@@ -2260,6 +2314,12 @@ PlasmoidItem {
                                                     onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "reboot")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status !== "running" }
+                                            }
+
+                                            // Reserve space so overlay scrollbar doesn't cover action buttons.
+                                            Item {
+                                                Layout.preferredWidth: scrollView.__scrollbarReserve
+                                                Layout.minimumWidth: scrollView.__scrollbarReserve
                                             }
                                         }
                                     }
@@ -2430,6 +2490,13 @@ PlasmoidItem {
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status !== "running" }
                                             }
+
+                                            // Keep the row background aligned with node cards, but reserve space on the
+                                            // far right so the overlay scrollbar doesn't cover the action buttons.
+                                            Item {
+                                                Layout.preferredWidth: scrollView.__scrollbarReserve
+                                                Layout.minimumWidth: scrollView.__scrollbarReserve
+                                            }
                                         }
                                     }
                                 }
@@ -2448,6 +2515,8 @@ PlasmoidItem {
                         // Node separator
                         Rectangle {
                             Layout.fillWidth: true
+                            // Keep a gutter so the separator line doesn't run under the overlay scrollbar
+                            Layout.rightMargin: scrollView.__scrollbarReserve
                             Layout.preferredHeight: 1
                             color: Kirigami.Theme.disabledTextColor
                             opacity: 0.3
@@ -2477,6 +2546,8 @@ PlasmoidItem {
 
                         Rectangle {
                             Layout.fillWidth: true
+                            // Keep a gutter so the right border doesn't sit under the overlay scrollbar
+                            Layout.rightMargin: scrollView.__scrollbarReserve
                             Layout.preferredHeight: 34
                             radius: 6
                             color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12)

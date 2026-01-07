@@ -27,7 +27,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Known Bugs/Limitations
 
-- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g., due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows “Missing Token Secret”, re-enter the secret in the settings and click Apply.
+- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g., due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows “Missing Token Secret”, re-enter the secret in the settings and click **Update Keyring**, then wait a moment (the widget refreshes shortly after config changes).
 
 ## Screenshots
 
@@ -152,7 +152,7 @@ pveum user token add monitor@pve plasma-monitor
    - **Port**: API port (default: `8006`)
    - **API Token ID**: Format `user@realm!tokenname` (e.g., `root@pam!plasma-monitor`)
    - **API Token Secret**: The secret from token creation
-   - **Update Keyring**: If you changed the secret, click **Update Keyring**. The widget stores it temporarily and migrates it into the system keyring on next load.
+   - **Update Keyring**: If you changed the secret, click **Update Keyring**. The widget stores it temporarily and migrates it into the system keyring on next load. The widget will refresh shortly after config changes (debounced).
    - **Forget**: Clears the secret field (does **not** delete existing keyring entries).
    - **Refresh Interval**: Update frequency in seconds (default: `30`)
    - **Ignore SSL**: Enable for self-signed certificates
