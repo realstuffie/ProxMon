@@ -9,11 +9,25 @@ KCM.SimpleKCM {
 
     // Bind cfg_* keys to the actual controls (KDE Plasma config convention).
     // This ensures Apply/Cancel works and values persist via Plasmoid.configuration.
-    property alias cfg_defaultSorting: sortingCombo.selectedValue
+    //
+    // IMPORTANT:
+    // Avoid adding custom properties directly onto QQC2.ComboBox. Some Plasma/Qt
+    // versions will throw "Cannot override FINAL property" which prevents the
+    // entire KCM page (Behavior tab) from loading.
+    // Store the selected value in a separate QtObject and alias to it.
+    QtObject {
+        id: sortingValue
+        property string value: "status"
+    }
+    property alias cfg_defaultSorting: sortingValue.value
     property string cfg_defaultSortingDefault: "status"
 
     // Compact label mode: "cpu" (default), "running", "error", "lastUpdate"
-    property alias cfg_compactMode: compactModeCombo.currentValue
+    QtObject {
+        id: compactModeValue
+        property string value: "cpu"
+    }
+    property alias cfg_compactMode: compactModeValue.value
     property string cfg_compactModeDefault: "cpu"
 
     // Notification properties
@@ -71,13 +85,6 @@ KCM.SimpleKCM {
                 id: sortingCombo
                 Layout.fillWidth: true
 
-                // Expose selected value for cfg_ alias binding
-                // NOTE: `currentValue` is a FINAL property on QQC2.ComboBox in some versions.
-                // Using a different name avoids "Cannot override FINAL property".
-                property string selectedValue: (currentIndex >= 0 && currentIndex < sortingModel.count)
-                    ? sortingModel.get(currentIndex).value
-                    : "status"
-
                 model: ListModel {
                     id: sortingModel
                     ListElement { text: "Status (Running first)"; value: "status" }
@@ -95,6 +102,16 @@ KCM.SimpleKCM {
                             currentIndex = i
                             break
                         }
+                    }
+                    if (currentIndex < 0) {
+                        currentIndex = 0
+                    }
+                    sortingValue.value = sortingModel.get(currentIndex).value
+                }
+
+                onActivated: {
+                    if (currentIndex >= 0 && currentIndex < sortingModel.count) {
+                        sortingValue.value = sortingModel.get(currentIndex).value
                     }
                 }
             }
@@ -139,11 +156,6 @@ KCM.SimpleKCM {
                 id: compactModeCombo
                 Layout.fillWidth: true
 
-                // Expose selected value for cfg_ alias binding
-                property string currentValue: (currentIndex >= 0 && currentIndex < compactModeModel.count)
-                    ? compactModeModel.get(currentIndex).value
-                    : "cpu"
-
                 model: ListModel {
                     id: compactModeModel
                     ListElement { text: "Avg CPU %"; value: "cpu" }
@@ -160,6 +172,16 @@ KCM.SimpleKCM {
                             currentIndex = i
                             break
                         }
+                    }
+                    if (currentIndex < 0) {
+                        currentIndex = 0
+                    }
+                    compactModeValue.value = compactModeModel.get(currentIndex).value
+                }
+
+                onActivated: {
+                    if (currentIndex >= 0 && currentIndex < compactModeModel.count) {
+                        compactModeValue.value = compactModeModel.get(currentIndex).value
                     }
                 }
             }
@@ -328,6 +350,8 @@ KCM.SimpleKCM {
             text: "Redact user@realm and token ID in notifications"
             enabled: root.cfg_enableNotifications
             visible: root.cfg_enableNotifications
+            checked: root.cfg_redactNotifyIdentities
+            onCheckedChanged: root.cfg_redactNotifyIdentities = checked
         }
 
         QQC2.Label {
@@ -366,7 +390,8 @@ KCM.SimpleKCM {
             // Avoids binding loops between RadioButtons and cfg_ values.
             QtObject {
                 id: notifyModeValue
-                property string value: "all"
+                // Initialize from config; alias cfg_notifyMode points here.
+                property string value: root.cfg_notifyMode || "all"
             }
 
             QQC2.RadioButton {

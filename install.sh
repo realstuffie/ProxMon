@@ -202,10 +202,19 @@ else
 fi
 
 # Install icons (user-local; portable via XDG)
+# Plasma resolves KPlugin.Icon via the icon theme, not from the plasmoid package.
+# Our icon sources live in this repo under contents/icons/.
 ICON_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
 ICON_DIR="$ICON_BASE/hicolor/scalable/apps"
 mkdir -p "$ICON_DIR"
-cp icons/*.svg "$ICON_DIR/"
+
+if [ -d "icons" ]; then
+  cp icons/*.svg "$ICON_DIR/"
+elif [ -d "contents/icons" ]; then
+  cp contents/icons/*.svg "$ICON_DIR/"
+else
+  printf '%s\n' "No icon source dir found (expected ./icons or ./contents/icons). Skipping icon install." >&2
+fi
 
 # Update icon cache (best-effort; command availability differs by distro/DE)
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
