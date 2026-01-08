@@ -174,7 +174,6 @@ void handleFinishedReply(QNetworkReply *r,
     if (r->error() != QNetworkReply::NoError) {
         // Silent cancels (expected when refresh restarts or watchdog fires)
         if (r->error() == QNetworkReply::OperationCanceledError) {
-            r->deleteLater();
             return;
         }
 
@@ -184,7 +183,6 @@ void handleFinishedReply(QNetworkReply *r,
             msg += QStringLiteral(" - ") + jsonMsg;
         }
         emitErr(QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
-        r->deleteLater();
         return;
     }
 
@@ -196,7 +194,6 @@ void handleFinishedReply(QNetworkReply *r,
             msg += QStringLiteral(" - ") + jsonMsg;
         }
         emitErr(QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
-        r->deleteLater();
         return;
     }
     if (httpStatus >= 400) {
@@ -206,7 +203,6 @@ void handleFinishedReply(QNetworkReply *r,
             msg += QStringLiteral(" - ") + jsonMsg;
         }
         emitErr(QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
-        r->deleteLater();
         return;
     }
 
@@ -214,12 +210,10 @@ void handleFinishedReply(QNetworkReply *r,
     const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
     if (pe.error != QJsonParseError::NoError || doc.isNull()) {
         emitErr(QStringLiteral("JSON parse error: %1").arg(pe.errorString()));
-        r->deleteLater();
         return;
     }
 
     emitOk(doc.toVariant());
-    r->deleteLater();
 }
 
 } // namespace
@@ -263,6 +257,9 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
     QObject::connect(r, &QObject::destroyed, this, [this, r]() {
         m_inFlight.remove(r);
     });
+
+    // Ensure reply is cleaned up even if ProxmoxClient is destroyed before finished() is handled.
+    QObject::connect(r, &QNetworkReply::finished, r, &QObject::deleteLater);
 
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -309,6 +306,9 @@ void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind
         m_inFlight.remove(r);
     });
 
+    // Ensure reply is cleaned up even if ProxmoxClient is destroyed before finished() is handled.
+    QObject::connect(r, &QNetworkReply::finished, r, &QObject::deleteLater);
+
     if (m_ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
             r->ignoreSslErrors();
@@ -325,14 +325,12 @@ void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind
 
         auto fail = [&](const QString &msg) {
             emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
-            r->deleteLater();
         };
 
         // Qt network error (DNS, TLS, connection refused, etc)
         if (r->error() != QNetworkReply::NoError) {
             // Silent cancels (expected when refresh restarts or watchdog fires)
             if (r->error() == QNetworkReply::OperationCanceledError) {
-                r->deleteLater();
                 return;
             }
             QString msg = r->errorString();
@@ -372,7 +370,5 @@ void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind
         } else {
             emit actionReply(seq, actionKind, node, vmid, action, QVariant());
         }
-
-        r->deleteLater();
     });
 }
