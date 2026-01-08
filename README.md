@@ -292,6 +292,11 @@ See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.4.1
+- UI: VM/CT row layout polish (CPU|Mem alignment + tighter spacing)
+- UI: Power action buttons now use icon ToolButtons with tooltips + subtle hover highlight
+- UI: Right-aligned action buttons with protection from overlay scrollbar overlap
+
 ### v0.4.0
 - Reliability: cancel/abort in-flight requests during refresh/timeouts
 - Credentials: keyring secret lookup normalized + legacy key auto-migration
