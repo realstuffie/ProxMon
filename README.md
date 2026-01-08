@@ -17,7 +17,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Planned Features
 
-- [ ] Remote commands (Start, Stop, Restart) *(implemented; docs/UI polish still ongoing)*
+- [ ] Remote commands (Start, Shutdown, Reboot) *(implemented)*
 - [ ] Resource usage graphs
 - [ ] Storage monitoring
 - [ ] Backup status
@@ -191,6 +191,7 @@ Filter supports:
 - **Node cards**: CPU, memory, uptime for each node
 - **Click node**: Expand/collapse VM and container lists
 - **Status indicators**: Green = running, gray = stopped
+- **Power actions**: Icon buttons (Start/Shutdown/Reboot) on each running VM/CT (requires `VM.PowerMgmt`)
 - **Footer**: Quick stats and last update time
 
 ### Developer Mode
