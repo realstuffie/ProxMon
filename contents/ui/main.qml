@@ -2252,9 +2252,10 @@ PlasmoidItem {
                                             // (CPU/Mem labels are fixed-width; the displayed text stays adjacent because widths are tight)
                                             RowLayout {
                                                 // Tighter CPU|Mem grouping (still aligned across rows)
-                                                Layout.preferredWidth: 62
-                                                Layout.minimumWidth: 62
-                                                Layout.maximumWidth: 62
+                                                // Keep CPU and Mem the same width.
+                                                Layout.preferredWidth: 68
+                                                Layout.minimumWidth: 68
+                                                Layout.maximumWidth: 68
                                                 Layout.alignment: Qt.AlignVCenter
                                                 spacing: 1
 
@@ -2267,9 +2268,9 @@ PlasmoidItem {
                                                     font.pixelSize: 10
                                                     opacity: 0.7
                                                     horizontalAlignment: Text.AlignRight
-                                                    Layout.preferredWidth: 24
-                                                    Layout.minimumWidth: 24
-                                                    Layout.maximumWidth: 24
+                                                    Layout.preferredWidth: 32
+                                                    Layout.minimumWidth: 32
+                                                    Layout.maximumWidth: 32
                                                 }
 
                                                 PlasmaComponents.Label {
@@ -2280,6 +2281,8 @@ PlasmoidItem {
                                                     Layout.preferredWidth: 4
                                                     Layout.minimumWidth: 4
                                                     Layout.maximumWidth: 4
+                                                    Layout.leftMargin: 2
+                                                    Layout.rightMargin: 2
                                                 }
 
                                                 PlasmaComponents.Label {
@@ -2288,10 +2291,11 @@ PlasmoidItem {
                                                         : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
-                                                    horizontalAlignment: Text.AlignRight
+                                                    horizontalAlignment: Text.AlignLeft
                                                     Layout.preferredWidth: 32
                                                     Layout.minimumWidth: 32
                                                     Layout.maximumWidth: 32
+                                                    Layout.leftMargin: 2
                                                 }
                                             }
 
@@ -2427,9 +2431,10 @@ PlasmoidItem {
                                             // (CPU/Mem labels are fixed-width; the displayed text stays adjacent because widths are tight)
                                             RowLayout {
                                                 // Tighter CPU|Mem grouping (still aligned across rows)
-                                                Layout.preferredWidth: 62
-                                                Layout.minimumWidth: 62
-                                                Layout.maximumWidth: 62
+                                                // Keep CPU and Mem the same width.
+                                                Layout.preferredWidth: 68
+                                                Layout.minimumWidth: 68
+                                                Layout.maximumWidth: 68
                                                 Layout.alignment: Qt.AlignVCenter
                                                 spacing: 1
 
@@ -2442,9 +2447,9 @@ PlasmoidItem {
                                                     font.pixelSize: 10
                                                     opacity: 0.7
                                                     horizontalAlignment: Text.AlignRight
-                                                    Layout.preferredWidth: 24
-                                                    Layout.minimumWidth: 24
-                                                    Layout.maximumWidth: 24
+                                                    Layout.preferredWidth: 32
+                                                    Layout.minimumWidth: 32
+                                                    Layout.maximumWidth: 32
                                                 }
 
                                                 PlasmaComponents.Label {
@@ -2455,6 +2460,8 @@ PlasmoidItem {
                                                     Layout.preferredWidth: 4
                                                     Layout.minimumWidth: 4
                                                     Layout.maximumWidth: 4
+                                                    Layout.leftMargin: 2
+                                                    Layout.rightMargin: 2
                                                 }
 
                                                 PlasmaComponents.Label {
@@ -2463,10 +2470,11 @@ PlasmoidItem {
                                                         : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
-                                                    horizontalAlignment: Text.AlignRight
+                                                    horizontalAlignment: Text.AlignLeft
                                                     Layout.preferredWidth: 32
                                                     Layout.minimumWidth: 32
                                                     Layout.maximumWidth: 32
+                                                    Layout.leftMargin: 2
                                                 }
                                             }
 
