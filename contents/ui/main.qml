@@ -59,6 +59,9 @@ PlasmoidItem {
     property bool notifyOnStart: Plasmoid.configuration.notifyOnStart !== false
     property bool notifyOnNodeChange: Plasmoid.configuration.notifyOnNodeChange !== false
 
+    // Notification privacy: redact user@realm and token IDs when present in notification text.
+    property bool redactNotifyIdentities: Plasmoid.configuration.redactNotifyIdentities !== false
+
     // Notification rate limiting (seconds)
     property bool notifyRateLimitEnabled: Plasmoid.configuration.notifyRateLimitEnabled !== false
     property int notifyRateLimitSeconds: Math.max(0, Plasmoid.configuration.notifyRateLimitSeconds || 120)
@@ -510,6 +513,22 @@ PlasmoidItem {
         // Prevent newlines from breaking the shell command
         title = (title || "").replace(/[\r\n]+/g, " ")
         message = (message || "").replace(/[\r\n]+/g, " ")
+
+        // Redact sensitive "user@realm!tokenid" fragments from notification text.
+        // This can appear in UPIDs (tasks) and logs.
+        function redactIdentities(str) {
+            str = String(str || "")
+            // redact "user@realm" portion but preserve realm
+            str = str.replace(/([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)/g, "REDACTED@$2")
+            // redact token id portion after "!"
+            str = str.replace(/!([A-Za-z0-9._:-]+)/g, "!REDACTED")
+            return str
+        }
+
+        if (redactNotifyIdentities) {
+            title = redactIdentities(title)
+            message = redactIdentities(message)
+        }
 
         logDebug("Notification: " + title + " - " + message)
 

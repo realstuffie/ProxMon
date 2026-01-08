@@ -41,6 +41,10 @@ KCM.SimpleKCM {
     property alias cfg_notifyRateLimitSeconds: rateLimitSecondsSpin.value
     property int cfg_notifyRateLimitSecondsDefault: 120
 
+    // Notification privacy
+    property alias cfg_redactNotifyIdentities: redactNotifyIdentitiesCheck.checked
+    property bool cfg_redactNotifyIdentitiesDefault: true
+
     ColumnLayout {
         anchors.left: parent.left
         anchors.right: parent.right
@@ -293,6 +297,41 @@ KCM.SimpleKCM {
 
         QQC2.Label {
             text: "Suppresses repeated notifications for the same VM/CT/node state within the interval."
+            font.pixelSize: 11
+            opacity: 0.6
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+            visible: root.cfg_enableNotifications
+        }
+
+        // Separator
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            Layout.bottomMargin: 5
+            implicitHeight: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.2
+            visible: root.cfg_enableNotifications
+        }
+
+        // Notification privacy
+        Kirigami.Heading {
+            text: "Privacy"
+            level: 4
+            visible: root.cfg_enableNotifications
+            opacity: root.cfg_enableNotifications ? 1.0 : 0.5
+        }
+
+        QQC2.CheckBox {
+            id: redactNotifyIdentitiesCheck
+            text: "Redact user@realm and token ID in notifications"
+            enabled: root.cfg_enableNotifications
+            visible: root.cfg_enableNotifications
+        }
+
+        QQC2.Label {
+            text: "Replaces patterns like 'user@realm!tokenid' with 'REDACTED@realm!REDACTED' when they appear in notification text."
             font.pixelSize: 11
             opacity: 0.6
             Layout.fillWidth: true

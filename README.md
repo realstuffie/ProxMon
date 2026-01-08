@@ -167,6 +167,11 @@ To reduce notification spam during flapping or frequent refresh/retry cycles, yo
 - Enable/disable in **Behavior tab → Rate Limiting**
 - Configure the minimum interval in seconds between duplicates (default: 120s)
 
+### Notification Privacy (redaction)
+By default, notifications will redact sensitive identity fragments if they appear in text (for example within task UPIDs):
+- **Behavior tab → Privacy → Redact user@realm and token ID in notifications** (default: enabled)
+- Replaces patterns like `user@realm!tokenid` with `REDACTED@realm!REDACTED`
+
 You can filter which VMs/CTs trigger notifications:
 
 | Mode | Description |
@@ -296,6 +301,7 @@ See [LICENSE](LICENSE) for details.
 - UI: VM/CT row layout polish (CPU|Mem alignment + tighter spacing)
 - UI: Power action buttons now use icon ToolButtons with tooltips + subtle hover highlight
 - UI: Right-aligned action buttons with protection from overlay scrollbar overlap
+- Notifications: add privacy toggle to redact `user@realm!tokenid` fragments (default: on)
 
 ### v0.4.0
 - Reliability: cancel/abort in-flight requests during refresh/timeouts
