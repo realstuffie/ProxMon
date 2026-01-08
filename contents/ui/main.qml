@@ -6,6 +6,7 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
+import org.kde.plasma.core as PlasmaCore
 import "../lib/proxmox" as ProxMon
 
 PlasmoidItem {
@@ -2020,7 +2021,8 @@ PlasmoidItem {
             QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
 
             // Reserve width for overlay scrollbar so right-side actions aren't covered.
-            readonly property int __scrollbarGap: 6
+            // Keep this small; we also reserve it inside each row.
+            readonly property int __scrollbarGap: 2
             readonly property int __scrollbarReserve: 14 + __scrollbarGap
 
             ColumnLayout {
@@ -2248,6 +2250,8 @@ PlasmoidItem {
                                                 font.pixelSize: 11
                                             }
 
+                                            Item { Layout.fillWidth: true }
+
                                             // Fixed-width stats group: keep CPU|Mem adjacent but align "|" and values across rows
                                             // (CPU/Mem labels are fixed-width; the displayed text stays adjacent because widths are tight)
                                             RowLayout {
@@ -2299,11 +2303,15 @@ PlasmoidItem {
                                                 }
                                             }
 
-                                            // Fixed-width actions strip (moved to far right, after stats column)
+                                            // Fixed-width actions strip pinned to the far right.
+                                            // Use ToolButtons (icon-only) + tooltips + subtle hover background.
+                                            // NOTE: ScrollView has an overlay scrollbar; reserve right gutter below so it won't cover these buttons.
                                             RowLayout {
-                                                spacing: 2
+                                                spacing: PlasmaCore.Units.smallSpacing
                                                 Layout.preferredWidth: 70
-                                                Layout.alignment: Qt.AlignVCenter
+                                                Layout.minimumWidth: 70
+                                                Layout.maximumWidth: 70
+                                                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                                                 Layout.preferredHeight: 28
                                                 Layout.minimumHeight: 28
                                                 Layout.maximumHeight: 28
@@ -2315,7 +2323,7 @@ PlasmoidItem {
                                                     implicitHeight: 16
                                                 }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("qemu:" + nodeName + ":" + vmModel.vmid + ":start") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2323,11 +2331,23 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: vmModel && !busy && vmModel.status !== "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Start"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "start")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status === "running" }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("qemu:" + nodeName + ":" + vmModel.vmid + ":shutdown") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2335,11 +2355,23 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: vmModel && !busy && vmModel.status === "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Shutdown"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "shutdown")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status !== "running" }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("qemu:" + nodeName + ":" + vmModel.vmid + ":reboot") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2347,12 +2379,25 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: vmModel && !busy && vmModel.status === "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Reboot"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "reboot")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status !== "running" }
                                             }
 
                                             // Reserve space so overlay scrollbar doesn't cover action buttons.
+                                            // Since buttons are pinned to far right, this MUST exist to keep them clickable.
                                             Item {
                                                 Layout.preferredWidth: scrollView.__scrollbarReserve
                                                 Layout.minimumWidth: scrollView.__scrollbarReserve
@@ -2427,6 +2472,8 @@ PlasmoidItem {
                                                 font.pixelSize: 11
                                             }
 
+                                            Item { Layout.fillWidth: true }
+
                                             // Fixed-width stats group: keep CPU|Mem adjacent but align "|" and values across rows
                                             // (CPU/Mem labels are fixed-width; the displayed text stays adjacent because widths are tight)
                                             RowLayout {
@@ -2478,11 +2525,15 @@ PlasmoidItem {
                                                 }
                                             }
 
-                                            // Fixed-width actions strip (moved to far right, after stats column)
+                                            // Fixed-width actions strip pinned to the far right.
+                                            // Use ToolButtons (icon-only) + tooltips + subtle hover background.
+                                            // NOTE: ScrollView has an overlay scrollbar; reserve right gutter below so it won't cover these buttons.
                                             RowLayout {
-                                                spacing: 2
+                                                spacing: PlasmaCore.Units.smallSpacing
                                                 Layout.preferredWidth: 70
-                                                Layout.alignment: Qt.AlignVCenter
+                                                Layout.minimumWidth: 70
+                                                Layout.maximumWidth: 70
+                                                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                                                 Layout.preferredHeight: 28
                                                 Layout.minimumHeight: 28
                                                 Layout.maximumHeight: 28
@@ -2494,7 +2545,7 @@ PlasmoidItem {
                                                     implicitHeight: 16
                                                 }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("lxc:" + nodeName + ":" + ctModel.vmid + ":start") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2502,11 +2553,23 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: ctModel && !busy && ctModel.status !== "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Start"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("lxc", nodeName, ctModel.vmid, ctModel.name, "start")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status === "running" }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("lxc:" + nodeName + ":" + ctModel.vmid + ":shutdown") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2514,11 +2577,23 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: ctModel && !busy && ctModel.status === "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Shutdown"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("lxc", nodeName, ctModel.vmid, ctModel.name, "shutdown")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status !== "running" }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("lxc:" + nodeName + ":" + ctModel.vmid + ":reboot") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2526,6 +2601,18 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: ctModel && !busy && ctModel.status === "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Reboot"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("lxc", nodeName, ctModel.vmid, ctModel.name, "reboot")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status !== "running" }
