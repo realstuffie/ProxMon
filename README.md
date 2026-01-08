@@ -17,13 +17,11 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Planned Features
 
-- [ ] Remote commands (Start, Stop, Restart) *(implemented; docs/UI polish still ongoing)*
+- [ ] Remote commands (Start, Shutdown, Reboot) *(implemented)*
 - [ ] Resource usage graphs
 - [ ] Storage monitoring
 - [ ] Backup status
 - [ ] Kde5 Compatible Version
-
-
 
 ### Known Bugs/Limitations
 
@@ -48,6 +46,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
   <br>
   <em>Configuration dialog</em>
 </p>
+
 ## Requirements
 
 - KDE Plasma 6.0+
@@ -129,10 +128,22 @@ Recommended approach:
 - Keep a read-only monitoring token with `Sys.Audit` + `VM.Audit`
 - Create a separate token/user for actions with `VM.PowerMgmt` (+ `Sys.PowerMgmt` only if required in your ACL/role setup) at the minimum scope you want
 
-Note: Proxmox ships built-in roles like `PVEAuditor` (read-only) and `PVEVMUser` (includes `VM.PowerMgmt`). You can also create minimal custom roles, e.g.:\n\n```bash\npveum role add VM_Power-only --privs \"VM.PowerMgmt VM.Console\"\n```\n\nAlso see Proxmox docs for templated ACL paths like `/vms/{vmid}` and `/nodes/{node}` when scoping permissions.
+Note: Proxmox ships built-in roles like `PVEAuditor` (read-only) and `PVEVMUser` (includes `VM.PowerMgmt`). You can also create minimal custom roles.
 
 #### Note on Privilege Separation (common misconfiguration)
-If you create the API token with **Privilege Separation** enabled (`-privsep 1`), the token will *not* automatically inherit the user's ACLs.\n\nPer Proxmox docs, the effective permissions are the **intersection** of the user permissions and the token permissions. This means you must grant roles to both the **user** and the **token** (or disable privilege separation for “full privileges”).\n\nExample:\n```bash\n# Create token with separated privileges\npveum user token add joe@pve monitoring -privsep 1\n\n# Grant read-only role to the token (and ensure the user also has it)\npveum acl modify /vms -token 'joe@pve!monitoring' -role PVEAuditor\n```
+
+If you create the API token with **Privilege Separation** enabled (`-privsep 1`), the token will *not* automatically inherit the user's ACLs.
+
+Per Proxmox docs, the effective permissions are the **intersection** of the user permissions and the token permissions. This means you must grant roles to both the **user** and the **token** (or disable privilege separation for “full privileges”).
+
+Example:
+```bash
+# Create token with separated privileges
+pveum user token add joe@pve monitoring -privsep 1
+
+# Grant read-only role to the token (and ensure the user also has it)
+pveum acl modify /vms -token 'joe@pve!monitoring' -role PVEAuditor
+```
 
 ### Example: Create a Dedicated Monitoring User
 
@@ -153,6 +164,7 @@ pveum user token add monitor@pve plasma-monitor
    - **API Token ID**: Format `user@realm!tokenname` (e.g., `root@pam!plasma-monitor`)
    - **API Token Secret**: The secret from token creation
    - **Update Keyring**: If you changed the secret, click **Update Keyring**. The widget stores it temporarily and migrates it into the system keyring on next load. The widget will refresh shortly after config changes (debounced).
+     - If the widget still doesn’t pick up new auth settings, restart Plasma (plasmashell) or remove/re-add the widget to force a full reload.
    - **Forget**: Clears the secret field (does **not** delete existing keyring entries).
    - **Refresh Interval**: Update frequency in seconds (default: `30`)
    - **Ignore SSL**: Enable for self-signed certificates
@@ -160,25 +172,17 @@ pveum user token add monitor@pve plasma-monitor
    - **Default Sorting**: How to sort VMs/CTs
    - **Notifications**: Configure state change alerts
 
-### Notification Filtering
-
 ### Notification Rate Limiting
+
 To reduce notification spam during flapping or frequent refresh/retry cycles, you can rate limit repeated notifications:
 - Enable/disable in **Behavior tab → Rate Limiting**
 - Configure the minimum interval in seconds between duplicates (default: 120s)
 
-You can filter which VMs/CTs trigger notifications:
+### Notification Privacy (redaction)
 
-| Mode | Description |
-|------|-------------|
-| **All** | Notify for all state changes |
-| **Whitelist** | Only notify for specified VMs/CTs |
-| **Blacklist** | Notify for all except specified VMs/CTs |
-
-Filter supports:
-- Exact names: `web-server`
-- VM/CT IDs: `100`
-- Wildcards: `*-prod`, `db-*`, `*test*`
+By default, notifications will redact sensitive identity fragments if they appear in text (for example within task UPIDs):
+- **Behavior tab → Privacy → Redact user@realm and token ID in notifications** (default: enabled)
+- Replaces patterns like `user@realm!tokenid` with `REDACTED@realm!REDACTED`
 
 ## Usage
 
@@ -191,6 +195,7 @@ Filter supports:
 - **Node cards**: CPU, memory, uptime for each node
 - **Click node**: Expand/collapse VM and container lists
 - **Status indicators**: Green = running, gray = stopped
+- **Power actions**: Icon buttons (Start/Shutdown/Reboot) on each running VM/CT (requires `VM.PowerMgmt`)
 - **Footer**: Quick stats and last update time
 
 ### Developer Mode
@@ -291,40 +296,18 @@ See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
-### v4.1
+### v0.4.1
 - Packaging: native QML plugin is now staged under `contents/qml/org/kde/plasma/proxmox/` (more reliable module discovery on Plasma 6)
 - Install script: cross-distro improvements (kpackagetool 5/6 support, safer option detection, XDG icon paths)
 - Install script: optional `--install-deps` mode with root escalation via root/sudo/doas/su (best-effort, distro-dependent package names)
 - Docs: added dev notes on QML module packaging and verification
+- UI: VM/CT row layout polish (CPU|Mem alignment + tighter spacing)
+- UI: Power action buttons now use icon ToolButtons with tooltips + subtle hover highlight
+- UI: Right-aligned action buttons with protection from overlay scrollbar overlap
+- Notifications: add privacy toggle to redact `user@realm!tokenid` fragments (default: on)
 
 ### v0.4.0
 - Reliability: cancel/abort in-flight requests during refresh/timeouts
 - Credentials: keyring secret lookup normalized + legacy key auto-migration
 - Notifications: rate limiting to reduce spam
 - Various UI/behavior improvements
-
-### v0.3.3
-- Repository hygiene: add/update `.gitignore`
-- Minor README/install script improvements
-
-### v0.3.2
-- Refresh of screenshots
-- Minor bug fixes
-
-### v0.3.1
-- minor bug fixes
-
-### v0.3.0
-- Added notification system with filtering
-- Added whitelist/blacklist support for notifications
-- Fixed security issues (shell injection)
-- Improved theme integration
-- Added developer mode
-
-### v0.2.0
-- Multi-node cluster support
-- Collapsible node sections
-- Improved UI
-
-### v0.1.0
-- Initial release

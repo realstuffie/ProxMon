@@ -6,6 +6,7 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
+import org.kde.plasma.core as PlasmaCore
 import "../lib/proxmox" as ProxMon
 
 PlasmoidItem {
@@ -57,6 +58,9 @@ PlasmoidItem {
     property bool notifyOnStop: Plasmoid.configuration.notifyOnStop !== false
     property bool notifyOnStart: Plasmoid.configuration.notifyOnStart !== false
     property bool notifyOnNodeChange: Plasmoid.configuration.notifyOnNodeChange !== false
+
+    // Notification privacy: redact user@realm and token IDs when present in notification text.
+    property bool redactNotifyIdentities: Plasmoid.configuration.redactNotifyIdentities !== false
 
     // Notification rate limiting (seconds)
     property bool notifyRateLimitEnabled: Plasmoid.configuration.notifyRateLimitEnabled !== false
@@ -192,6 +196,17 @@ PlasmoidItem {
             if (!str) return ""
             return str.replace(/'/g, "'\\''")
         }
+
+    // Clamp/sanitize CPU values coming from Proxmox.
+    // On some restarts the initial cpu field can be garbage (e.g. negative), which then renders as -4000%.
+    function safeCpuPercent(cpuFraction) {
+        var x = Number(cpuFraction)
+        if (!isFinite(x) || isNaN(x)) return 0
+        // Proxmox reports CPU as fraction (0..1 typically, can exceed 1 on some metrics).
+        // Clamp to a sane range for UI.
+        x = Math.max(0, Math.min(x, 1))
+        return x * 100
+    }
  
         ProxMon.ProxmoxClient {
         id: api
@@ -299,13 +314,26 @@ PlasmoidItem {
                 }
             } catch (e) { upid = "" }
 
+            // UPID tail can include user@realm!tokenid (sensitive). Redact both user@realm and tokenid.
+            function sanitizeUpid(u) {
+                u = String(u || "")
+                // Example tail: "...:user@realm!TOKENID:"
+                // 1) Replace "user@realm" with "REDACTED@realm"
+                u = u.replace(/:([^:@]+)@/g, ":REDACTED@")
+                // 2) Redact everything between "!" and the next ":".
+                u = u.replace(/!([^:]*):/g, "!REDACTED:")
+                return u
+            }
+
+            var upidSafe = sanitizeUpid(upid)
+
             if (devMode && upid) {
                 console.log("[Proxmox] Action UPID: " + upid)
             }
 
             sendNotification(
                 (actionKind === "qemu" ? "VM" : "Container") + " action",
-                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + " OK" + (upid ? (" (task " + upid + ")") : ""),
+                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + " OK" + (upidSafe ? (" (task " + upidSafe + ")") : ""),
                 "dialog-information",
                 "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":ok"
             )
@@ -485,6 +513,22 @@ PlasmoidItem {
         // Prevent newlines from breaking the shell command
         title = (title || "").replace(/[\r\n]+/g, " ")
         message = (message || "").replace(/[\r\n]+/g, " ")
+
+        // Redact sensitive "user@realm!tokenid" fragments from notification text.
+        // This can appear in UPIDs (tasks) and logs.
+        function redactIdentities(str) {
+            str = String(str || "")
+            // redact "user@realm" portion but preserve realm
+            str = str.replace(/([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)/g, "REDACTED@$2")
+            // redact token id portion after "!"
+            str = str.replace(/!([A-Za-z0-9._:-]+)/g, "!REDACTED")
+            return str
+        }
+
+        if (redactNotifyIdentities) {
+            title = redactIdentities(title)
+            message = redactIdentities(message)
+        }
 
         logDebug("Notification: " + title + " - " + message)
 
@@ -1526,6 +1570,14 @@ PlasmoidItem {
         if (connectionMode === "single") resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("apiTokenId")
     }
+
+    // If the secret is entered via the config UI (legacy plaintext field), it updates
+    // Plasmoid.configuration.apiTokenSecret but may not change apiTokenId/host/port.
+    // React to it so the widget transitions out of "Not Configured" immediately.
+    onApiTokenSecretChanged: {
+        if (connectionMode === "single") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("apiTokenSecret")
+    }
     onMultiHostsJsonChanged: {
         if (connectionMode === "multiHost") resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("multiHostsJson")
@@ -1988,7 +2040,8 @@ PlasmoidItem {
             QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
 
             // Reserve width for overlay scrollbar so right-side actions aren't covered.
-            readonly property int __scrollbarGap: 6
+            // Keep this small; we also reserve it inside each row.
+            readonly property int __scrollbarGap: 2
             readonly property int __scrollbarReserve: 14 + __scrollbarGap
 
             ColumnLayout {
@@ -2122,7 +2175,7 @@ PlasmoidItem {
                                     spacing: 12
 
                                     PlasmaComponents.Label {
-                                        text: "CPU: " + (nodeModel.cpu * 100).toFixed(1) + "%"
+                                        text: "CPU: " + safeCpuPercent(nodeModel.cpu).toFixed(1) + "%"
                                         font.pixelSize: 12
                                     }
 
@@ -2216,13 +2269,16 @@ PlasmoidItem {
                                                 font.pixelSize: 11
                                             }
 
+                                            Item { Layout.fillWidth: true }
+
                                             // Fixed-width stats group: keep CPU|Mem adjacent but align "|" and values across rows
                                             // (CPU/Mem labels are fixed-width; the displayed text stays adjacent because widths are tight)
                                             RowLayout {
                                                 // Tighter CPU|Mem grouping (still aligned across rows)
-                                                Layout.preferredWidth: 62
-                                                Layout.minimumWidth: 62
-                                                Layout.maximumWidth: 62
+                                                // Keep CPU and Mem the same width.
+                                                Layout.preferredWidth: 68
+                                                Layout.minimumWidth: 68
+                                                Layout.maximumWidth: 68
                                                 Layout.alignment: Qt.AlignVCenter
                                                 spacing: 1
 
@@ -2235,9 +2291,9 @@ PlasmoidItem {
                                                     font.pixelSize: 10
                                                     opacity: 0.7
                                                     horizontalAlignment: Text.AlignRight
-                                                    Layout.preferredWidth: 24
-                                                    Layout.minimumWidth: 24
-                                                    Layout.maximumWidth: 24
+                                                    Layout.preferredWidth: 32
+                                                    Layout.minimumWidth: 32
+                                                    Layout.maximumWidth: 32
                                                 }
 
                                                 PlasmaComponents.Label {
@@ -2248,6 +2304,8 @@ PlasmoidItem {
                                                     Layout.preferredWidth: 4
                                                     Layout.minimumWidth: 4
                                                     Layout.maximumWidth: 4
+                                                    Layout.leftMargin: 2
+                                                    Layout.rightMargin: 2
                                                 }
 
                                                 PlasmaComponents.Label {
@@ -2256,18 +2314,23 @@ PlasmoidItem {
                                                         : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
-                                                    horizontalAlignment: Text.AlignRight
+                                                    horizontalAlignment: Text.AlignLeft
                                                     Layout.preferredWidth: 32
                                                     Layout.minimumWidth: 32
                                                     Layout.maximumWidth: 32
+                                                    Layout.leftMargin: 2
                                                 }
                                             }
 
-                                            // Fixed-width actions strip (moved to far right, after stats column)
+                                            // Fixed-width actions strip pinned to the far right.
+                                            // Use ToolButtons (icon-only) + tooltips + subtle hover background.
+                                            // NOTE: ScrollView has an overlay scrollbar; reserve right gutter below so it won't cover these buttons.
                                             RowLayout {
-                                                spacing: 2
+                                                spacing: PlasmaCore.Units.smallSpacing
                                                 Layout.preferredWidth: 70
-                                                Layout.alignment: Qt.AlignVCenter
+                                                Layout.minimumWidth: 70
+                                                Layout.maximumWidth: 70
+                                                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                                                 Layout.preferredHeight: 28
                                                 Layout.minimumHeight: 28
                                                 Layout.maximumHeight: 28
@@ -2279,7 +2342,7 @@ PlasmoidItem {
                                                     implicitHeight: 16
                                                 }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("qemu:" + nodeName + ":" + vmModel.vmid + ":start") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2287,11 +2350,23 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: vmModel && !busy && vmModel.status !== "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Start"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "start")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status === "running" }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("qemu:" + nodeName + ":" + vmModel.vmid + ":shutdown") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2299,11 +2374,23 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: vmModel && !busy && vmModel.status === "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Shutdown"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "shutdown")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status !== "running" }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("qemu:" + nodeName + ":" + vmModel.vmid + ":reboot") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2311,12 +2398,25 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: vmModel && !busy && vmModel.status === "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Reboot"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("qemu", nodeName, vmModel.vmid, vmModel.name, "reboot")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !vmModel || busy || vmModel.status !== "running" }
                                             }
 
                                             // Reserve space so overlay scrollbar doesn't cover action buttons.
+                                            // Since buttons are pinned to far right, this MUST exist to keep them clickable.
                                             Item {
                                                 Layout.preferredWidth: scrollView.__scrollbarReserve
                                                 Layout.minimumWidth: scrollView.__scrollbarReserve
@@ -2391,13 +2491,16 @@ PlasmoidItem {
                                                 font.pixelSize: 11
                                             }
 
+                                            Item { Layout.fillWidth: true }
+
                                             // Fixed-width stats group: keep CPU|Mem adjacent but align "|" and values across rows
                                             // (CPU/Mem labels are fixed-width; the displayed text stays adjacent because widths are tight)
                                             RowLayout {
                                                 // Tighter CPU|Mem grouping (still aligned across rows)
-                                                Layout.preferredWidth: 62
-                                                Layout.minimumWidth: 62
-                                                Layout.maximumWidth: 62
+                                                // Keep CPU and Mem the same width.
+                                                Layout.preferredWidth: 68
+                                                Layout.minimumWidth: 68
+                                                Layout.maximumWidth: 68
                                                 Layout.alignment: Qt.AlignVCenter
                                                 spacing: 1
 
@@ -2410,9 +2513,9 @@ PlasmoidItem {
                                                     font.pixelSize: 10
                                                     opacity: 0.7
                                                     horizontalAlignment: Text.AlignRight
-                                                    Layout.preferredWidth: 24
-                                                    Layout.minimumWidth: 24
-                                                    Layout.maximumWidth: 24
+                                                    Layout.preferredWidth: 32
+                                                    Layout.minimumWidth: 32
+                                                    Layout.maximumWidth: 32
                                                 }
 
                                                 PlasmaComponents.Label {
@@ -2423,6 +2526,8 @@ PlasmoidItem {
                                                     Layout.preferredWidth: 4
                                                     Layout.minimumWidth: 4
                                                     Layout.maximumWidth: 4
+                                                    Layout.leftMargin: 2
+                                                    Layout.rightMargin: 2
                                                 }
 
                                                 PlasmaComponents.Label {
@@ -2431,18 +2536,23 @@ PlasmoidItem {
                                                         : ""
                                                     font.pixelSize: 10
                                                     opacity: 0.7
-                                                    horizontalAlignment: Text.AlignRight
+                                                    horizontalAlignment: Text.AlignLeft
                                                     Layout.preferredWidth: 32
                                                     Layout.minimumWidth: 32
                                                     Layout.maximumWidth: 32
+                                                    Layout.leftMargin: 2
                                                 }
                                             }
 
-                                            // Fixed-width actions strip (moved to far right, after stats column)
+                                            // Fixed-width actions strip pinned to the far right.
+                                            // Use ToolButtons (icon-only) + tooltips + subtle hover background.
+                                            // NOTE: ScrollView has an overlay scrollbar; reserve right gutter below so it won't cover these buttons.
                                             RowLayout {
-                                                spacing: 2
+                                                spacing: PlasmaCore.Units.smallSpacing
                                                 Layout.preferredWidth: 70
-                                                Layout.alignment: Qt.AlignVCenter
+                                                Layout.minimumWidth: 70
+                                                Layout.maximumWidth: 70
+                                                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                                                 Layout.preferredHeight: 28
                                                 Layout.minimumHeight: 28
                                                 Layout.maximumHeight: 28
@@ -2454,7 +2564,7 @@ PlasmoidItem {
                                                     implicitHeight: 16
                                                 }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("lxc:" + nodeName + ":" + ctModel.vmid + ":start") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2462,11 +2572,23 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: ctModel && !busy && ctModel.status !== "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Start"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("lxc", nodeName, ctModel.vmid, ctModel.name, "start")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status === "running" }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("lxc:" + nodeName + ":" + ctModel.vmid + ":shutdown") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2474,11 +2596,23 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: ctModel && !busy && ctModel.status === "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Shutdown"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("lxc", nodeName, ctModel.vmid, ctModel.name, "shutdown")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status !== "running" }
 
-                                                PlasmaComponents.Button {
+                                                PlasmaComponents.ToolButton {
                                                     flat: true
                                                     icon.name: (armedActionKey === ("lxc:" + nodeName + ":" + ctModel.vmid + ":reboot") && armedTimer.running)
                                                         ? "dialog-ok"
@@ -2486,6 +2620,18 @@ PlasmoidItem {
                                                     implicitWidth: 22
                                                     implicitHeight: 22
                                                     visible: ctModel && !busy && ctModel.status === "running"
+
+                                                    PlasmaComponents.ToolTip {
+                                                        text: "Reboot"
+                                                    }
+
+                                                    background: Rectangle {
+                                                        radius: 4
+                                                        color: parent.hovered
+                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            : "transparent"
+                                                    }
+
                                                     onClicked: confirmAndRunAction("lxc", nodeName, ctModel.vmid, ctModel.name, "reboot")
                                                 }
                                                 Item { implicitWidth: 22; implicitHeight: 22; visible: !ctModel || busy || ctModel.status !== "running" }
@@ -2696,7 +2842,7 @@ PlasmoidItem {
                                             spacing: 12
 
                                             PlasmaComponents.Label {
-                                                text: nodeModel ? ("CPU: " + (nodeModel.cpu * 100).toFixed(1) + "%") : ""
+                                                text: nodeModel ? ("CPU: " + safeCpuPercent(nodeModel.cpu).toFixed(1) + "%") : ""
                                                 font.pixelSize: 12
                                             }
 

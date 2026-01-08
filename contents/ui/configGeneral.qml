@@ -9,6 +9,11 @@ import org.kde.kcmutils as KCM
   Config QML (KCM) runs in a separate context than the plasmoid itself and
   should not depend on the native plugin being loadable. Otherwise the entire
   Connection tab may fail to load if the plugin can't be resolved.
+
+  ALSO:
+  Do not access `Plasmoid` from a KCM page. The config dialog injects cfg_*
+  properties; use those as the single source of truth. Accessing Plasmoid here
+  causes "Plasmoid is not defined" and can prevent config pages from loading.
 */
 
 KCM.SimpleKCM {
@@ -23,9 +28,10 @@ KCM.SimpleKCM {
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
     property alias cfg_enableNotifications: enableNotificationsCheck.checked
 
-    // Multi-host mode
-    property string cfg_connectionMode: Plasmoid.configuration.connectionMode || "single"
-    property string cfg_multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
+    // Multi-host mode (cfg_* values are provided by the KCM engine)
+    property string cfg_connectionMode: "single"
+    property string cfg_multiHostsJson: "[]"
+    property string cfg_multiHostSecretsJson: "{}"
 
     // Auto-retry (handled in main.qml)
     property alias cfg_autoRetry: autoRetryCheck.checked
@@ -40,6 +46,7 @@ KCM.SimpleKCM {
 
     property string cfg_connectionModeDefault: "single"
     property string cfg_multiHostsJsonDefault: "[]"
+    property string cfg_multiHostSecretsJsonDefault: "{}"
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
     property bool cfg_enableNotificationsDefault: true
@@ -128,7 +135,6 @@ KCM.SimpleKCM {
 
     function saveMultiHosts(arr) {
         cfg_multiHostsJson = JSON.stringify((arr || []).slice(0, 5))
-        Plasmoid.configuration.multiHostsJson = cfg_multiHostsJson
     }
 
     function ensureMultiHostsLen(n) {
@@ -184,14 +190,12 @@ KCM.SimpleKCM {
                 Layout.fillWidth: true
 
                 Component.onCompleted: {
-                    var v = Plasmoid.configuration.connectionMode || "single"
+                    var v = root.cfg_connectionMode || "single"
                     currentIndex = (v === "multiHost") ? 1 : 0
                 }
 
                 onActivated: {
-                    var v2 = model[currentIndex].value
-                    Plasmoid.configuration.connectionMode = v2
-                    cfg_connectionMode = v2
+                    cfg_connectionMode = model[currentIndex].value
                 }
             }
         }
@@ -202,7 +206,7 @@ KCM.SimpleKCM {
             columnSpacing: 15
             rowSpacing: 12
             Layout.fillWidth: true
-            visible: (Plasmoid.configuration.connectionMode || "single") === "single"
+            visible: (root.cfg_connectionMode || "single") === "single"
 
             QQC2.Label {
                 text: "Host:"
@@ -256,9 +260,8 @@ KCM.SimpleKCM {
                     icon.name: "dialog-password"
                     enabled: tokenSecretField.text && tokenSecretField.text.trim() !== ""
                     onClicked: {
-                        // KCM cannot access keyring directly. This stores the secret temporarily in config;
-                        // the plasmoid runtime migrates it into keyring on next load and clears the plaintext.
-                        Plasmoid.configuration.apiTokenSecret = tokenSecretField.text
+                        // KCM cannot access keyring directly. Stash secret into config; runtime migrates to keyring.
+                        cfg_apiTokenSecret = tokenSecretField.text
                     }
 
                     QQC2.ToolTip.visible: hovered
@@ -270,7 +273,7 @@ KCM.SimpleKCM {
                     icon.name: "edit-clear"
                     onClicked: {
                         tokenSecretField.text = ""
-                        Plasmoid.configuration.apiTokenSecret = ""
+                        cfg_apiTokenSecret = ""
                     }
 
                     QQC2.ToolTip.visible: hovered
@@ -321,7 +324,7 @@ KCM.SimpleKCM {
         // Multi-host configuration
         ColumnLayout {
             Layout.fillWidth: true
-            visible: (Plasmoid.configuration.connectionMode || "single") === "multiHost"
+            visible: (root.cfg_connectionMode || "single") === "multiHost"
             spacing: 10
 
             QQC2.Label {
@@ -427,9 +430,9 @@ KCM.SimpleKCM {
                                     // KCM cannot access keyring directly. Stash secrets temporarily in config;
                                     // the plasmoid runtime migrates them into the system keyring on next load.
                                     var map = {}
-                                    try { map = JSON.parse(Plasmoid.configuration.multiHostSecretsJson || "{}") } catch (e) { map = {} }
+                                    try { map = JSON.parse(root.cfg_multiHostSecretsJson || "{}") } catch (e) { map = {} }
                                     map[key] = mhSecretField.text
-                                    Plasmoid.configuration.multiHostSecretsJson = JSON.stringify(map)
+                                    root.cfg_multiHostSecretsJson = JSON.stringify(map)
 
                                     // Reduce risk of the secret lingering on screen / being re-saved accidentally.
                                     mhSecretField.text = ""
@@ -454,6 +457,27 @@ KCM.SimpleKCM {
             }
             QQC2.Label {
                 text: "Notifications are sent when VMs, containers, or nodes change state. Configure filters in the Behavior tab."
+                font.pixelSize: 11
+                opacity: 0.7
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+
+        // Auth/config refresh hint (Plasma sometimes caches plasmoid runtime state)
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Kirigami.Icon {
+                source: "dialog-warning"
+                implicitWidth: 16
+                implicitHeight: 16
+                opacity: 0.7
+            }
+
+            QQC2.Label {
+                text: "If updating Host/Token settings doesn’t take effect immediately, restart Plasma (plasmashell) or remove/re-add the widget to force a full reload."
                 font.pixelSize: 11
                 opacity: 0.7
                 wrapMode: Text.WordWrap
@@ -572,7 +596,7 @@ KCM.SimpleKCM {
                     // Store secret in config temporarily; plasmoid runtime will migrate to keyring and clear it.
                     // This keeps the KCM dependency-free while still letting users enter/update the secret.
                     if (tokenSecretField.text && tokenSecretField.text.trim() !== "") {
-                        Plasmoid.configuration.apiTokenSecret = tokenSecretField.text
+                        cfg_apiTokenSecret = tokenSecretField.text
                     }
                 }
             }

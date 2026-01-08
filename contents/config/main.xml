@@ -40,6 +40,9 @@
         <entry name="defaultSorting" type="String">
             <default>status</default>
         </entry>
+        <entry name="compactMode" type="String">
+            <default>cpu</default>
+        </entry>
 
         <!-- Notification Settings -->
         <entry name="enableNotifications" type="Bool">
@@ -67,6 +70,11 @@
         </entry>
         <entry name="notifyRateLimitSeconds" type="Int">
             <default>120</default>
+        </entry>
+
+        <!-- Notification privacy -->
+        <entry name="redactNotifyIdentities" type="Bool">
+            <default>true</default>
         </entry>
     </group>
 </kcfg>

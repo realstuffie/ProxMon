@@ -174,31 +174,47 @@ printf '%s\n' "Native plugin staged: contents/qml/org/kde/plasma/proxmox/libprox
 # Not all kpackagetool builds support --packageroot. Detect support and fallback.
 # Prefer modern long options (--type/--install/--upgrade); fall back to short options.
 # Also, only use --packageroot if supported.
+# kpackagetool6 uses "install <path>" / "upgrade <path>" options that REQUIRE a value.
+# Our previous invocation passed "." without binding it to --install/--upgrade, which
+# results in errors like:
+#   Error: Plugin  is not installed.
+#   "One of install, remove, upgrade or list is required."
+PKG_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}"
+PKG_PATH="."
+
+# Prefer long options if available, else use short options.
 if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
-  # long-option style (commonly works on newer kpackage/kpackagetool)
   if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--packageroot'; then
-    "$KPACKAGETOOL" --type Plasma/Applet --install --packageroot "${XDG_DATA_HOME:-$HOME/.local/share}" . 2>/dev/null || \
-    "$KPACKAGETOOL" --type Plasma/Applet --upgrade --packageroot "${XDG_DATA_HOME:-$HOME/.local/share}" .
+    "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" --packageroot "$PKG_ROOT" 2>/dev/null || \
+    "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH" --packageroot "$PKG_ROOT"
   else
-    "$KPACKAGETOOL" --type Plasma/Applet --install . 2>/dev/null || \
-    "$KPACKAGETOOL" --type Plasma/Applet --upgrade .
+    "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
+    "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH"
   fi
 else
-  # short-option style
   if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--packageroot'; then
-    "$KPACKAGETOOL" -t Plasma/Applet -i --packageroot "${XDG_DATA_HOME:-$HOME/.local/share}" . 2>/dev/null || \
-    "$KPACKAGETOOL" -t Plasma/Applet -u --packageroot "${XDG_DATA_HOME:-$HOME/.local/share}" .
+    "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" --packageroot "$PKG_ROOT" 2>/dev/null || \
+    "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" --packageroot "$PKG_ROOT"
   else
-    "$KPACKAGETOOL" -t Plasma/Applet -i . 2>/dev/null || \
-    "$KPACKAGETOOL" -t Plasma/Applet -u .
+    "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
+    "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH"
   fi
 fi
 
 # Install icons (user-local; portable via XDG)
+# Plasma resolves KPlugin.Icon via the icon theme, not from the plasmoid package.
+# Our icon sources live in this repo under contents/icons/.
 ICON_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
 ICON_DIR="$ICON_BASE/hicolor/scalable/apps"
 mkdir -p "$ICON_DIR"
-cp icons/*.svg "$ICON_DIR/"
+
+if [ -d "icons" ]; then
+  cp icons/*.svg "$ICON_DIR/"
+elif [ -d "contents/icons" ]; then
+  cp contents/icons/*.svg "$ICON_DIR/"
+else
+  printf '%s\n' "No icon source dir found (expected ./icons or ./contents/icons). Skipping icon install." >&2
+fi
 
 # Update icon cache (best-effort; command availability differs by distro/DE)
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
