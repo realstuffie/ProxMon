@@ -174,23 +174,30 @@ printf '%s\n' "Native plugin staged: contents/qml/org/kde/plasma/proxmox/libprox
 # Not all kpackagetool builds support --packageroot. Detect support and fallback.
 # Prefer modern long options (--type/--install/--upgrade); fall back to short options.
 # Also, only use --packageroot if supported.
+# kpackagetool6 uses "install <path>" / "upgrade <path>" options that REQUIRE a value.
+# Our previous invocation passed "." without binding it to --install/--upgrade, which
+# results in errors like:
+#   Error: Plugin  is not installed.
+#   "One of install, remove, upgrade or list is required."
+PKG_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}"
+PKG_PATH="."
+
+# Prefer long options if available, else use short options.
 if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
-  # long-option style (commonly works on newer kpackage/kpackagetool)
   if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--packageroot'; then
-    "$KPACKAGETOOL" --type Plasma/Applet --install --packageroot "${XDG_DATA_HOME:-$HOME/.local/share}" . 2>/dev/null || \
-    "$KPACKAGETOOL" --type Plasma/Applet --upgrade --packageroot "${XDG_DATA_HOME:-$HOME/.local/share}" .
+    "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" --packageroot "$PKG_ROOT" 2>/dev/null || \
+    "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH" --packageroot "$PKG_ROOT"
   else
-    "$KPACKAGETOOL" --type Plasma/Applet --install . 2>/dev/null || \
-    "$KPACKAGETOOL" --type Plasma/Applet --upgrade .
+    "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
+    "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH"
   fi
 else
-  # short-option style
   if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--packageroot'; then
-    "$KPACKAGETOOL" -t Plasma/Applet -i --packageroot "${XDG_DATA_HOME:-$HOME/.local/share}" . 2>/dev/null || \
-    "$KPACKAGETOOL" -t Plasma/Applet -u --packageroot "${XDG_DATA_HOME:-$HOME/.local/share}" .
+    "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" --packageroot "$PKG_ROOT" 2>/dev/null || \
+    "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" --packageroot "$PKG_ROOT"
   else
-    "$KPACKAGETOOL" -t Plasma/Applet -i . 2>/dev/null || \
-    "$KPACKAGETOOL" -t Plasma/Applet -u .
+    "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
+    "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH"
   fi
 fi
 

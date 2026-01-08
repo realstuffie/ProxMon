@@ -192,6 +192,17 @@ PlasmoidItem {
             if (!str) return ""
             return str.replace(/'/g, "'\\''")
         }
+
+    // Clamp/sanitize CPU values coming from Proxmox.
+    // On some restarts the initial cpu field can be garbage (e.g. negative), which then renders as -4000%.
+    function safeCpuPercent(cpuFraction) {
+        var x = Number(cpuFraction)
+        if (!isFinite(x) || isNaN(x)) return 0
+        // Proxmox reports CPU as fraction (0..1 typically, can exceed 1 on some metrics).
+        // Clamp to a sane range for UI.
+        x = Math.max(0, Math.min(x, 1))
+        return x * 100
+    }
  
         ProxMon.ProxmoxClient {
         id: api
@@ -299,13 +310,26 @@ PlasmoidItem {
                 }
             } catch (e) { upid = "" }
 
+            // UPID tail can include user@realm!tokenid (sensitive). Redact both user@realm and tokenid.
+            function sanitizeUpid(u) {
+                u = String(u || "")
+                // Example tail: "...:user@realm!TOKENID:"
+                // 1) Replace "user@realm" with "REDACTED@realm"
+                u = u.replace(/:([^:@]+)@/g, ":REDACTED@")
+                // 2) Redact everything between "!" and the next ":".
+                u = u.replace(/!([^:]*):/g, "!REDACTED:")
+                return u
+            }
+
+            var upidSafe = sanitizeUpid(upid)
+
             if (devMode && upid) {
                 console.log("[Proxmox] Action UPID: " + upid)
             }
 
             sendNotification(
                 (actionKind === "qemu" ? "VM" : "Container") + " action",
-                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + " OK" + (upid ? (" (task " + upid + ")") : ""),
+                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + " OK" + (upidSafe ? (" (task " + upidSafe + ")") : ""),
                 "dialog-information",
                 "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":ok"
             )
@@ -1526,6 +1550,14 @@ PlasmoidItem {
         if (connectionMode === "single") resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("apiTokenId")
     }
+
+    // If the secret is entered via the config UI (legacy plaintext field), it updates
+    // Plasmoid.configuration.apiTokenSecret but may not change apiTokenId/host/port.
+    // React to it so the widget transitions out of "Not Configured" immediately.
+    onApiTokenSecretChanged: {
+        if (connectionMode === "single") resolveSecretIfNeeded()
+        triggerRefreshFromConfigChange("apiTokenSecret")
+    }
     onMultiHostsJsonChanged: {
         if (connectionMode === "multiHost") resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("multiHostsJson")
@@ -2122,7 +2154,7 @@ PlasmoidItem {
                                     spacing: 12
 
                                     PlasmaComponents.Label {
-                                        text: "CPU: " + (nodeModel.cpu * 100).toFixed(1) + "%"
+                                        text: "CPU: " + safeCpuPercent(nodeModel.cpu).toFixed(1) + "%"
                                         font.pixelSize: 12
                                     }
 
@@ -2696,7 +2728,7 @@ PlasmoidItem {
                                             spacing: 12
 
                                             PlasmaComponents.Label {
-                                                text: nodeModel ? ("CPU: " + (nodeModel.cpu * 100).toFixed(1) + "%") : ""
+                                                text: nodeModel ? ("CPU: " + safeCpuPercent(nodeModel.cpu).toFixed(1) + "%") : ""
                                                 font.pixelSize: 12
                                             }
 
