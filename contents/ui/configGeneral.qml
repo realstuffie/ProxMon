@@ -464,6 +464,27 @@ KCM.SimpleKCM {
             }
         }
 
+        // Auth/config refresh hint (Plasma sometimes caches plasmoid runtime state)
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            Kirigami.Icon {
+                source: "dialog-warning"
+                implicitWidth: 16
+                implicitHeight: 16
+                opacity: 0.7
+            }
+
+            QQC2.Label {
+                text: "If updating Host/Token settings doesn’t take effect immediately, restart Plasma (plasmashell) or remove/re-add the widget to force a full reload."
+                font.pixelSize: 11
+                opacity: 0.7
+                wrapMode: Text.WordWrap
+                Layout.fillWidth: true
+            }
+        }
+
         // Separator
         Rectangle {
             Layout.fillWidth: true
