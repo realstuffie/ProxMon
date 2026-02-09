@@ -4,7 +4,9 @@
 
 /*
  * System-agnostic notifications via org.freedesktop.Notifications (D-Bus).
- * Works on KDE, GNOME, etc. Falls back to notify-send in QML if this fails.
+ *
+ * SECURITY: We intentionally do not execute external commands (e.g. notify-send) from QML.
+ * If D-Bus notifications fail, the UI should silently drop the notification.
  */
 class Notifier : public QObject {
     Q_OBJECT

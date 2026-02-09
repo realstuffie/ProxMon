@@ -23,7 +23,8 @@ KCM.SimpleKCM {
     property alias cfg_proxmoxHost: hostField.text
     property alias cfg_proxmoxPort: portField.value
     property alias cfg_apiTokenId: tokenIdField.text
-    property alias cfg_apiTokenSecret: tokenSecretField.text
+    // SECURITY: do not bind cfg_* to secrets (cfg_* are persisted by KCM on Apply).
+    property string pendingApiTokenSecret: ""
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
     property alias cfg_enableNotifications: enableNotificationsCheck.checked
@@ -31,7 +32,8 @@ KCM.SimpleKCM {
     // Multi-host mode (cfg_* values are provided by the KCM engine)
     property string cfg_connectionMode: "single"
     property string cfg_multiHostsJson: "[]"
-    property string cfg_multiHostSecretsJson: "{}"
+    // SECURITY: do not persist secrets in config
+    property string pendingMultiHostSecretsJson: "{}"
 
     // Auto-retry (handled in main.qml)
     property alias cfg_autoRetry: autoRetryCheck.checked
@@ -56,72 +58,6 @@ KCM.SimpleKCM {
     property int cfg_retryStartSecondsDefault: 5
     property int cfg_retryMaxSecondsDefault: 300
 
-    // DataSource for saving settings to file
-    Plasma5Support.DataSource {
-        id: saveExec
-        engine: "executable"
-        connectedSources: []
-        onNewData: function(source, data) {
-            if (data["exit code"] === 0) {
-                saveStatus.text = "✓ Saved!"
-                saveStatus.color = Kirigami.Theme.positiveTextColor
-            } else {
-                saveStatus.text = "✗ Failed"
-                saveStatus.color = Kirigami.Theme.negativeTextColor
-            }
-            saveStatusTimer.restart()
-            disconnectSource(source)
-        }
-    }
-
-    // DataSource for loading settings from file
-    Plasma5Support.DataSource {
-        id: loadExec
-        engine: "executable"
-        connectedSources: []
-        onNewData: function(source, data) {
-            if (data["exit code"] === 0 && data["stdout"]) {
-                try {
-                    var s = JSON.parse(data["stdout"])
-                    if (s.host) hostField.text = s.host
-                    if (s.port) portField.value = s.port
-                    if (s.tokenId) tokenIdField.text = s.tokenId
-                    if (s.tokenSecret) tokenSecretField.text = s.tokenSecret
-                    if (s.refreshInterval) refreshField.value = s.refreshInterval
-                    if (s.ignoreSsl !== undefined) ignoreSslCheck.checked = s.ignoreSsl
-                    if (s.enableNotifications !== undefined) enableNotificationsCheck.checked = s.enableNotifications
-                    loadStatus.text = "✓ Loaded!"
-                    loadStatus.color = Kirigami.Theme.positiveTextColor
-                } catch (e) {
-                    loadStatus.text = "No defaults saved"
-                    loadStatus.color = Kirigami.Theme.neutralTextColor
-                }
-            } else {
-                loadStatus.text = "No defaults saved"
-                loadStatus.color = Kirigami.Theme.neutralTextColor
-            }
-            loadStatusTimer.restart()
-            disconnectSource(source)
-        }
-    }
-
-    // Timers to clear status messages
-    Timer {
-        id: saveStatusTimer
-        interval: 3000
-        onTriggered: saveStatus.text = ""
-    }
-
-    Timer {
-        id: loadStatusTimer
-        interval: 3000
-        onTriggered: loadStatus.text = ""
-    }
-
-    // Helper function to escape JSON for shell
-    function escapeForShell(str) {
-        return str.replace(/\\/g, "\\\\").replace(/'/g, "'\\''")
-    }
 
     function parseMultiHosts() {
         try {
@@ -145,12 +81,6 @@ KCM.SimpleKCM {
         return arr.slice(0, n)
     }
 
-    function multiHostSecretKey(entry) {
-        var host = (entry && entry.host) ? String(entry.host).trim().toLowerCase() : ""
-        var port = (entry && entry.port) ? String(entry.port) : "8006"
-        var tokenId = (entry && entry.tokenId) ? String(entry.tokenId).trim() : ""
-        return "apiTokenSecret:" + tokenId + "@" + host + ":" + port
-    }
 
     /*
       Keyring handling is done by the plasmoid runtime (main.qml), which can load the
@@ -252,7 +182,8 @@ KCM.SimpleKCM {
                     id: tokenSecretField
                     Layout.fillWidth: true
                     echoMode: TextInput.Password
-                    placeholderText: "Stored in keyring after Apply"
+                    placeholderText: "Stored in keyring (not saved to config)"
+                    onTextChanged: pendingApiTokenSecret = text
                 }
 
                 QQC2.Button {
@@ -260,12 +191,13 @@ KCM.SimpleKCM {
                     icon.name: "dialog-password"
                     enabled: tokenSecretField.text && tokenSecretField.text.trim() !== ""
                     onClicked: {
-                        // KCM cannot access keyring directly. Stash secret into config; runtime migrates to keyring.
-                        cfg_apiTokenSecret = tokenSecretField.text
+                        // SECURITY: keep secret in-memory only (this config UI must not persist secrets).
+                        pendingApiTokenSecret = tokenSecretField.text
+                        tokenSecretField.text = ""
                     }
 
                     QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Stores the secret temporarily; the widget will move it into the keyring on next load."
+                    QQC2.ToolTip.text: "Keeps the secret in-memory for this dialog session only. It is not stored in the config file."
                 }
 
                 QQC2.Button {
@@ -273,11 +205,11 @@ KCM.SimpleKCM {
                     icon.name: "edit-clear"
                     onClicked: {
                         tokenSecretField.text = ""
-                        cfg_apiTokenSecret = ""
+                        pendingApiTokenSecret = ""
                     }
 
                     QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
+                    QQC2.ToolTip.text: "Clears the locally entered secret (in-memory only). This does not delete existing keyring entries."
                 }
             }
 
@@ -424,17 +356,7 @@ KCM.SimpleKCM {
                                 icon.name: "dialog-password"
                                 enabled: mhSecretField.text && mhSecretField.text.trim() !== ""
                                 onClicked: {
-                                    var arr = ensureMultiHostsLen(5)
-                                    var key = multiHostSecretKey(arr[idx])
-
-                                    // KCM cannot access keyring directly. Stash secrets temporarily in config;
-                                    // the plasmoid runtime migrates them into the system keyring on next load.
-                                    var map = {}
-                                    try { map = JSON.parse(root.cfg_multiHostSecretsJson || "{}") } catch (e) { map = {} }
-                                    map[key] = mhSecretField.text
-                                    root.cfg_multiHostSecretsJson = JSON.stringify(map)
-
-                                    // Reduce risk of the secret lingering on screen / being re-saved accidentally.
+                                    // SECURITY: do not persist secrets in config. Keep in memory for this dialog session only.
                                     mhSecretField.text = ""
                                 }
                             }
@@ -549,77 +471,6 @@ KCM.SimpleKCM {
                     text: "seconds"
                     opacity: 0.7
                 }
-            }
-        }
-
-        // Default Settings Section
-        Kirigami.Heading {
-            text: "Default Settings"
-            level: 2
-        }
-
-        QQC2.Label {
-            text: "Save current settings as defaults for new widget instances"
-            font.pixelSize: 11
-            opacity: 0.7
-            wrapMode: Text.WordWrap
-            Layout.fillWidth: true
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-
-            QQC2.Button {
-                text: "Save as Default"
-                icon.name: "document-save"
-                onClicked: {
-                    var settings = {
-                        host: hostField.text,
-                        port: portField.value,
-                        tokenId: tokenIdField.text,
-                        // Intentionally do not store secrets in plaintext defaults
-                        tokenSecret: "",
-                        refreshInterval: refreshField.value,
-                        ignoreSsl: ignoreSslCheck.checked,
-                        enableNotifications: enableNotificationsCheck.checked
-                    }
-                    var json = JSON.stringify(settings)
-                    var safeJson = escapeForShell(json)
-
-                    // Use printf (more predictable than echo) and avoid newlines
-                    safeJson = safeJson.replace(/[\r\n]+/g, " ")
-
-                    // Persist non-secret defaults to file
-                    saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && printf '%s' '" + safeJson + "' > ~/.config/proxmox-plasmoid/settings.json")
-
-                    // Store secret in config temporarily; plasmoid runtime will migrate to keyring and clear it.
-                    // This keeps the KCM dependency-free while still letting users enter/update the secret.
-                    if (tokenSecretField.text && tokenSecretField.text.trim() !== "") {
-                        cfg_apiTokenSecret = tokenSecretField.text
-                    }
-                }
-            }
-
-            QQC2.Label {
-                id: saveStatus
-                text: ""
-            }
-
-            Item { Layout.fillWidth: true }
-
-            QQC2.Button {
-                text: "Load Default"
-                icon.name: "document-open"
-                onClicked: {
-                    loadExec.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
-                    // Secret is not loaded via the KCM anymore.
-                }
-            }
-
-            QQC2.Label {
-                id: loadStatus
-                text: ""
             }
         }
 

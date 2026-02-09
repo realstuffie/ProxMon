@@ -5,7 +5,6 @@ import QtQuick.Controls as QQC2
 import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
-import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.plasma.core as PlasmaCore
 import "../lib/proxmox" as ProxMon
 
@@ -21,13 +20,13 @@ PlasmoidItem {
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
-    // Token secret lives in keyring (SecretStore); this is legacy fallback only.
-    property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
+    // Token secret must live in keyring (SecretStore). Do not read from config.
+    property string apiTokenSecret: ""
 
     // Multi-host config (KCM stores these)
     property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
-    // Plaintext stash from KCM; runtime migrates to keyring and clears it.
-    property string multiHostSecretsJson: Plasmoid.configuration.multiHostSecretsJson || "{}"
+    // SECURITY: do not store/read secrets from config.
+    property string multiHostSecretsJson: "{}"
 
     // secretState: idle|loading|ready|missing|error
     property string secretState: "idle"
@@ -191,11 +190,6 @@ PlasmoidItem {
 
     // ==================== UTILITY FUNCTIONS ====================
 
-    // Shell-escape for executable datasource usage
-    function escapeShell(str) {
-            if (!str) return ""
-            return str.replace(/'/g, "'\\''")
-        }
 
     // Clamp/sanitize CPU values coming from Proxmox.
     // On some restarts the initial cpu field can be garbage (e.g. negative), which then renders as -4000%.
@@ -406,17 +400,8 @@ PlasmoidItem {
     }
 
     function copyDebugInfo() {
-        var text = buildDebugInfo()
-
-        // Copy debug info to clipboard (no secrets)
-        var cmd = "sh -lc " + "'" +
-            "if command -v wl-copy >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | wl-copy; " +
-            "elif command -v xclip >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | xclip -selection clipboard; " +
-            "else exit 1; fi" +
-            "'"
-
-        executable.connectSource(cmd)
-        sendNotification("Debug info copied", "Copied widget debug info to clipboard (no secrets).", "dialog-information")
+        // SECURITY: avoid shelling out from QML.
+        sendNotification("Debug info", "Copy-to-clipboard is disabled for security (no shell execution).", "dialog-information")
     }
 
     // ==================== NOTIFICATION FUNCTIONS ====================
@@ -532,19 +517,11 @@ PlasmoidItem {
 
         logDebug("Notification: " + title + " - " + message)
 
-        // Prefer D-Bus notifier; fallback to notify-send.
+        // SECURITY: do not shell out from QML (no notify-send fallback).
+        // If the native notifier fails, silently drop the notification.
         if (notifier.notify(title, message, iconName || "proxmox-monitor", 5000)) {
             if (rateLimitKey) markNotifySent(rateLimitKey)
-            return
         }
-
-        var safeIcon = escapeShell(iconName || "proxmox-monitor")
-        var safeTitle = escapeShell(title)
-        var safeMessage = escapeShell(message)
-
-        var notifyCmd = "notify-send -i '" + safeIcon + "' -a 'Proxmox Monitor' '" + safeTitle + "' '" + safeMessage + "'"
-        executable.connectSource(notifyCmd)
-        if (rateLimitKey) markNotifySent(rateLimitKey)
     }
 
     // Test notifications function (dev mode)
@@ -1210,18 +1187,6 @@ PlasmoidItem {
         return q
     }
 
-    function parseSecretsMap() {
-        try {
-            var m = JSON.parse(Plasmoid.configuration.multiHostSecretsJson || "{}")
-            if (m && typeof m === "object") return m
-        } catch (e) {}
-        return {}
-    }
-
-    function writeSecretsMap(m) {
-        Plasmoid.configuration.multiHostSecretsJson = JSON.stringify(m || {})
-        multiHostSecretsJson = Plasmoid.configuration.multiHostSecretsJson
-    }
 
     function startMultiSecretResolution() {
         secretsResolved = 0
@@ -1446,32 +1411,7 @@ PlasmoidItem {
                     return
                 }
 
-                // No keyring entry. If KCM stashed a plaintext secret for this endpoint, migrate it.
-                var map = parseSecretsMap()
-                var stashed = map[sessionKey]
-                if (stashed && String(stashed).length > 0) {
-                    logDebug("secretStore: Migrating multi-host plaintext secret into keyring: " + sessionKey)
-                    // write it and record endpoint immediately
-                    secretStore.writeSecret(String(stashed))
-                    delete map[sessionKey]
-                    writeSecretsMap(map)
-
-                    tempEndpoints.push({
-                        sessionKey: sessionKey,
-                        label: item.label,
-                        host: item.host,
-                        port: item.port,
-                        tokenId: item.tokenId,
-                        secret: String(stashed),
-                        ignoreSsl: ignoreSsl
-                    })
-                    secretsResolved += 1
-                    secretQueueIndex += 1
-                    readNextMultiSecret()
-                    return
-                }
-
-                // Not found; skip this endpoint
+                // No keyring entry; skip this endpoint (KCM no longer stashes plaintext secrets).
                 secretsResolved += 1
                 secretQueueIndex += 1
                 readNextMultiSecret()
@@ -1606,72 +1546,11 @@ PlasmoidItem {
     Component.onCompleted: {
         logDebug("Component.onCompleted: Plasmoid initialized")
         resolveSecretIfNeeded()
-
-        if (!hasCoreConfig && connectionMode === "single") {
-            logDebug("Component.onCompleted: Missing core config, loading defaults")
-            loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
-        }
     }
 
     // ==================== DATA SOURCES ====================
 
-    // DataSource for loading default settings from file
-    Plasma5Support.DataSource {
-        id: loadDefaults
-        engine: "executable"
-        connectedSources: []
-
-        onNewData: function(source, data) {
-            logDebug("loadDefaults: Received response")
-
-            if (data["exit code"] === 0 && data["stdout"] && !defaultsLoaded) {
-                try {
-                    var s = JSON.parse(data["stdout"])
-                    logDebug("loadDefaults: Parsed settings file")
-
-                    if (s.host) Plasmoid.configuration.proxmoxHost = s.host
-                    if (s.port) Plasmoid.configuration.proxmoxPort = s.port
-                    if (s.tokenId) Plasmoid.configuration.apiTokenId = s.tokenId
-                    // Legacy: keep for migration; will be moved into keyring on first load.
-                    if (s.tokenSecret) Plasmoid.configuration.apiTokenSecret = s.tokenSecret
-                    if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
-                    if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
-                    if (s.enableNotifications !== undefined) Plasmoid.configuration.enableNotifications = s.enableNotifications
-
-                    proxmoxHost = s.host || ""
-                    proxmoxPort = s.port || 8006
-                    apiTokenId = s.tokenId || ""
-                    apiTokenSecret = s.tokenSecret || ""
-                    if (apiTokenSecret && apiTokenSecret.length > 0) {
-                        secretState = "ready"
-                    }
-                    refreshInterval = (s.refreshInterval || 30) * 1000
-                    ignoreSsl = s.ignoreSsl !== false
-                    enableNotifications = s.enableNotifications !== false
-
-                    defaultsLoaded = true
-                    logDebug("loadDefaults: Settings applied - host: " + proxmoxHost)
-                } catch (e) {
-                    logDebug("loadDefaults: No defaults found or parse error - " + e)
-                }
-            }
-            disconnectSource(source)
-        }
-    }
-
-    // DataSource for running local commands (notifications + reading defaults).
-    // NOTE: API calls are handled by the native ProxMon.ProxmoxClient (QNetworkAccessManager),
-    // so we intentionally do NOT fetch Proxmox data via "executable" anymore.
-    Plasma5Support.DataSource {
-        id: executable
-        engine: "executable"
-        connectedSources: []
-
-        onNewData: function(source, data) {
-            // We only use this datasource for fire-and-forget notify-send and for loadDefaults ("cat ...").
-            disconnectSource(source)
-        }
-    }
+    // SECURITY: no "executable" datasources in QML (no shell execution).
 
     // ==================== COMPACT REPRESENTATION ====================
 
