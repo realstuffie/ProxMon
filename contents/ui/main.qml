@@ -1452,6 +1452,7 @@ PlasmoidItem {
                 secretStore.key = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
                 secretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
                 apiTokenSecret = Plasmoid.configuration.apiTokenSecret
+                // Best-effort wipe: clear persisted config value immediately after importing.
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
                 return
@@ -1511,9 +1512,9 @@ PlasmoidItem {
         triggerRefreshFromConfigChange("apiTokenId")
     }
 
-    // If the secret is entered via the config UI (legacy plaintext field), it updates
-    // Plasmoid.configuration.apiTokenSecret but may not change apiTokenId/host/port.
-    // React to it so the widget transitions out of "Not Configured" immediately.
+    // SECURITY: apiTokenSecret is no longer a persisted config value.
+    // Keep this handler only for backward compatibility with *legacy* configs that still have it on disk.
+    // It will fire if the config system still exposes the entry (older installed versions) and we will migrate+clear it in SecretStore.
     onApiTokenSecretChanged: {
         if (connectionMode === "single") resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("apiTokenSecret")

@@ -44,11 +44,10 @@ KCM.SimpleKCM {
     property string cfg_proxmoxHostDefault: ""
     property int cfg_proxmoxPortDefault: 8006
     property string cfg_apiTokenIdDefault: ""
-    property string cfg_apiTokenSecretDefault: ""
-
+    // SECURITY: no cfg_apiTokenSecret* default; secrets are not part of KConfig.
+    // (Token secret is stored in system keyring by the plasmoid runtime.)
     property string cfg_connectionModeDefault: "single"
     property string cfg_multiHostsJsonDefault: "[]"
-    property string cfg_multiHostSecretsJsonDefault: "{}"
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
     property bool cfg_enableNotificationsDefault: true
