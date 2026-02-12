@@ -117,6 +117,10 @@ void ProxmoxClient::requestAction(const QString &kind, const QString &node, int 
 
 namespace {
 
+bool hasCrlf(const QString &s) {
+    return s.contains(QLatin1Char('\r')) || s.contains(QLatin1Char('\n'));
+}
+
 QNetworkRequest buildRequest(const QString &host, int port, const QString &path, const QString &tokenId, const QString &tokenSecret) {
     const QUrl url(QStringLiteral("https://%1:%2/api2/json%3").arg(host).arg(port).arg(path));
 
@@ -128,8 +132,7 @@ QNetworkRequest buildRequest(const QString &host, int port, const QString &path,
     // Header format: Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID
     //
     // Harden against malformed headers / header injection: do not allow CR/LF in header values.
-    if (tokenId.contains(QLatin1Char('\r')) || tokenId.contains(QLatin1Char('\n')) ||
-        tokenSecret.contains(QLatin1Char('\r')) || tokenSecret.contains(QLatin1Char('\n'))) {
+    if (hasCrlf(tokenId) || hasCrlf(tokenSecret)) {
         return req;
     }
 
@@ -137,6 +140,12 @@ QNetworkRequest buildRequest(const QString &host, int port, const QString &path,
     req.setRawHeader("Authorization", auth);
 
     return req;
+}
+
+QString maybeTruncate(QString msg) {
+    msg = msg.trimmed();
+    if (msg.size() > 160) msg = msg.left(160) + QStringLiteral("…");
+    return msg;
 }
 
 // Helper: extract a short message from a JSON error payload if possible (bounded length).
@@ -148,17 +157,32 @@ QString extractJsonMessage(const QByteArray &body) {
     }
     const QJsonObject obj = doc.object();
 
-    // Proxmox sometimes uses "errors" or "message" in responses; best-effort only.
-    QString msg;
+    // Proxmox sometimes uses "message" or "errors" in responses; best-effort only.
+    // "errors" may be a string or an object; handle both.
     if (obj.contains(QStringLiteral("message")) && obj.value(QStringLiteral("message")).isString()) {
-        msg = obj.value(QStringLiteral("message")).toString();
-    } else if (obj.contains(QStringLiteral("errors")) && obj.value(QStringLiteral("errors")).isString()) {
-        msg = obj.value(QStringLiteral("errors")).toString();
+        return maybeTruncate(obj.value(QStringLiteral("message")).toString());
     }
 
-    msg = msg.trimmed();
-    if (msg.size() > 160) msg = msg.left(160) + QStringLiteral("…");
-    return msg;
+    if (obj.contains(QStringLiteral("errors"))) {
+        const auto v = obj.value(QStringLiteral("errors"));
+        if (v.isString()) {
+            return maybeTruncate(v.toString());
+        }
+        if (v.isObject()) {
+            const QJsonObject e = v.toObject();
+            // Flatten first few entries: "key: message"
+            QStringList parts;
+            for (auto it = e.begin(); it != e.end(); ++it) {
+                if (it.value().isString()) {
+                    parts << (it.key() + QStringLiteral(": ") + it.value().toString());
+                }
+                if (parts.size() >= 3) break;
+            }
+            if (!parts.isEmpty()) return maybeTruncate(parts.join(QStringLiteral("; ")));
+        }
+    }
+
+    return {};
 }
 
 } // namespace
@@ -256,6 +280,15 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
         }
         return;
     }
+    if (hasCrlf(tokenId) || hasCrlf(tokenSecret)) {
+        const QString msg = QStringLiteral("Invalid token (contains newline)");
+        if (sessionKey.isEmpty()) {
+            emit error(seq, kind, node, msg);
+        } else {
+            emit errorFor(seq, sessionKey, kind, node, msg);
+        }
+        return;
+    }
 
     QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret);
     QNetworkReply *r = m_nam.get(req);
@@ -300,6 +333,10 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
 void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind, const QString &node, int vmid, const QString &action) {
     if (m_host.isEmpty() || m_tokenId.isEmpty() || m_tokenSecret.isEmpty()) {
         emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("Not configured"));
+        return;
+    }
+    if (hasCrlf(m_tokenId) || hasCrlf(m_tokenSecret)) {
+        emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("Invalid token (contains newline)"));
         return;
     }
 
