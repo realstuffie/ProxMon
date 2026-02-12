@@ -20,6 +20,12 @@ void SecretStore::setKey(const QString &v) {
 }
 
 void SecretStore::readSecret() {
+    if (m_service.isEmpty() || m_key.isEmpty()) {
+        emit error(QStringLiteral("Not configured"));
+        emit secretReady(QString());
+        return;
+    }
+
     auto *job = new ReadPasswordJob(m_service, this);
     job->setKey(m_key);
     connect(job, &Job::finished, this, [this, job]() {
@@ -43,6 +49,11 @@ void SecretStore::readSecret() {
 }
 
 void SecretStore::writeSecret(const QString &secret) {
+    if (m_service.isEmpty() || m_key.isEmpty()) {
+        emit writeFinished(false, QStringLiteral("Not configured"));
+        return;
+    }
+
     auto *job = new WritePasswordJob(m_service, this);
     job->setKey(m_key);
     job->setTextData(secret);
@@ -56,6 +67,11 @@ void SecretStore::writeSecret(const QString &secret) {
 }
 
 void SecretStore::deleteSecret() {
+    if (m_service.isEmpty() || m_key.isEmpty()) {
+        emit deleteFinished(false, QStringLiteral("Not configured"));
+        return;
+    }
+
     auto *job = new DeletePasswordJob(m_service, this);
     job->setKey(m_key);
 
