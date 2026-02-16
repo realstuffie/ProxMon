@@ -810,15 +810,6 @@ PlasmoidItem {
         armedTimer.restart()
     }
 
-    // Backwards-compatible helper (no longer used by action flow, but kept to avoid dangling references)
-    function runPendingAction() {
-        if (!pendingAction) return
-        var a = pendingAction
-        pendingAction = null
-        setActionBusy(a.node, a.kind, a.vmid, true)
-        api.requestAction(a.kind, a.node, a.vmid, a.action, ++actionSeq)
-    }
-
     // Toggle node collapsed state
     function toggleNodeCollapsed(nodeName, sessionKey) {
         var k = (connectionMode === "multiHost" && sessionKey) ? endpointNodeKey(sessionKey, nodeName) : nodeName
@@ -922,12 +913,6 @@ PlasmoidItem {
         })
     }
 
-    // Get node name from API URL
-    function getNodeFromSource(source) {
-        var match = source.match(/\/nodes\/([^\/]+)\//)
-        return match ? match[1] : ""
-    }
-
         // Atomically swap displayed data when all requests finish
     function checkRequestsComplete() {
         logDebug("checkRequestsComplete: Pending requests: " + pendingNodeRequests)
@@ -970,9 +955,6 @@ PlasmoidItem {
 
     // Sequencing for actions
     property int actionSeq: 0
-
-    // Confirmation prompt state
-    property var pendingAction: null
 
     // Confirm is two-click (see confirmAndRunAction()); QQC2.Popup overlays are unreliable in plasmoids.
 
@@ -1105,18 +1087,6 @@ PlasmoidItem {
 
         logDebug("fetchData: Requesting /nodes from " + proxmoxHost + ":" + proxmoxPort)
         api.requestNodes(refreshSeq)
-    }
-
-    function fetchVMs(nodeName) {
-        if (!nodeName) return
-        logDebug("fetchVMs: Requesting VMs for node: " + nodeName)
-        api.requestQemu(nodeName, refreshSeq)
-    }
-
-    function fetchLXC(nodeName) {
-        if (!nodeName) return
-        logDebug("fetchLXC: Requesting LXCs for node: " + nodeName)
-        api.requestLxc(nodeName, refreshSeq)
     }
 
     // Use displayed data for counts
