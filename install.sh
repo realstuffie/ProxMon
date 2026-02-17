@@ -137,6 +137,12 @@ fi
 
 install_deps_best_effort
 
+# Ensure qtkeychain submodule is available when running from a git checkout.
+if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
+  printf '%s\n' "Initializing git submodules (qtkeychain)..."
+  git submodule update --init --recursive
+fi
+
 require_cmd cmake
 require_cmd mktemp
 require_cmd getconf
