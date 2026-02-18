@@ -295,9 +295,11 @@ fi
 printf '\n'
 printf '%s\n' "Installation complete!"
 printf '\n'
-printf '%s\n' "Restart Plasma to load the widget:"
-printf '%s\n' "  plasmashell --replace &"
-printf '%s\n' "Or log out and back in."
+printf '%s\n' "You may need to restart Plasma:"
+printf '%s\n' "  kquitapp6 plasmashell && kstart plasmashell"
+printf '%s\n' "If that doesn't work on your distro, try:"
+printf '%s\n' "  systemctl --user restart plasma-plasmashell.service"
+printf '%s\n' "or log out/in."
 printf '\n'
 printf '%s\n' "To add the widget:"
 printf '%s\n' "  1. Right-click on your panel"
