@@ -1430,28 +1430,10 @@ PlasmoidItem {
                 var item = secretQueue[secretQueueIndex]
                 var sessionKey = item ? item.sessionKey : ""
 
-                if (secret && secret.length > 0) {
-                    tempEndpoints.push({
-                        sessionKey: sessionKey,
-                        label: item.label,
-                        host: item.host,
-                        port: item.port,
-                        tokenId: item.tokenId,
-                        secret: secret,
-                        ignoreSsl: ignoreSsl
-                    })
-                    secretsResolved += 1
-                    secretQueueIndex += 1
-                    readNextMultiSecret()
-                    return
-                }
-
-                // No keyring entry. If KCM stashed a plaintext secret for this endpoint, migrate it.
                 var map = parseSecretsMap()
                 var stashed = map[sessionKey]
                 if (stashed && String(stashed).length > 0) {
-                    logDebug("secretStore: Migrating multi-host plaintext secret into keyring: " + sessionKey)
-                    // write it and record endpoint immediately
+                    logDebug("secretStore: Updating multi-host secret from settings into keyring: " + sessionKey)
                     secretStore.writeSecret(String(stashed))
                     delete map[sessionKey]
                     writeSecretsMap(map)
@@ -1471,6 +1453,22 @@ PlasmoidItem {
                     return
                 }
 
+                if (secret && secret.length > 0) {
+                    tempEndpoints.push({
+                        sessionKey: sessionKey,
+                        label: item.label,
+                        host: item.host,
+                        port: item.port,
+                        tokenId: item.tokenId,
+                        secret: secret,
+                        ignoreSsl: ignoreSsl
+                    })
+                    secretsResolved += 1
+                    secretQueueIndex += 1
+                    readNextMultiSecret()
+                    return
+                }
+
                 // Not found; skip this endpoint
                 secretsResolved += 1
                 secretQueueIndex += 1
@@ -1479,6 +1477,18 @@ PlasmoidItem {
             }
 
             // Single-host path (legacy candidates)
+            var pendingSecret = Plasmoid.configuration.apiTokenSecret
+            if (pendingSecret && pendingSecret.length > 0) {
+                logDebug("secretStore: Updating secret from settings into keyring")
+                var canonicalKey2 = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
+                secretStore.key = canonicalKey2
+                secretStore.writeSecret(pendingSecret)
+                apiTokenSecret = pendingSecret
+                Plasmoid.configuration.apiTokenSecret = ""
+                secretState = "ready"
+                return
+            }
+
             if (secret && secret.length > 0) {
                 // If we loaded from a legacy key, migrate into canonical normalized key.
                 var canonicalKey = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
@@ -1547,12 +1557,10 @@ PlasmoidItem {
             return
         }
 
-        // Single-host legacy:
-        // If we already have a secret from legacy config binding, consider it ready.
-        // (We still attempt keyring read to migrate/ensure correct secret, but avoid UI flicker.)
-        if (apiTokenSecret && apiTokenSecret.length > 0 && secretState !== "ready") {
-            secretState = "ready"
-        }
+        // Single-host: always go through the keyring read path so that:
+        // 1. A new/updated plaintext secret in the config gets migrated into keyring.
+        // 2. Stale plaintext config values don't bypass the keyring.
+        // Do not short-circuit to "ready" here — let onSecretReady decide.
         if (secretState === "loading") return
         secretState = "loading"
         startSecretReadCandidates()
@@ -1687,7 +1695,7 @@ PlasmoidItem {
 
             Kirigami.Icon {
                 id: proxmoxIcon
-                source: "proxmox-monitor"
+                source: Qt.resolvedUrl("../icons/proxmox-monitor.svg")
                 implicitWidth: 22
                 implicitHeight: 22
 
