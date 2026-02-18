@@ -179,26 +179,18 @@ printf '%s\n' "Native plugin staged: contents/qml/org/kde/plasma/proxmox/libprox
 # results in errors like:
 #   Error: Plugin  is not installed.
 #   "One of install, remove, upgrade or list is required."
-PKG_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}"
 PKG_PATH="."
 
-# Prefer long options if available, else use short options.
+# Install if not present, upgrade if already installed.
+# --packageroot is intentionally omitted: kpackagetool6 defaults to the correct
+# user-local XDG path (~/.local/share/plasma/plasmoids/) and passing --packageroot
+# can silently fail on some builds, causing the fallback --upgrade to also fail.
 if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
-  if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--packageroot'; then
-    "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" --packageroot "$PKG_ROOT" 2>/dev/null || \
-    "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH" --packageroot "$PKG_ROOT"
-  else
-    "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
-    "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH"
-  fi
+  "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
+  "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH"
 else
-  if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--packageroot'; then
-    "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" --packageroot "$PKG_ROOT" 2>/dev/null || \
-    "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" --packageroot "$PKG_ROOT"
-  else
-    "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
-    "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH"
-  fi
+  "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
+  "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH"
 fi
 
 # Install icons (user-local; portable via XDG)
