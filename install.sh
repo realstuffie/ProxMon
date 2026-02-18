@@ -10,17 +10,20 @@ require_cmd() {
   fi
 }
 
-AUTO_DEPS=0
+AUTO_DEPS=1
 for arg in "$@"; do
   case "$arg" in
-    --install-deps) AUTO_DEPS=1 ;;
+    --no-deps) AUTO_DEPS=0 ;;
     -h|--help)
       cat <<'EOF'
-Usage: ./install.sh [--install-deps]
+Usage: ./install.sh [--no-deps]
 
 Options:
-  --install-deps   Attempt to install build/runtime dependencies using the detected package manager.
-                  Requires sudo/root and is best-effort (package names vary by distro).
+  --no-deps   Skip automatic dependency installation. Use this if you have
+              already installed build dependencies or prefer to manage them
+              yourself. By default, install.sh will attempt to install missing
+              build/runtime dependencies using the system package manager
+              (apt-get / zypper / dnf / pacman). Requires sudo/root.
 EOF
       exit 0
       ;;
@@ -32,7 +35,7 @@ install_deps_best_effort() {
     return 0
   fi
 
-  printf '%s\n' "Auto-install deps enabled (--install-deps). Attempting best-effort dependency install..."
+  printf '%s\n' "Attempting best-effort dependency install (pass --no-deps to skip)..."
   printf '%s\n' "NOTE: This is best-effort. Package names vary by distro and version."
   printf '%s\n' "NOTE: Any \"not found\" messages for optional packages are non-fatal and can be ignored if the build succeeds."
 
@@ -88,9 +91,11 @@ install_deps_best_effort() {
     run_root apt-get update
     install_pkgs_best_effort apt-get install -y \
       cmake make g++ pkg-config \
-      qt6-base-dev qt6-declarative-dev
-    # ECM/KF6 package names vary; leave as optional hints:
+      qt6-base-dev qt6-declarative-dev \
+      libsecret-1-dev
+    # ECM/KF6/kpackagetool6 package names vary by distro; best-effort:
     install_pkgs_best_effort apt-get install -y extra-cmake-modules || true
+    install_pkgs_best_effort apt-get install -y libkf6package-bin || true
   elif command -v zypper >/dev/null 2>&1; then
     run_root zypper refresh
     install_pkgs_best_effort zypper install -y \
@@ -124,6 +129,9 @@ install_deps_best_effort() {
   fi
 }
 
+# Run dep install first so kpackagetool6/cmake are available for the checks below.
+install_deps_best_effort
+
 # Prefer kpackagetool6 (Plasma 6), fallback to kpackagetool5 (Plasma 5)
 KPACKAGETOOL=""
 if command -v kpackagetool6 >/dev/null 2>&1; then
@@ -135,7 +143,11 @@ else
   exit 1
 fi
 
-install_deps_best_effort
+# Ensure qtkeychain submodule is available when running from a git checkout.
+if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
+  printf '%s\n' "Initializing git submodules (qtkeychain)..."
+  git submodule update --init --recursive
+fi
 
 # Ensure qtkeychain submodule is available when running from a git checkout.
 if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
@@ -185,26 +197,18 @@ printf '%s\n' "Native plugin staged: contents/qml/org/kde/plasma/proxmox/libprox
 # results in errors like:
 #   Error: Plugin  is not installed.
 #   "One of install, remove, upgrade or list is required."
-PKG_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}"
 PKG_PATH="."
 
-# Prefer long options if available, else use short options.
+# Install if not present, upgrade if already installed.
+# --packageroot is intentionally omitted: kpackagetool6 defaults to the correct
+# user-local XDG path (~/.local/share/plasma/plasmoids/) and passing --packageroot
+# can silently fail on some builds, causing the fallback --upgrade to also fail.
 if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
-  if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--packageroot'; then
-    "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" --packageroot "$PKG_ROOT" 2>/dev/null || \
-    "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH" --packageroot "$PKG_ROOT"
-  else
-    "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
-    "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH"
-  fi
+  "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
+  "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH"
 else
-  if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--packageroot'; then
-    "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" --packageroot "$PKG_ROOT" 2>/dev/null || \
-    "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" --packageroot "$PKG_ROOT"
-  else
-    "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
-    "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH"
-  fi
+  "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
+  "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH"
 fi
 
 # Install icons (user-local; portable via XDG)
