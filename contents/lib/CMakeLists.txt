@@ -13,7 +13,10 @@ set(CMAKE_AUTOMOC ON)
 set(BUILD_WITH_QT6 ON CACHE BOOL "Build qtkeychain with Qt 6" FORCE)
 set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable qtkeychain translations" FORCE)
 set(BUILD_TEST_APPLICATION OFF CACHE BOOL "Disable qtkeychain test app" FORCE)
-set(BUILD_SHARED_LIBS ON CACHE BOOL "Build shared libs for bundling" FORCE)
+# Build qtkeychain as a STATIC library so it is compiled directly into
+# libproxmoxclientplugin.so. This eliminates the libqt6keychain.so runtime
+# dependency and the RUNPATH pointing to the (deleted) temp build directory.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build qtkeychain as static for bundling into plugin" FORCE)
 # Ensure keychain library is built with PIC so we can link it into our plugin .so
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # libsecret dev package may not be installed; allow qtkeychain to build without it (fallbacks: KWallet/plaintext)
