@@ -10,17 +10,20 @@ require_cmd() {
   fi
 }
 
-AUTO_DEPS=0
+AUTO_DEPS=1
 for arg in "$@"; do
   case "$arg" in
-    --install-deps) AUTO_DEPS=1 ;;
+    --no-deps) AUTO_DEPS=0 ;;
     -h|--help)
       cat <<'EOF'
-Usage: ./install.sh [--install-deps]
+Usage: ./install.sh [--no-deps]
 
 Options:
-  --install-deps   Attempt to install build/runtime dependencies using the detected package manager.
-                  Requires sudo/root and is best-effort (package names vary by distro).
+  --no-deps   Skip automatic dependency installation. Use this if you have
+              already installed build dependencies or prefer to manage them
+              yourself. By default, install.sh will attempt to install missing
+              build/runtime dependencies using the system package manager
+              (apt-get / zypper / dnf / pacman). Requires sudo/root.
 EOF
       exit 0
       ;;
@@ -32,7 +35,7 @@ install_deps_best_effort() {
     return 0
   fi
 
-  printf '%s\n' "Auto-install deps enabled (--install-deps). Attempting best-effort dependency install..."
+  printf '%s\n' "Attempting best-effort dependency install (pass --no-deps to skip)..."
   printf '%s\n' "NOTE: This is best-effort. Package names vary by distro and version."
   printf '%s\n' "NOTE: Any \"not found\" messages for optional packages are non-fatal and can be ignored if the build succeeds."
 
@@ -88,9 +91,11 @@ install_deps_best_effort() {
     run_root apt-get update
     install_pkgs_best_effort apt-get install -y \
       cmake make g++ pkg-config \
-      qt6-base-dev qt6-declarative-dev
-    # ECM/KF6 package names vary; leave as optional hints:
+      qt6-base-dev qt6-declarative-dev \
+      libsecret-1-dev
+    # ECM/KF6/kpackagetool6 package names vary by distro; best-effort:
     install_pkgs_best_effort apt-get install -y extra-cmake-modules || true
+    install_pkgs_best_effort apt-get install -y libkf6package-bin || true
   elif command -v zypper >/dev/null 2>&1; then
     run_root zypper refresh
     install_pkgs_best_effort zypper install -y \
@@ -124,6 +129,9 @@ install_deps_best_effort() {
   fi
 }
 
+# Run dep install first so kpackagetool6/cmake are available for the checks below.
+install_deps_best_effort
+
 # Prefer kpackagetool6 (Plasma 6), fallback to kpackagetool5 (Plasma 5)
 KPACKAGETOOL=""
 if command -v kpackagetool6 >/dev/null 2>&1; then
@@ -134,8 +142,6 @@ else
   printf '%s\n' "Could not find kpackagetool6 or kpackagetool5. Install KDE Plasma packaging tools." >&2
   exit 1
 fi
-
-install_deps_best_effort
 
 require_cmd cmake
 require_cmd mktemp
