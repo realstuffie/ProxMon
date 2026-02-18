@@ -173,8 +173,10 @@ cmake --build "$BUILD_DIR" -- -j"$JOBS" || exit 1
 #   contents/qml/<module-uri-path>/
 mkdir -p contents/qml/org/kde/plasma/proxmox
 
-# qmldir is already in the package (see contents/lib/proxmox/qmldir). This script stages the .so here.
+# Stage the .so and qmldir together — Qt needs both in the same directory to
+# load the plugin. qmldir declares the module name and plugin filename.
 cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/qml/org/kde/plasma/proxmox/
+cp contents/lib/proxmox/qmldir contents/qml/org/kde/plasma/proxmox/
 
 printf '%s\n' "Native plugin staged: contents/qml/org/kde/plasma/proxmox/libproxmoxclientplugin.so"
 
