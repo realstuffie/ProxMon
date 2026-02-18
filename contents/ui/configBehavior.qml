@@ -539,14 +539,6 @@ KCM.SimpleKCM {
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.3
         }
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.topMargin: 15
-            Layout.bottomMargin: 10
-            implicitHeight: 1
-            color: Kirigami.Theme.disabledTextColor
-            opacity: 0.3
-        }
 
         // ==================== INFO SECTION ====================
         RowLayout {

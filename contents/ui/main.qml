@@ -12,6 +12,30 @@ import "../lib/proxmox" as ProxMon
 PlasmoidItem {
     id: root
 
+    // Toggle expanded state when the applet is activated (e.g. keyboard shortcut).
+    // The compactRepresentation also has a MouseArea for direct clicks.
+    activationTogglesExpanded: true
+
+    // Panel icon tooltip — updated whenever data changes.
+    toolTipMainText: "Proxmox Monitor"
+    toolTipSubText: {
+        if (!configured) {
+            if (!hasCoreConfig) return "Not configured — right-click to configure"
+            if (secretState === "loading") return "Loading credentials…"
+            if (secretState === "missing") return "Missing token secret — open settings"
+            if (secretState === "error") return "Keyring error — check logs"
+            return "Not configured"
+        }
+        if (loading) return "Loading…"
+        if (errorMessage) return "Error: " + errorMessage
+        var nn = displayedNodeList.length
+        var txt = nn + " node" + (nn !== 1 ? "s" : "")
+        txt += " · " + runningVMs + "/" + displayedVmData.length + " VMs"
+        txt += " · " + runningLXC + "/" + displayedLxcData.length + " CTs"
+        if (lastUpdate) txt += "\nUpdated: " + lastUpdate
+        return txt
+    }
+
     // ==================== CONNECTION / MODE ====================
 
     // Connection mode: "single" | "multiHost"
@@ -21,8 +45,14 @@ PlasmoidItem {
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
-    // Token secret lives in keyring (SecretStore); this is legacy fallback only.
+    // apiTokenSecret stays bound to Plasmoid.configuration so onApiTokenSecretChanged
+    // keeps firing whenever the user saves a new secret via the KCM. The runtime-resolved
+    // secret (read from the keyring or migrated from config) lives in resolvedApiTokenSecret.
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
+    // Runtime-resolved token secret — set by onSecretReady, used by the API client.
+    // Keeping this separate from apiTokenSecret preserves the config binding so that
+    // secret-only updates from the KCM are detected and migrated into the keyring.
+    property string resolvedApiTokenSecret: ""
 
     // Multi-host config (KCM stores these)
     property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
@@ -120,7 +150,7 @@ PlasmoidItem {
         if (connectionMode === "multiHost") {
             return secretState === "ready" && endpoints && endpoints.length > 0
         }
-        return hasCoreConfig && secretState === "ready" && apiTokenSecret !== ""
+        return hasCoreConfig && secretState === "ready" && resolvedApiTokenSecret !== ""
     }
     property bool defaultsLoaded: false
     property bool devMode: false
@@ -215,7 +245,7 @@ PlasmoidItem {
         host: proxmoxHost
         port: proxmoxPort
         tokenId: apiTokenId
-        tokenSecret: apiTokenSecret
+        tokenSecret: resolvedApiTokenSecret
         ignoreSslErrors: ignoreSsl
 
         onReply: function(seq, kind, node, data) {
@@ -1348,11 +1378,17 @@ PlasmoidItem {
 
     function handleMultiError(sessionKey, kind, node, message) {
         logDebug("api error (multi): " + sessionKey + " " + kind + " " + node + " - " + message)
+        // Record the error but keep going — one failing endpoint should not discard
+        // results from the other endpoints that may already be in-flight or finished.
+        // Record the last error message for display; partial results will still appear.
         errorMessage = message || "Connection failed"
-        pendingNodeRequests = 0
-        isRefreshing = false
-        loading = false
-        scheduleRetry(errorMessage)
+
+        // Decrement pending count for this individual request and continue.
+        // If this is the last outstanding request, checkMultiRequestsComplete() will
+        // commit whatever partial data we have from the successful endpoints.
+        pendingNodeRequests--
+        if (pendingNodeRequests < 0) pendingNodeRequests = 0
+        checkMultiRequestsComplete()
     }
 
     function endpointBySession(sessionKey) {
@@ -1369,21 +1405,40 @@ PlasmoidItem {
 
         displayedEndpoints = bucketsToArray(tempEndpointsData)
 
-        // Single-host legacy view state cleared
+        // Aggregate nodes/VMs/LXCs across all endpoints so that:
+        //   • The footer counts (displayedNodeList.length, runningVMs, runningLXC) are correct.
+        //   • The "running/total" compact label mode works in multi-host.
+        //   • toolTipSubText reflects the true cluster-wide totals.
+        var aggNodes = []
+        var aggVms = []
+        var aggLxcs = []
+        for (var ai = 0; ai < displayedEndpoints.length; ai++) {
+            var ep = displayedEndpoints[ai]
+            if (!ep) continue
+            if (ep.nodes) {
+                for (var ni2 = 0; ni2 < ep.nodes.length; ni2++) aggNodes.push(ep.nodes[ni2].node)
+            }
+            if (ep.vms) {
+                for (var vi2 = 0; vi2 < ep.vms.length; vi2++) aggVms.push(ep.vms[vi2])
+            }
+            if (ep.lxcs) {
+                for (var li2 = 0; li2 < ep.lxcs.length; li2++) aggLxcs.push(ep.lxcs[li2])
+            }
+        }
+        displayedNodeList = aggNodes
+        displayedVmData = aggVms
+        displayedLxcData = aggLxcs
         displayedProxmoxData = null
-        displayedNodeList = []
-        displayedVmData = []
-        displayedLxcData = []
 
-        // Derive last update and reset retry
-        errorMessage = ""
+        // Only clear error if we got at least some data; otherwise keep the last error message visible.
+        if (displayedEndpoints.length > 0) errorMessage = ""
         lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
         resetRetryState()
 
         isRefreshing = false
         loading = false
 
-        // TODO: state change notifications across endpoints (future); for now, reuse existing logic only for single-host.
+        // TODO: state change notifications across endpoints (future).
     }
 
     // Try multiple keys for backwards compatibility (older formatting / pre-normalization).
@@ -1483,7 +1538,9 @@ PlasmoidItem {
                 var canonicalKey2 = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
                 secretStore.key = canonicalKey2
                 secretStore.writeSecret(pendingSecret)
-                apiTokenSecret = pendingSecret
+                // Use resolvedApiTokenSecret so the apiTokenSecret binding to
+                // Plasmoid.configuration stays intact for future KCM updates.
+                resolvedApiTokenSecret = pendingSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
                 return
@@ -1501,7 +1558,7 @@ PlasmoidItem {
                 }
 
                 logDebug("secretStore: Secret loaded from keyring")
-                apiTokenSecret = secret
+                resolvedApiTokenSecret = secret
                 secretState = "ready"
                 return
             }
@@ -1521,7 +1578,7 @@ PlasmoidItem {
                 logDebug("secretStore: Migrating legacy plaintext secret into keyring")
                 secretStore.key = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
                 secretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
-                apiTokenSecret = Plasmoid.configuration.apiTokenSecret
+                resolvedApiTokenSecret = Plasmoid.configuration.apiTokenSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
                 return
@@ -1649,8 +1706,8 @@ PlasmoidItem {
                     proxmoxHost = s.host || ""
                     proxmoxPort = s.port || 8006
                     apiTokenId = s.tokenId || ""
-                    apiTokenSecret = s.tokenSecret || ""
-                    if (apiTokenSecret && apiTokenSecret.length > 0) {
+                    resolvedApiTokenSecret = s.tokenSecret || ""
+                    if (resolvedApiTokenSecret && resolvedApiTokenSecret.length > 0) {
                         secretState = "ready"
                     }
                     refreshInterval = (s.refreshInterval || 30) * 1000
