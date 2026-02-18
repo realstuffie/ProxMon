@@ -46,4 +46,12 @@ rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/lxc.svg"
 # Remove saved settings
 rm -rf "${HOME}/.config/proxmox-plasmoid" || true
 
+printf '\n'
 printf '%s\n' "Uninstallation complete!"
+printf '\n'
+printf '%s\n' "You may need to restart Plasma for the widget to disappear:"
+printf '%s\n' "  kquitapp6 plasmashell && kstart plasmashell"
+printf '%s\n' "If that doesn't work on your distro, try:"
+printf '%s\n' "  systemctl --user restart plasma-plasmashell.service"
+printf '%s\n' "or log out/in."
+printf '\n'
