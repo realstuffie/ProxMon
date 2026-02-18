@@ -76,5 +76,16 @@
         <entry name="redactNotifyIdentities" type="Bool">
             <default>true</default>
         </entry>
+
+        <!-- Auto-retry / exponential backoff -->
+        <entry name="autoRetry" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="retryStartSeconds" type="Int">
+            <default>5</default>
+        </entry>
+        <entry name="retryMaxSeconds" type="Int">
+            <default>300</default>
+        </entry>
     </group>
 </kcfg>
