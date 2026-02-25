@@ -6,6 +6,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - 🖥️ **Virtual Machine tracking** - See all VMs and their status
 - 📦 **LXC Container support** - Monitor containers alongside VMs
 - 🖧 **Multi-node clusters** - Support for multiple Proxmox nodes
+- 🔌 **Remote Power Commands** Start, Stop, Restart 
 - 🔄 **Auto-refresh** - Configurable refresh interval
 - 🔔 **Desktop notifications** - Alerts when VMs/CTs change state (optional rate limiting to reduce spam)
 - 🎯 **Notification filters** - Whitelist/blacklist specific VMs/CTs
@@ -14,7 +15,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - 🎨 **Theme integration** - Adapts to your Plasma theme
 - ⚙️ **Easy configuration** - GUI-based setup
 - 🔧 **Developer mode** - Triple-click footer for verbose logging
-- 🔌 **Remote Power Commands** Start, Stop, Restart 
+
 
 ### Planned Features
 - [ ] Resource usage graphs
