@@ -10,7 +10,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - 🔔 **Desktop notifications** - Alerts when VMs/CTs change state (optional rate limiting to reduce spam)
 - 🎯 **Notification filters** - Whitelist/blacklist specific VMs/CTs
 - ↕️ **Flexible sorting** - Sort by status, name, or ID
-- 🔒 **Secure** - API token authentication with SSL support
+- 🔒 **Secure** - API token authentication with SSL support, API tokens are stored in QtToolchain
 - 🎨 **Theme integration** - Adapts to your Plasma theme
 - ⚙️ **Easy configuration** - GUI-based setup
 - 🔧 **Developer mode** - Triple-click footer for verbose logging
