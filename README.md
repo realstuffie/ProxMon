@@ -18,10 +18,10 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 ### Planned Features
 
 - [✓] Remote commands (Start, Shutdown, Reboot)
-- [ ] Resource usage graphs
-- [ ] Storage monitoring
-- [ ] Backup status
-- [ ] Kde5 Compatible Version
+-  [ ] Resource usage graphs
+-  [ ] Storage monitoring
+-  [ ] Backup status
+-  [ ] Kde5 Compatible Version
 
 ### Known Bugs/Limitations
 
