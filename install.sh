@@ -146,6 +146,53 @@ require_cmd getconf
 require_cmd cp
 require_cmd mkdir
 
+# ---------------------------------------------------------------------------
+# AppArmor helper: if profile exists and is in enforce mode, stage local allow
+# rule for Proxmox API port and reload that profile.
+# ---------------------------------------------------------------------------
+stage_apparmor_override_if_enforced() {
+  local profile_name=""
+  local profile_file=""
+  local local_file=""
+  local src_override="apparmor/plasmashell.local"
+
+  [ -f "$src_override" ] || return 0
+  command -v aa-status >/dev/null 2>&1 || return 0
+
+  # Detect common profile file names.
+  if [ -f /etc/apparmor.d/usr.bin.plasmashell ]; then
+    profile_name="usr.bin.plasmashell"
+    profile_file="/etc/apparmor.d/usr.bin.plasmashell"
+  elif [ -f /etc/apparmor.d/plasmashell ]; then
+    profile_name="plasmashell"
+    profile_file="/etc/apparmor.d/plasmashell"
+  else
+    return 0
+  fi
+
+  # Only act when profile is enforced.
+  if ! aa-status --verbose 2>/dev/null | grep -qE "^[[:space:]]*${profile_name}$"; then
+    printf '%s\n' "AppArmor profile ${profile_name} not in enforce mode; skipping ProxMon AppArmor staging."
+    return 0
+  fi
+
+  local_file="/etc/apparmor.d/local/${profile_name}"
+  printf '%s\n' "Staging ProxMon AppArmor override to ${local_file}"
+  run_root mkdir -p /etc/apparmor.d/local
+  run_root cp "$src_override" "$local_file"
+
+  # Ensure profile includes local override.
+  if ! grep -q "include <local/${profile_name}>" "$profile_file"; then
+    printf '%s\n' "Adding local include to ${profile_file}"
+    run_root sh -c "printf '\n#include <local/${profile_name}>\n' >> '$profile_file'"
+  fi
+
+  # Reload profile.
+  if command -v apparmor_parser >/dev/null 2>&1; then
+    run_root apparmor_parser -r "$profile_file" || true
+  fi
+}
+
 printf '%s\n' "Building native Proxmox API plugin..."
 
 # Build out-of-source to avoid polluting the repo with build artifacts
@@ -227,6 +274,9 @@ if command -v kbuildsycoca6 >/dev/null 2>&1; then
 elif command -v kbuildsycoca5 >/dev/null 2>&1; then
   kbuildsycoca5 >/dev/null 2>&1 || true
 fi
+
+# Stage AppArmor profile override when plasmashell is enforced.
+stage_apparmor_override_if_enforced
 
 printf '\n'
 printf '%s\n' "Installation complete!"
