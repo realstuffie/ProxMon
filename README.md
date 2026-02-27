@@ -1,3 +1,5 @@
+# ProxMon
+
 A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your desktop panel.
 
 ## Features
@@ -6,18 +8,18 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - 🖥️ **Virtual Machine tracking** - See all VMs and their status
 - 📦 **LXC Container support** - Monitor containers alongside VMs
 - 🖧 **Multi-node clusters** - Support for multiple Proxmox nodes
-- 🔌 **Remote Power Commands** Start, Stop, Restart 
 - 🔄 **Auto-refresh** - Configurable refresh interval
 - 🔔 **Desktop notifications** - Alerts when VMs/CTs change state (optional rate limiting to reduce spam)
 - 🎯 **Notification filters** - Whitelist/blacklist specific VMs/CTs
 - ↕️ **Flexible sorting** - Sort by status, name, or ID
-- 🔒 **Secure** - API token authentication with SSL support, API tokens are stored in QtToolchain
+- 🔒 **Secure** - API token authentication with SSL support
 - 🎨 **Theme integration** - Adapts to your Plasma theme
 - ⚙️ **Easy configuration** - GUI-based setup
 - 🔧 **Developer mode** - Triple-click footer for verbose logging
-
+- 🔌 **Remote Power Commands** Start, Stop, Restart
 
 ### Planned Features
+
 - [ ] Resource usage graphs
 - [ ] Storage monitoring
 - [ ] Backup status
@@ -29,23 +31,29 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ## Screenshots
 
-<p align="center">
-  <img src="screenshots/widget-expanded.png" alt="Expanded View" width="400">
-  <br>
-  <em>Expanded view showing nodes, VMs, and containers</em>
-</p>
+### Expanded View
 
 <p align="center">
-  <img src="screenshots/widget-pannel.png" alt="Panel View" width="200">
-  <br>
-  <em>Compact panel view showing CPU usage</em>
+  <img src="screenshots/widget-expanded.png" alt="Expanded View" />
 </p>
 
+<p align="center"><em>Expanded view showing nodes, VMs, and containers</em></p>
+
+### Panel View
+
 <p align="center">
-  <img src="screenshots/Settings.png" alt="Settings" width="800">
-  <br>
-  <em>Configuration dialog</em>
+  <img src="screenshots/widget-pannel.png" alt="Panel View" width="420" />
 </p>
+
+<p align="center"><em>Compact panel view showing CPU usage</em></p>
+
+### Settings
+
+<p align="center">
+  <img src="screenshots/Settings.png" alt="Settings" />
+</p>
+
+<p align="center"><em>Configuration dialog</em></p>
 
 ## Requirements
 
@@ -64,9 +72,14 @@ cd ProxMon
 
 # Run the install script
 bash install.sh
+
+# Optional compatibility mode (also install standalone user-local Qt6 QML module)
+# bash install.sh --install-standalone-qml-module
 ```
 
 > Note: Build output is not committed to the repository. The install script builds the native plugin in a temporary directory and stages the resulting `.so` into the plasmoid package.
+>
+> Install policy: the script detects your user-local Qt6 QML path for diagnostics, but final runtime deployment is single-location via the plasmoid package in `~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/lib/proxmox/` (not a second standalone QML module install).
 
 ### Manual Installation
 
@@ -80,7 +93,7 @@ kpackagetool6 -t Plasma/Applet -i .
 
 # Install icons
 mkdir -p ~/.local/share/icons/hicolor/scalable/apps/
-cp icons/*.svg ~/.local/share/icons/hicolor/scalable/apps/
+cp contents/icons/*.svg ~/.local/share/icons/hicolor/scalable/apps/
 
 # Update icon cache
 gtk-update-icon-cache ~/.local/share/icons/hicolor/ 2>/dev/null || true
@@ -93,6 +106,30 @@ cd ProxMon
 git pull
 kpackagetool6 -t Plasma/Applet -u .
 ```
+
+### Optional: AppArmor Helper Scripts (include-based)
+
+If your distro blocks `plasmashell` from loading user-local QML plugin libraries, you can apply a ProxMon-specific AppArmor snippet:
+
+```bash
+# Apply ProxMon snippet (requires root via sudo/doas/su)
+bash scripts/setup-apparmor-override.sh
+```
+
+To remove it later:
+
+```bash
+bash scripts/remove-apparmor-override.sh
+```
+
+What these scripts do:
+
+- Install/remove `/etc/apparmor.d/local/plasmashell-proxmon`
+- Ensure/remove this include line in `/etc/apparmor.d/local/plasmashell`:
+  - `#include <local/plasmashell-proxmon>`
+- Attempt a plasmashell profile/service reload
+
+This avoids replacing the entire local plasmashell override file and is safer with existing local customizations.
 
 ## Proxmox API Token Setup
 
@@ -110,21 +147,22 @@ kpackagetool6 -t Plasma/Applet -u .
 
 If using privilege separation, the token needs:
 
-| Permission | Path | Purpose |
-|------------|------|---------|
-| `Sys.Audit` | `/` | Read node status |
-| `VM.Audit` | `/vms` | Read VM & container status (QEMU + LXC) |
+| Permission  | Path   | Purpose                                   |
+| ----------- | ------ | ----------------------------------------- |
+| `Sys.Audit` | `/`    | Read node status                          |
+| `VM.Audit`  | `/vms` | Read VM & container status (QEMU + LXC)   |
 
 ### Optional: Permissions for Start/Stop/Reboot actions
 
 If you want to use the widget’s power actions (Start/Shutdown/Reboot), audit permissions are **not** sufficient. Grant power-management privileges:
 
-| Permission | Path | Purpose |
-|------------|------|---------|
-| `VM.PowerMgmt` | `/vms` (or more specific) | Start/stop/reboot VMs and containers (QEMU + LXC) |
-| `Sys.PowerMgmt` | `/` (or more specific) | Required for power actions in some setups/roles |
+| Permission      | Path                      | Purpose                                                   |
+| --------------- | ------------------------- | --------------------------------------------------------- |
+| `VM.PowerMgmt`  | `/vms` (or more specific) | Start/stop/reboot VMs and containers (QEMU + LXC)         |
+| `Sys.PowerMgmt` | `/` (or more specific)    | Required for power actions in some setups/roles           |
 
 Recommended approach:
+
 - Keep a read-only monitoring token with `Sys.Audit` + `VM.Audit`
 - Create a separate token/user for actions with `VM.PowerMgmt` (+ `Sys.PowerMgmt` only if required in your ACL/role setup) at the minimum scope you want
 
@@ -137,6 +175,7 @@ If you create the API token with **Privilege Separation** enabled (`-privsep 1`)
 Per Proxmox docs, the effective permissions are the **intersection** of the user permissions and the token permissions. This means you must grant roles to both the **user** and the **token** (or disable privilege separation for “full privileges”).
 
 Example:
+
 ```bash
 # Create token with separated privileges
 pveum user token add joe@pve monitoring -privsep 1
@@ -175,23 +214,27 @@ pveum user token add monitor@pve plasma-monitor
 ### Notification Rate Limiting
 
 To reduce notification spam during flapping or frequent refresh/retry cycles, you can rate limit repeated notifications:
+
 - Enable/disable in **Behavior tab → Rate Limiting**
 - Configure the minimum interval in seconds between duplicates (default: 120s)
 
 ### Notification Privacy (redaction)
 
 By default, notifications will redact sensitive identity fragments if they appear in text (for example within task UPIDs):
+
 - **Behavior tab → Privacy → Redact user@realm and token ID in notifications** (default: enabled)
 - Replaces patterns like `user@realm!tokenid` with `REDACTED@realm!REDACTED`
 
 ## Usage
 
 ### Panel View (Compact)
+
 - Shows average CPU usage across all nodes
 - Animated icon during refresh
 - Click to expand
 
-### Expanded View
+### Expanded View Details
+
 - **Node cards**: CPU, memory, uptime for each node
 - **Click node**: Expand/collapse VM and container lists
 - **Status indicators**: Green = running, gray = stopped
@@ -199,7 +242,9 @@ By default, notifications will redact sensitive identity fragments if they appea
 - **Footer**: Quick stats and last update time
 
 ### Developer Mode
+
 Triple-click the footer to enable developer mode:
+
 - Verbose logging to journal (`journalctl --user -f`)
 - Anonymized data (for screenshots)
 - Test notification button
@@ -234,6 +279,12 @@ plasmashell --replace &
 plasmashell --replace &
 
 # Or log out and back in
+```
+
+If your distro/security profile blocks loading the packaged native plugin path, try compatibility mode:
+
+```bash
+bash install.sh --install-standalone-qml-module
 ```
 
 ### Check logs
@@ -272,6 +323,7 @@ Contributions are welcome! Please feel free to:
 ### Reporting Bugs
 
 Please open an issue with:
+
 - KDE Plasma version (`plasmashell --version`)
 - Proxmox VE version
 - Steps to reproduce
@@ -291,7 +343,8 @@ See [LICENSE](LICENSE) for details.
 ## Changelog
 
 ### v0.4.1
-- Packaging: native QML plugin is now staged under `contents/qml/org/kde/plasma/proxmox/` (more reliable module discovery on Plasma 6)
+
+- Packaging: native QML plugin is staged under `contents/lib/proxmox/` in the plasmoid package as the single runtime location; legacy standalone user-local Qt6 QML module paths are cleaned on uninstall
 - Install script: cross-distro improvements (kpackagetool 5/6 support, safer option detection, XDG icon paths)
 - Install script: optional `--install-deps` mode with root escalation via root/sudo/doas/su (best-effort, distro-dependent package names)
 - Docs: added dev notes on QML module packaging and verification
@@ -301,6 +354,7 @@ See [LICENSE](LICENSE) for details.
 - Notifications: add privacy toggle to redact `user@realm!tokenid` fragments (default: on)
 
 ### v0.4.0
+
 - Reliability: cancel/abort in-flight requests during refresh/timeouts
 - Credentials: keyring secret lookup normalized + legacy key auto-migration
 - Notifications: rate limiting to reduce spam

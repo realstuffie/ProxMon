@@ -46,7 +46,7 @@ PlasmoidItem {
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
     // apiTokenSecret stays bound to Plasmoid.configuration so onApiTokenSecretChanged
-    // keeps firing whenever the user saves a new secret via the KCM. The runtime-resolved
+    // keeps firing whenever the user saves a new secret via the KCM.
     // secret (read from the keyring or migrated from config) lives in resolvedApiTokenSecret.
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
     // Runtime-resolved token secret — set by onSecretReady, used by the API client.
