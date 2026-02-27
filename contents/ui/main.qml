@@ -513,8 +513,7 @@ PlasmoidItem {
         if (!notifyRateLimitSeconds || notifyRateLimitSeconds <= 0) return false
         if (!key) return false
 
-        v
-        ar last = notifyLastSent[key]
+        var last = notifyLastSent[key]
         if (!last) return false
 
         var now = Date.now()

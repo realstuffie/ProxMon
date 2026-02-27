@@ -26,12 +26,14 @@ run_root() {
 }
 
 AUTO_DEPS=1
+INSTALL_STANDALONE_QML_MODULE=0
 for arg in "$@"; do
   case "$arg" in
     --no-deps) AUTO_DEPS=0 ;;
+    --install-standalone-qml-module) INSTALL_STANDALONE_QML_MODULE=1 ;;
     -h|--help)
       cat <<'EOF'
-Usage: ./install.sh [--no-deps]
+Usage: ./install.sh [--no-deps] [--install-standalone-qml-module]
 
 Options:
   --no-deps   Skip automatic dependency installation. Use this if you have
@@ -39,6 +41,11 @@ Options:
               yourself. By default, install.sh will attempt to install missing
               build/runtime dependencies using the system package manager
               (apt-get / zypper / dnf / pacman). Requires sudo/root.
+  --install-standalone-qml-module
+              Also copy the native plugin/qmldir to your user-local Qt6 QML
+              module path for compatibility on stricter distro/policy setups.
+              Default behavior keeps runtime plugin location inside the
+              plasmoid package only.
 EOF
       exit 0
       ;;
@@ -172,7 +179,8 @@ cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/
 printf '%s\n' "Native plugin staged: contents/lib/proxmox/libproxmoxclientplugin.so"
 
 # ---------------------------------------------------------------------------
-# Install plugin to the user-local Qt6 QML dir (no sudo required).
+# Detect user-local Qt6 QML dir for documentation/diagnostics only.
+# Runtime plugin is shipped inside the plasmoid package at contents/lib/proxmox.
 # ---------------------------------------------------------------------------
 detect_qt6_qml_user_dir() {
   local arch_triplet=""
@@ -188,10 +196,15 @@ detect_qt6_qml_user_dir() {
 
 QT6_QML_USER_DIR="$(detect_qt6_qml_user_dir)"
 QML_MODULE_USER_DIR="$QT6_QML_USER_DIR/org/kde/plasma/proxmox"
-mkdir -p "$QML_MODULE_USER_DIR"
-cp "$BUILD_DIR/libproxmoxclientplugin.so" "$QML_MODULE_USER_DIR/"
-cp contents/lib/proxmox/qmldir "$QML_MODULE_USER_DIR/"
-printf '%s\n' "QML plugin also copied to user-local: $QML_MODULE_USER_DIR"
+printf '%s\n' "Detected user-local Qt6 QML dir: $QT6_QML_USER_DIR"
+if [ "$INSTALL_STANDALONE_QML_MODULE" -eq 1 ]; then
+  mkdir -p "$QML_MODULE_USER_DIR"
+  cp "$BUILD_DIR/libproxmoxclientplugin.so" "$QML_MODULE_USER_DIR/"
+  cp contents/lib/proxmox/qmldir "$QML_MODULE_USER_DIR/"
+  printf '%s\n' "Standalone QML module copy enabled: $QML_MODULE_USER_DIR"
+else
+  printf '%s\n' "No standalone QML module copy is performed; final runtime path is inside the plasmoid package."
+fi
 
 # Clean up any stale Plasma workspace env file from a previous install attempt
 PLASMA_ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/plasma-workspace/env/proxmon-qml.sh"
@@ -209,13 +222,11 @@ else
   "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH"
 fi
 
-# Install icons
+# Install icons from a single authoritative source
 ICON_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
 ICON_DIR="$ICON_BASE/hicolor/scalable/apps"
 mkdir -p "$ICON_DIR"
-if [ -d "icons" ]; then
-  cp icons/*.svg "$ICON_DIR/"
-elif [ -d "contents/icons" ]; then
+if [ -d "contents/icons" ]; then
   cp contents/icons/*.svg "$ICON_DIR/"
 fi
 

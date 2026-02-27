@@ -11,7 +11,8 @@ elif command -v kpackagetool5 >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# Remove QML plugin from user-local path
+# Detect user-local Qt6 QML path for legacy cleanup only.
+# Current install keeps runtime plugin inside the plasmoid package.
 # ---------------------------------------------------------------------------
 detect_qt6_qml_user_dir() {
   local arch_triplet=""
@@ -28,7 +29,7 @@ detect_qt6_qml_user_dir() {
 QT6_QML_USER_DIR="$(detect_qt6_qml_user_dir)"
 QML_MODULE_USER_DIR="$QT6_QML_USER_DIR/org/kde/plasma/proxmox"
 if [ -d "$QML_MODULE_USER_DIR" ]; then
-  printf '%s\n' "Removing QML plugin from user-local: $QML_MODULE_USER_DIR"
+  printf '%s\n' "Removing legacy standalone QML plugin from user-local: $QML_MODULE_USER_DIR"
   rm -rf "$QML_MODULE_USER_DIR"
 fi
 
