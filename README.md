@@ -107,30 +107,6 @@ git pull
 kpackagetool6 -t Plasma/Applet -u .
 ```
 
-### Optional: AppArmor Helper Scripts (include-based)
-
-If your distro blocks `plasmashell` from loading user-local QML plugin libraries, you can apply a ProxMon-specific AppArmor snippet:
-
-```bash
-# Apply ProxMon snippet (requires root via sudo/doas/su)
-bash scripts/setup-apparmor-override.sh
-```
-
-To remove it later:
-
-```bash
-bash scripts/remove-apparmor-override.sh
-```
-
-What these scripts do:
-
-- Install/remove `/etc/apparmor.d/local/plasmashell-proxmon`
-- Ensure/remove this include line in `/etc/apparmor.d/local/plasmashell`:
-  - `#include <local/plasmashell-proxmon>`
-- Attempt a plasmashell profile/service reload
-
-This avoids replacing the entire local plasmashell override file and is safer with existing local customizations.
-
 ## Proxmox API Token Setup
 
 1. Log into your Proxmox web interface
@@ -285,6 +261,31 @@ If your distro/security profile blocks loading the packaged native plugin path, 
 
 ```bash
 bash install.sh --install-standalone-qml-module
+```
+
+### Ubuntu 26.04 AppArmor note (common issue)
+
+On some Ubuntu 26.04 setups, the `plasmashell` AppArmor profile may block ProxMon network sends (`class="net"`), which can cause repeated connection errors even with correct widget config.
+
+Quick checks:
+
+```bash
+# Look for AppArmor denials tied to plasmashell
+sudo journalctl -k -b --no-pager | grep -i 'apparmor="DENIED".*profile="plasmashell"'
+```
+
+Workaround (host-specific, less strict):
+```bash
+# Put plasmashell profile in complain mode
+sudo aa-complain plasmashell
+
+# Restart plasmashell
+kquitapp6 plasmashell && kstart plasmashell
+```
+
+To revert later:
+```bash
+sudo aa-enforce plasmashell
 ```
 
 ### Check logs
