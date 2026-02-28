@@ -89,7 +89,7 @@ qmllint --version
 
 Must succeed and must not reference `/usr/lib/qt5/bin/qmllint`.
 
-3. Re-enable:
+3.Re-enable:
 
 ```json
 "qml.lint.enabled": true
