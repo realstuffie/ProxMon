@@ -6,7 +6,6 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
-import org.kde.plasma.core as PlasmaCore
 import "../lib/proxmox" as ProxMon
 
 PlasmoidItem {
@@ -2405,7 +2404,7 @@ PlasmoidItem {
                                             // Use ToolButtons (icon-only) + tooltips + subtle hover background.
                                             // NOTE: ScrollView has an overlay scrollbar; reserve right gutter below so it won't cover these buttons.
                                             RowLayout {
-                                                spacing: PlasmaCore.Units.smallSpacing
+                                                spacing: Kirigami.Units.smallSpacing
                                                 Layout.preferredWidth: 70
                                                 Layout.minimumWidth: 70
                                                 Layout.maximumWidth: 70
@@ -2461,7 +2460,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
                                                             : "transparent"
                                                     }
 
@@ -2485,7 +2484,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
                                                             : "transparent"
                                                     }
 
@@ -2627,7 +2626,7 @@ PlasmoidItem {
                                             // Use ToolButtons (icon-only) + tooltips + subtle hover background.
                                             // NOTE: ScrollView has an overlay scrollbar; reserve right gutter below so it won't cover these buttons.
                                             RowLayout {
-                                                spacing: PlasmaCore.Units.smallSpacing
+                                                spacing: Kirigami.Units.smallSpacing
                                                 Layout.preferredWidth: 70
                                                 Layout.minimumWidth: 70
                                                 Layout.maximumWidth: 70
@@ -2683,7 +2682,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
                                                             : "transparent"
                                                     }
 
@@ -2707,7 +2706,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
                                                             : "transparent"
                                                     }
 
