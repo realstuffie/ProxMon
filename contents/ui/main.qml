@@ -6,7 +6,6 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
-import org.kde.plasma.core as PlasmaCore
 import "../lib/proxmox" as ProxMon
 
 PlasmoidItem {
@@ -218,6 +217,18 @@ PlasmoidItem {
         interval: 1000
         onTriggered: footerClickCount = 0
     }
+
+    // ==================== VISUAL TOKENS ====================
+    // Keep platform colors from Kirigami, but standardize shape/opacity rhythm
+    // for a flatter, Adwaita-leaning look.
+    readonly property int uiRadiusS: 4
+    readonly property int uiRadiusM: 6
+    readonly property int uiRadiusL: 8
+    readonly property real uiBorderOpacity: 0.22
+    readonly property real uiSurfaceAltOpacity: 0.10
+    readonly property real uiSurfaceRunningOpacity: 0.12
+    readonly property real uiMutedTextOpacity: 0.68
+    readonly property int uiRowHeight: 30
 
     // ==================== UTILITY FUNCTIONS ====================
 
@@ -2149,9 +2160,9 @@ PlasmoidItem {
                             Layout.leftMargin: 12
                             Layout.rightMargin: scrollView.__scrollbarReserve
                             Layout.preferredHeight: 70
-                            radius: 6
-                            color: Kirigami.Theme.backgroundColor
-                            border.color: Kirigami.Theme.disabledTextColor
+                            radius: uiRadiusL
+                            color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.98)
+                            border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, uiBorderOpacity)
                             border.width: 1
 
                             MouseArea {
@@ -2185,19 +2196,21 @@ PlasmoidItem {
                                         font.bold: true
                                     }
 
-                                    Rectangle {
-                                        implicitWidth: 52
-                                        implicitHeight: 16
-                                        radius: 8
-                                        color: nodeModel.status === "online" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+                                        Rectangle {
+                                            implicitWidth: 56
+                                            implicitHeight: 16
+                                            radius: uiRadiusL
+                                            color: nodeModel.status === "online"
+                                                ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.82)
+                                                : Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.82)
 
-                                        PlasmaComponents.Label {
-                                            anchors.centerIn: parent
-                                            text: nodeModel.status
-                                            color: "white"
-                                            font.pixelSize: 9
+                                            PlasmaComponents.Label {
+                                                anchors.centerIn: parent
+                                                text: nodeModel.status
+                                                color: "white"
+                                                font.pixelSize: 9
+                                            }
                                         }
-                                    }
 
                                     Item { Layout.fillWidth: true }
 
@@ -2297,8 +2310,8 @@ PlasmoidItem {
 
                                     delegate: Rectangle {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 28
-                                        radius: 4
+                                        Layout.preferredHeight: uiRowHeight
+                                        radius: uiRadiusS
 
                                         required property int index
                                         required property var modelData
@@ -2307,8 +2320,8 @@ PlasmoidItem {
                                         readonly property var vmModel: modelData
 
                                         color: vmModel && vmModel.status === "running"
-                                            ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.15)
-                                            : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
+                                            ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, uiSurfaceRunningOpacity)
+                                            : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, uiSurfaceAltOpacity)
 
                                         property bool busy: vmModel ? isActionBusy(nodeName, "qemu", vmModel.vmid) : false
 
@@ -2391,7 +2404,7 @@ PlasmoidItem {
                                             // Use ToolButtons (icon-only) + tooltips + subtle hover background.
                                             // NOTE: ScrollView has an overlay scrollbar; reserve right gutter below so it won't cover these buttons.
                                             RowLayout {
-                                                spacing: PlasmaCore.Units.smallSpacing
+                                                spacing: Kirigami.Units.smallSpacing
                                                 Layout.preferredWidth: 70
                                                 Layout.minimumWidth: 70
                                                 Layout.maximumWidth: 70
@@ -2423,7 +2436,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
                                                             : "transparent"
                                                     }
 
@@ -2447,7 +2460,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
                                                             : "transparent"
                                                     }
 
@@ -2471,7 +2484,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
                                                             : "transparent"
                                                     }
 
@@ -2519,8 +2532,8 @@ PlasmoidItem {
 
                                     delegate: Rectangle {
                                         Layout.fillWidth: true
-                                        Layout.preferredHeight: 28
-                                        radius: 4
+                                        Layout.preferredHeight: uiRowHeight
+                                        radius: uiRadiusS
 
                                         required property int index
                                         required property var modelData
@@ -2529,8 +2542,8 @@ PlasmoidItem {
                                         readonly property var ctModel: modelData
 
                                         color: ctModel && ctModel.status === "running"
-                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.15)
-                                            : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.1)
+                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, uiSurfaceRunningOpacity)
+                                            : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, uiSurfaceAltOpacity)
 
                                         property bool busy: ctModel ? isActionBusy(nodeName, "lxc", ctModel.vmid) : false
 
@@ -2613,7 +2626,7 @@ PlasmoidItem {
                                             // Use ToolButtons (icon-only) + tooltips + subtle hover background.
                                             // NOTE: ScrollView has an overlay scrollbar; reserve right gutter below so it won't cover these buttons.
                                             RowLayout {
-                                                spacing: PlasmaCore.Units.smallSpacing
+                                                spacing: Kirigami.Units.smallSpacing
                                                 Layout.preferredWidth: 70
                                                 Layout.minimumWidth: 70
                                                 Layout.maximumWidth: 70
@@ -2645,7 +2658,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
                                                             : "transparent"
                                                     }
 
@@ -2669,7 +2682,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
                                                             : "transparent"
                                                     }
 
@@ -2693,7 +2706,7 @@ PlasmoidItem {
                                                     background: Rectangle {
                                                         radius: 4
                                                         color: parent.hovered
-                                                            ? Qt.rgba(PlasmaCore.Theme.highlightColor.r, PlasmaCore.Theme.highlightColor.g, PlasmaCore.Theme.highlightColor.b, 0.18)
+                                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
                                                             : "transparent"
                                                     }
 
@@ -2760,9 +2773,9 @@ PlasmoidItem {
                             // Keep a gutter so the right border doesn't sit under the overlay scrollbar
                             Layout.rightMargin: scrollView.__scrollbarReserve
                             Layout.preferredHeight: 34
-                            radius: 6
-                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.12)
-                            border.color: Kirigami.Theme.disabledTextColor
+                            radius: uiRadiusL
+                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.10)
+                            border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, uiBorderOpacity)
                             border.width: 1
 
                             RowLayout {
@@ -2774,7 +2787,7 @@ PlasmoidItem {
                                     source: "server-database"
                                     implicitWidth: 16
                                     implicitHeight: 16
-                                    opacity: 0.7
+                                    opacity: uiMutedTextOpacity
                                 }
 
                                 PlasmaComponents.Label {
@@ -2817,9 +2830,9 @@ PlasmoidItem {
                                 Rectangle {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 70
-                                    radius: 6
-                                    color: Kirigami.Theme.backgroundColor
-                                    border.color: Kirigami.Theme.disabledTextColor
+                                    radius: uiRadiusL
+                                    color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.98)
+                                    border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, uiBorderOpacity)
                                     border.width: 1
 
                                     MouseArea {
@@ -2856,8 +2869,10 @@ PlasmoidItem {
                                             Rectangle {
                                                 implicitWidth: 52
                                                 implicitHeight: 16
-                                                radius: 8
-                                                color: nodeModel && nodeModel.status === "online" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.negativeTextColor
+                                                radius: uiRadiusL
+                                                color: nodeModel && nodeModel.status === "online"
+                                                    ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.82)
+                                                    : Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.82)
 
                                                 PlasmaComponents.Label {
                                                     anchors.centerIn: parent

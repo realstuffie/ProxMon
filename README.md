@@ -275,6 +275,9 @@ sudo journalctl -k -b --no-pager | grep -i 'apparmor="DENIED".*profile="plasmash
 ```
 
 Workaround (host-specific, less strict):
+
+## warning do not use this unless you explicitly understand (Complain mode: logs violations but does not block them)
+
 ```bash
 # Put plasmashell profile in complain mode
 sudo aa-complain plasmashell
@@ -284,6 +287,7 @@ kquitapp6 plasmashell && kstart plasmashell
 ```
 
 To revert later:
+
 ```bash
 sudo aa-enforce plasmashell
 ```
