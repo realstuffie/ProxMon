@@ -208,3 +208,8 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 - Credentials: keyring secret lookup normalized + legacy key auto-migration
 - Notifications: rate limiting to reduce spam
 - Various UI/behavior improvements
+
+### Credits
+
+- [Proxmox VE](https://www.proxmox.com/) - Virtualization platform
+- [KDE Plasma](https://kde.org/plasma-desktop/) - Desktop environment
