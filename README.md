@@ -4,30 +4,14 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ## Features
 
-- 📊 **Real-time monitoring** - Node status (CPU, Memory, Uptime)
-- 🖥️ **Virtual Machine tracking** - See all VMs and their status
-- 📦 **LXC Container support** - Monitor containers alongside VMs
-- 🖧 **Multi-node clusters** - Support for multiple Proxmox nodes
-- 🔄 **Auto-refresh** - Configurable refresh interval
-- 🔔 **Desktop notifications** - Alerts when VMs/CTs change state (optional rate limiting to reduce spam)
-- 🎯 **Notification filters** - Whitelist/blacklist specific VMs/CTs
-- ↕️ **Flexible sorting** - Sort by status, name, or ID
-- 🔒 **Secure** - API token authentication with SSL support
-- 🎨 **Theme integration** - Adapts to your Plasma theme
-- ⚙️ **Easy configuration** - GUI-based setup
-- 🔧 **Developer mode** - Triple-click footer for verbose logging
-- 🔌 **Remote Power Commands** Start, Stop, Restart
-
-### Planned Features
-
-- [ ] Resource usage graphs
-- [ ] Storage monitoring
-- [ ] Backup status
-- [ ] Kde5 Compatible Version
-
-### Known Bugs/Limitations
-
-- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g., due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows “Missing Token Secret”, re-enter the secret in the settings and click **Update Keyring**, then wait a moment (the widget refreshes shortly after config changes).
+- 📊 **Real-time monitoring** — Node status (CPU, Memory, Uptime)
+- 🖥️ **VM & Container tracking** — All VMs and LXC containers with status
+- 🖧 **Multi-node cluster support**
+- 🔔 **Desktop notifications** — State change alerts with rate limiting and filters
+- 🔌 **Power commands** — Start, Stop, Restart VMs/CTs
+- 🔒 **Secure** — API token authentication with SSL support
+- 🎨 **Theme integration** — Adapts to your Plasma theme
+- 🔧 **Developer mode** — Triple-click footer for verbose logging
 
 ## Screenshots
 
@@ -53,117 +37,56 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
   <img src="screenshots/Settings.png" alt="Settings" />
 </p>
 
-<p align="center"><em>Configuration dialog</em></p>
-
 ## Requirements
 
 - KDE Plasma 6.0+
 - Proxmox VE 7.0+ with API access
-- No external CLI tools required for API calls (uses native Qt networking)
 
 ## Installation
 
-### Quick Install (Recommended)
-
 ```bash
-# Clone the repository
 git clone https://github.com/realstuffie/ProxMon.git
 cd ProxMon
-
-# Run the install script
 bash install.sh
-
-# Optional compatibility mode (also install standalone user-local Qt6 QML module)
-# bash install.sh --install-standalone-qml-module
 ```
 
-> Note: Build output is not committed to the repository. The install script builds the native plugin in a temporary directory and stages the resulting `.so` into the plasmoid package.
->
-> Install policy: the script detects your user-local Qt6 QML path for diagnostics, but final runtime deployment is single-location via the plasmoid package in `~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/lib/proxmox/` (not a second standalone QML module install).
+The script handles dependencies, builds the native plugin, installs the plasmoid, and sets up an auto-rebuild watcher that detects library changes (e.g. libplasma soname bumps) and rebuilds automatically.
 
-### Manual Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/realstuffie/ProxMon.git
-cd ProxMon
-
-# Install the plasmoid
-kpackagetool6 -t Plasma/Applet -i .
-
-# Install icons
-mkdir -p ~/.local/share/icons/hicolor/scalable/apps/
-cp contents/icons/*.svg ~/.local/share/icons/hicolor/scalable/apps/
-
-# Update icon cache
-gtk-update-icon-cache ~/.local/share/icons/hicolor/ 2>/dev/null || true
-```
+Re-run with `--no-deps` to skip dependency installation on subsequent installs.
 
 ### Upgrading
 
 ```bash
 cd ProxMon
 git pull
-kpackagetool6 -t Plasma/Applet -u .
+bash install.sh --no-deps
 ```
 
 ## Proxmox API Token Setup
 
-1. Log into your Proxmox web interface
-2. Go to **Datacenter → Permissions → API Tokens**
-3. Click **Add**
-4. Configure the token:
-   - **User**: Select a user (e.g., `root@pam` or create a dedicated monitoring user)
-   - **Token ID**: Enter a name (e.g., `plasma-monitor`)
-   - **Privilege Separation**: Uncheck for full access, or configure specific permissions
-5. Click **Add**
-6. **Important**: Copy the displayed secret immediately (shown only once!)
+1. Go to **Datacenter → Permissions → API Tokens → Add**
+2. Set a user and token ID (e.g. `root@pam` / `plasma-monitor`)
+3. Copy the secret immediately — shown only once
 
-### Minimum Required Permissions
+### Minimum Permissions
 
-If using privilege separation, the token needs:
+| Permission  | Path   | Purpose                        |
+|-------------|--------|--------------------------------|
+| `Sys.Audit` | `/`    | Read node status               |
+| `VM.Audit`  | `/vms` | Read VM & container status     |
 
-| Permission  | Path   | Purpose                                   |
-| ----------- | ------ | ----------------------------------------- |
-| `Sys.Audit` | `/`    | Read node status                          |
-| `VM.Audit`  | `/vms` | Read VM & container status (QEMU + LXC)   |
+### Power Action Permissions
 
-### Optional: Permissions for Start/Stop/Reboot actions
+| Permission      | Path   | Purpose                         |
+|-----------------|--------|---------------------------------|
+| `VM.PowerMgmt`  | `/vms` | Start/stop/reboot VMs and CTs   |
+| `Sys.PowerMgmt` | `/`    | Required in some role setups    |
 
-If you want to use the widget’s power actions (Start/Shutdown/Reboot), audit permissions are **not** sufficient. Grant power-management privileges:
+> **Privilege Separation note:** If your token has privilege separation enabled, effective permissions are the *intersection* of user and token permissions. You must grant roles to both, or disable privilege separation.
 
-| Permission      | Path                      | Purpose                                                   |
-| --------------- | ------------------------- | --------------------------------------------------------- |
-| `VM.PowerMgmt`  | `/vms` (or more specific) | Start/stop/reboot VMs and containers (QEMU + LXC)         |
-| `Sys.PowerMgmt` | `/` (or more specific)    | Required for power actions in some setups/roles           |
-
-Recommended approach:
-
-- Keep a read-only monitoring token with `Sys.Audit` + `VM.Audit`
-- Create a separate token/user for actions with `VM.PowerMgmt` (+ `Sys.PowerMgmt` only if required in your ACL/role setup) at the minimum scope you want
-
-Note: Proxmox ships built-in roles like `PVEAuditor` (read-only) and `PVEVMUser` (includes `VM.PowerMgmt`). You can also create minimal custom roles.
-
-#### Note on Privilege Separation (common misconfiguration)
-
-If you create the API token with **Privilege Separation** enabled (`-privsep 1`), the token will *not* automatically inherit the user's ACLs.
-
-Per Proxmox docs, the effective permissions are the **intersection** of the user permissions and the token permissions. This means you must grant roles to both the **user** and the **token** (or disable privilege separation for “full privileges”).
-
-Example:
+### Example: Dedicated Monitoring User
 
 ```bash
-# Create token with separated privileges
-pveum user token add joe@pve monitoring -privsep 1
-
-# Grant read-only role to the token (and ensure the user also has it)
-pveum acl modify /vms -token 'joe@pve!monitoring' -role PVEAuditor
-```
-
-### Example: Create a Dedicated Monitoring User
-
-```bash
-# On your Proxmox server
 pveum user add monitor@pve -comment "Plasma Monitor"
 pveum aclmod / -user monitor@pve -role PVEAuditor
 pveum user token add monitor@pve plasma-monitor
@@ -171,188 +94,109 @@ pveum user token add monitor@pve plasma-monitor
 
 ## Configuration
 
-1. **Add the widget** to your panel or desktop
-2. **Right-click** → **Configure Proxmox Monitor**
-3. **Connection tab**:
-   - **Host**: Proxmox IP or hostname (e.g., `192.168.1.100`)
-   - **Port**: API port (default: `8006`)
-   - **API Token ID**: Format `user@realm!tokenname` (e.g., `root@pam!plasma-monitor`)
-   - **API Token Secret**: The secret from token creation
-   - **Update Keyring**: If you changed the secret, click **Update Keyring**. The widget stores it temporarily and migrates it into the system keyring on next load. The widget will refresh shortly after config changes (debounced).
-     - If the widget still doesn’t pick up new auth settings, restart Plasma (plasmashell) or remove/re-add the widget to force a full reload.
-   - **Forget**: Clears the secret field (does **not** delete existing keyring entries).
-   - **Refresh Interval**: Update frequency in seconds (default: `30`)
-   - **Ignore SSL**: Enable for self-signed certificates
-4. **Behavior tab**:
-   - **Default Sorting**: How to sort VMs/CTs
-   - **Notifications**: Configure state change alerts
-
-### Notification Rate Limiting
-
-To reduce notification spam during flapping or frequent refresh/retry cycles, you can rate limit repeated notifications:
-
-- Enable/disable in **Behavior tab → Rate Limiting**
-- Configure the minimum interval in seconds between duplicates (default: 120s)
-
-### Notification Privacy (redaction)
-
-By default, notifications will redact sensitive identity fragments if they appear in text (for example within task UPIDs):
-
-- **Behavior tab → Privacy → Redact user@realm and token ID in notifications** (default: enabled)
-- Replaces patterns like `user@realm!tokenid` with `REDACTED@realm!REDACTED`
-
-## Usage
-
-### Panel View (Compact)
-
-- Shows average CPU usage across all nodes
-- Animated icon during refresh
-- Click to expand
-
-### Expanded View Details
-
-- **Node cards**: CPU, memory, uptime for each node
-- **Click node**: Expand/collapse VM and container lists
-- **Status indicators**: Green = running, gray = stopped
-- **Power actions**: Icon buttons (Start/Shutdown/Reboot) on each running VM/CT (requires `VM.PowerMgmt`)
-- **Footer**: Quick stats and last update time
-
-### Developer Mode
-
-Triple-click the footer to enable developer mode:
-
-- Verbose logging to journal (`journalctl --user -f`)
-- Anonymized data (for screenshots)
-- Test notification button
+1. Right-click the widget → **Configure Proxmox Monitor**
+2. **Connection tab**: Host, Port, Token ID (`user@realm!tokenname`), Token Secret, SSL, Refresh Interval
+   - Click **Update Keyring** after changing the secret
+3. **Behavior tab**: Sorting, Notifications, Rate Limiting, Privacy (redact token fragments in notifications)
 
 ## Troubleshooting
 
-### Widget shows "!" or connection error
+### Connection errors / "!" indicator
 
-1. **Verify credentials**:
-   - Ensure token ID format is `user@realm!tokenname`
-   - If you rotated the token secret, re-enter it and click **Update Keyring**, then reopen the widget
-
-2. **SSL issues**: Enable "Ignore SSL" for self-signed certificates
-
-3. **Firewall**: Ensure port 8006 is accessible
+- Verify token ID format: `user@realm!tokenname`
+- Enable **Ignore SSL** for self-signed certificates
+- Check port 8006 is accessible
 
 ### Icons not showing
 
 ```bash
-# Reinstall icons
-cp icons/*.svg ~/.local/share/icons/hicolor/scalable/apps/
+cp contents/icons/*.svg ~/.local/share/icons/hicolor/scalable/apps/
 gtk-update-icon-cache ~/.local/share/icons/hicolor/
-
-# Log out and back in, or restart Plasma
 plasmashell --replace &
 ```
 
 ### Widget not appearing after install
 
 ```bash
-# Restart Plasma
 plasmashell --replace &
-
-# Or log out and back in
 ```
 
-If your distro/security profile blocks loading the packaged native plugin path, try compatibility mode:
+If your distro blocks loading the packaged native plugin path:
 
 ```bash
 bash install.sh --install-standalone-qml-module
 ```
 
-### Ubuntu 26.04 AppArmor note (common issue)
+### Ubuntu 26.04 AppArmor
 
-On some Ubuntu 26.04 setups, the `plasmashell` AppArmor profile may block ProxMon network sends (`class="net"`), which can cause repeated connection errors even with correct widget config.
-
-Quick checks:
+AppArmor may block plasmashell network calls. Check for denials:
 
 ```bash
-# Look for AppArmor denials tied to plasmashell
 sudo journalctl -k -b --no-pager | grep -i 'apparmor="DENIED".*profile="plasmashell"'
 ```
 
-Workaround (host-specific, less strict):
-
-## warning do not use this unless you explicitly understand (Complain mode: logs violations but does not block them)
+Workaround (complain mode — logs but does not block):
 
 ```bash
-# Put plasmashell profile in complain mode
 sudo aa-complain plasmashell
-
-# Restart plasmashell
-kquitapp6 plasmashell && kstart plasmashell
+plasmashell --replace &
 ```
 
-To revert later:
+Revert with `sudo aa-enforce plasmashell`.
+
+### Logs
 
 ```bash
-sudo aa-enforce plasmashell
-```
-
-### Check logs
-
-```bash
-# View plasmoid logs
 journalctl --user -f | grep -i proxmox
 ```
 
-## Uninstall
+### Auto-rebuild watcher
 
-### Using Script
+```bash
+systemctl --user status proxmox-plasmoid-rebuild.path
+tail -f ~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/rebuild.log
+```
+
+## Known Issues
+
+- **Fedora/openSUSE first install:** The completion banner may be hidden above the prompt due to package manager output. The install completes successfully — run `systemctl --user status proxmox-plasmoid-rebuild.path` to confirm, or re-run with `--no-deps` for clean output.
+
+- **Legacy keyring key migration:** If the widget shows "Missing Token Secret" after upgrading from an older version, re-enter the secret and click **Update Keyring**.
+
+## Uninstall
 
 ```bash
 ./uninstall.sh
 ```
 
-### Manual Uninstall
+Or manually:
 
 ```bash
-# Remove plasmoid
 kpackagetool6 -t Plasma/Applet -r org.kde.plasma.proxmox
-
-# Remove icons
 rm -f ~/.local/share/icons/hicolor/scalable/apps/proxmox-monitor.svg
 rm -f ~/.local/share/icons/hicolor/scalable/apps/lxc.svg
-
-# Remove saved settings (optional)
-rm -rf ~/.config/proxmox-plasmoid/
 ```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to:
-
-### Reporting Bugs
-
-Please open an issue with:
-
-- KDE Plasma version (`plasmashell --version`)
-- Proxmox VE version
-- Steps to reproduce
-- Relevant log output
+Open an issue with your KDE Plasma version (`plasmashell --version`), Proxmox VE version, steps to reproduce, and relevant log output.
 
 ## License
 
-This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or any later version.
-
-See [LICENSE](LICENSE) for details.
-
-## Credits
-
-- [Proxmox VE](https://www.proxmox.com/) - Virtualization platform
-- [KDE Plasma](https://kde.org/plasma-desktop/) - Desktop environment
+GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.4.2
+
+- Auto-rebuild watcher: detects libplasma/Qt soname bumps and rebuilds the native plugin automatically
+- Install script: cross-distro fixes and validation (Ubuntu 26.04, Fedora 43, Manjaro, openSUSE Tumbleweed)
+- Install script: improved handling of package manager edge cases on Fedora and openSUSE
+
 ### v0.4.1
 
-- Packaging: native QML plugin is staged under `contents/lib/proxmox/` in the plasmoid package as the single runtime location; legacy standalone user-local Qt6 QML module paths are cleaned on uninstall
 - Install script: cross-distro improvements (kpackagetool 5/6 support, safer option detection, XDG icon paths)
 - Install script: optional `--install-deps` mode with root escalation via root/sudo/doas/su (best-effort, distro-dependent package names)
-- Docs: added dev notes on QML module packaging and verification
 - UI: VM/CT row layout polish (CPU|Mem alignment + tighter spacing)
 - UI: Power action buttons now use icon ToolButtons with tooltips + subtle hover highlight
 - UI: Right-aligned action buttons with protection from overlay scrollbar overlap
