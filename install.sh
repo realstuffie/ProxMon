@@ -80,7 +80,7 @@ install_deps_best_effort() {
       fi
     elif command -v dnf >/dev/null 2>&1; then
       local pkg
-      pkg="$(dnf -q provides "$provider_query" 2>/dev/null | awk '/:/{print $1; exit}')"
+      pkg="$(dnf -q --cacheonly provides "$provider_query" 2>/dev/null | awk '/:/{print $1; exit}')"
       if [ -n "${pkg:-}" ]; then
         install_pkgs_best_effort dnf "install" "-y" "$pkg"
       fi
@@ -126,6 +126,12 @@ install_deps_best_effort() {
     return 0
   fi
 }
+
+# Prime sudo credentials upfront so the password prompt doesn't interrupt
+# build output mid-stream. Only needed when auto dep install is enabled.
+if [ "$AUTO_DEPS" -eq 1 ] && [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+  sudo -v
+fi
 
 # Run dep install first so kpackagetool6/cmake are available for the checks below.
 install_deps_best_effort
@@ -216,10 +222,10 @@ fi
 PKG_PATH="."
 if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
   "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
-  "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH"
+  "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH" || true
 else
   "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
-  "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH"
+  "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" || true
 fi
 
 # Install icons from a single authoritative source
@@ -239,14 +245,105 @@ elif command -v kbuildsycoca5 >/dev/null 2>&1; then
   kbuildsycoca5 >/dev/null 2>&1 || true
 fi
 
+# ---------------------------------------------------------------------------
+# install_autoupdate: resolves libplasma.so path at install time via ldconfig,
+# generates a systemd path unit pointing at it, and installs a service unit
+# that runs check-and-rebuild.sh when the path unit fires.
+#
+# Using a path unit (inotify-based) rather than a timer.
+# ---------------------------------------------------------------------------
+install_autoupdate() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    printf '%s\n' "systemctl not found — skipping auto-update watcher install."
+    return 0
+  fi
+
+  local plasmoid_dir="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
+  local systemd_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+
+  mkdir -p "$plasmoid_dir" "$systemd_dir"
+
+  # Copy check-and-rebuild.sh and install.sh into the plasmoid dir so the
+  # setup is self-contained and survives the source repo being moved/deleted.
+  if [ -f "check-and-rebuild.sh" ]; then
+    cp check-and-rebuild.sh "$plasmoid_dir/check-and-rebuild.sh"
+    chmod +x "$plasmoid_dir/check-and-rebuild.sh"
+    # install.sh is needed by check-and-rebuild.sh for --no-deps rebuilds
+    cp "$0" "$plasmoid_dir/install.sh"
+    chmod +x "$plasmoid_dir/install.sh"
+  else
+    printf '%s\n' "WARNING: check-and-rebuild.sh not found — skipping auto-update install." >&2
+    return 0
+  fi
+
+  # Copy the static service unit
+  if [ -f "proxmox-plasmoid-rebuild.service" ]; then
+    cp proxmox-plasmoid-rebuild.service "$systemd_dir/"
+  else
+    printf '%s\n' "WARNING: proxmox-plasmoid-rebuild.service not found — skipping auto-update install." >&2
+    return 0
+  fi
+
+  # Resolve libplasma.so path via ldconfig (distro-agnostic)
+  local libplasma_path
+  libplasma_path="$(ldconfig -p 2>/dev/null | grep -i 'libPlasma\.so\.' | awk '{print $NF}' | head -1)"
+
+  if [ -z "${libplasma_path:-}" ]; then
+    printf '%s\n' "WARNING: Could not resolve libplasma.so via ldconfig — skipping auto-update install." >&2
+    return 0
+  fi
+
+  printf '%s\n' "Resolved libplasma.so: $libplasma_path"
+
+  # Generate the path unit dynamically with the resolved library path
+  cat > "$systemd_dir/proxmox-plasmoid-rebuild.path" <<EOF
+[Unit]
+Description=Proxmox Plasmoid - watch libplasma.so for library changes
+
+[Path]
+# Resolved at install time by ldconfig — distro-agnostic
+PathChanged=$libplasma_path
+
+[Install]
+WantedBy=default.target
+EOF
+
+  systemctl --user daemon-reload
+  systemctl --user enable --now proxmox-plasmoid-rebuild.path
+
+  printf '%s\n' "Auto-update watcher installed and enabled (watching: $libplasma_path)"
+}
+
+install_autoupdate
+
+# ---------------------------------------------------------------------------
+# Write build fingerprint now that install succeeded, so the path unit's
+# first trigger does not cause a redundant rebuild.
+# ---------------------------------------------------------------------------
+PLASMOID_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
+FINGERPRINT_FILE="$PLASMOID_DIR/.build_fingerprint"
+ldconfig -p 2>/dev/null \
+  | grep -iE 'libplasma|libQt6' \
+  | awk '{print $NF}' \
+  | sort \
+  | xargs -r md5sum 2>/dev/null \
+  | md5sum \
+  | cut -d' ' -f1 > "$FINGERPRINT_FILE"
+
 printf '\n'
-printf '%s\n' "Installation complete!"
+printf '%s\n' "========================================"
+printf '%s\n' "  Proxmox Plasmoid - Install Complete  "
+printf '%s\n' "========================================"
 printf '\n'
 printf '%s\n' "You may need to restart Plasma:"
 printf '%s\n' "  kquitapp6 plasmashell && kstart plasmashell"
 printf '%s\n' "If that doesn't work on your distro, try:"
 printf '%s\n' "  systemctl --user restart plasma-plasmashell.service"
 printf '%s\n' "or log out/in."
+printf '\n'
+printf '%s\n' "Auto-update watcher status:"
+printf '%s\n' "  systemctl --user status proxmox-plasmoid-rebuild.path"
+printf '%s\n' "  tail -f $PLASMOID_DIR/rebuild.log"
 printf '\n'
 printf '%s\n' "To add the widget:"
 printf '%s\n' "  1. Right-click on your panel"

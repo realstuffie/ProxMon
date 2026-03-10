@@ -1,0 +1,13 @@
+[Unit]
+Description=Proxmox Plasmoid - rebuild native plugin on library change
+
+[Service]
+Type=oneshot
+# Short delay to let the package manager finish writing before we check
+ExecStartPre=/bin/sleep 10
+ExecStart=%h/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/check-and-rebuild.sh
+StandardOutput=append:%h/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/rebuild.log
+StandardError=append:%h/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/rebuild.log
+
+[Install]
+WantedBy=default.target
