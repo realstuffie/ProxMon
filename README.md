@@ -42,6 +42,11 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - KDE Plasma 6.0+
 - Proxmox VE 7.0+ with API access
 
+### Known bugs / limitations
+
+- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
+- On Fedora/openSUSE, the completion banner on first install may be hidden above the prompt due to package manager output. The install completes successfully — run `systemctl --user status proxmox-plasmoid-rebuild.path` to confirm, or re-run with `--no-deps` for clean output.
+
 ## Installation
 
 ```bash
