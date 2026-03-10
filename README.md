@@ -9,7 +9,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - 🖧 **Multi-node cluster support**
 - 🔔 **Desktop notifications** — State change alerts with rate limiting and filters
 - 🔌 **Power commands** — Start, Stop, Restart VMs/CTs
-- 🔒 **Secure** — API token authentication with SSL support
+- 🔒 **Secure** — API token authentication with SSL support, Local keychain integration 
 - 🎨 **Theme integration** — Adapts to your Plasma theme
 - 🔧 **Developer mode** — Triple-click footer for verbose logging
 
