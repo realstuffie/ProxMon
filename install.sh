@@ -74,14 +74,16 @@ install_deps_best_effort() {
 
     if command -v zypper >/dev/null 2>&1; then
       local pkg
-      pkg="$(zypper --non-interactive se -x -f "$provider_query" 2>/dev/null | awk -F'|' 'NR>2 && $2 ~ /\\S/ {gsub(/^[ \\t]+|[ \\t]+$/, "", $2); print $2; exit}')"
-      if [ -n "${pkg:-}" ]; then
+      pkg="$(zypper --non-interactive se -x -f "$provider_query" 2>/dev/null | awk -F'|' 'NR>2 && $2 ~ /\\S/ {gsub(/^[ \\t]+|[ \\t]+$/, "", $2); print $2; exit}')" || true
+         if [ -n "${pkg:-}" ]; then
+        sudo -v 2>/dev/null || true
         install_pkgs_best_effort zypper "install" "-y" "$pkg"
       fi
     elif command -v dnf >/dev/null 2>&1; then
       local pkg
-      pkg="$(dnf -q --cacheonly provides "$provider_query" 2>/dev/null | awk '/:/{print $1; exit}')"
-      if [ -n "${pkg:-}" ]; then
+      pkg="$(dnf -q --cacheonly provides "$provider_query" 2>/dev/null | awk '/:/{print $1; exit}')" || true
+        if [ -n "${pkg:-}" ]; then
+        sudo -v 2>/dev/null || true
         install_pkgs_best_effort dnf "install" "-y" "$pkg"
       fi
     elif command -v apt-get >/dev/null 2>&1; then
@@ -105,17 +107,17 @@ install_deps_best_effort() {
       cmake make gcc-c++ pkg-config \
       qt6-base-devel qt6-declarative-devel
     install_pkgs_best_effort zypper install -y extra-cmake-modules || true
-    install_provider_best_effort "kpackagetool6"
-    install_provider_best_effort "ECMConfig.cmake"
-    install_provider_best_effort "KF6PlasmaConfig.cmake"
+    command -v kpackagetool6 >/dev/null 2>&1 || install_provider_best_effort "kpackagetool6"
+    rpm -q extra-cmake-modules >/dev/null 2>&1 || install_provider_best_effort "ECMConfig.cmake"
+    rpm -q kf6-plasma-devel >/dev/null 2>&1 || install_provider_best_effort "KF6PlasmaConfig.cmake"
   elif command -v dnf >/dev/null 2>&1; then
     install_pkgs_best_effort dnf install -y \
       cmake make gcc-c++ pkgconf-pkg-config \
       qt6-qtbase-devel qt6-qtdeclarative-devel
     install_pkgs_best_effort dnf install -y extra-cmake-modules || true
-    install_provider_best_effort "*/kpackagetool6"
-    install_provider_best_effort "*/ECMConfig.cmake"
-    install_provider_best_effort "*/KF6PlasmaConfig.cmake"
+    command -v kpackagetool6 >/dev/null 2>&1 || install_provider_best_effort "*/kpackagetool6"
+    rpm -q extra-cmake-modules >/dev/null 2>&1 || install_provider_best_effort "*/ECMConfig.cmake"
+    rpm -q kf6-plasma-devel >/dev/null 2>&1 || install_provider_best_effort "*/KF6PlasmaConfig.cmake"
   elif command -v pacman >/dev/null 2>&1; then
     install_pkgs_best_effort pacman -Sy --noconfirm \
       cmake make gcc pkgconf \
@@ -286,10 +288,13 @@ install_autoupdate() {
 
   # Resolve libplasma.so path via ldconfig (distro-agnostic)
   local libplasma_path
-  libplasma_path="$(ldconfig -p 2>/dev/null | grep -i 'libPlasma\.so\.' | awk '{print $NF}' | head -1)"
+  libplasma_path="$(ldconfig -p 2>/dev/null | grep -i 'libPlasma\.so\.' | awk '{print $NF}' | head -1)" || true
 
   if [ -z "${libplasma_path:-}" ]; then
-    printf '%s\n' "WARNING: Could not resolve libplasma.so via ldconfig — skipping auto-update install." >&2
+    libplasma_path="$(find /usr/lib64 /usr/lib /lib64 /lib -name 'libPlasma.so.*' 2>/dev/null | grep '\.so\.[0-9]*$' | head -1)" || true
+  fi
+  if [ -z "${libplasma_path:-}" ]; then
+    printf '%s\n' "WARNING: Could not resolve libplasma.so via ldconfig or find — skipping auto-update install." >&2
     return 0
   fi
 
@@ -322,14 +327,12 @@ install_autoupdate
 # ---------------------------------------------------------------------------
 PLASMOID_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
 FINGERPRINT_FILE="$PLASMOID_DIR/.build_fingerprint"
-ldconfig -p 2>/dev/null \
-  | grep -iE 'libplasma|libQt6' \
+{ ldconfig -p 2>/dev/null | grep -iE 'libplasma|libQt6' || true; } \
   | awk '{print $NF}' \
   | sort \
   | xargs -r md5sum 2>/dev/null \
   | md5sum \
   | cut -d' ' -f1 > "$FINGERPRINT_FILE"
-
 printf '\n'
 printf '%s\n' "========================================"
 printf '%s\n' "  Proxmox Plasmoid - Install Complete  "
