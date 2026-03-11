@@ -61,71 +61,87 @@ install_deps_best_effort() {
   printf '%s\n' "NOTE: This is best-effort. Package names vary by distro and version."
   printf '%s\n' "NOTE: Any \"not found\" messages for optional packages are non-fatal and can be ignored if the build succeeds."
 
-  # Helper to install a list of packages, but don't fail the whole script if some are missing.
+  # Detect package manager and set distro-specific variables
+  local pm="" pm_update="" pm_install="" pm_provider_prefix=""
+  local pkgs_build="" pkgs_ecm="" pkgs_kpackage=""
+
+  if command -v apt-get >/dev/null 2>&1; then
+    pm="apt-get"
+    pm_update="apt-get update"
+    pm_install="apt-get install -y"
+    pkgs_build="cmake make g++ pkg-config qt6-base-dev qt6-declarative-dev libsecret-1-dev"
+    pkgs_ecm="extra-cmake-modules"
+    pkgs_kpackage="libkf6package-bin"
+  elif command -v zypper >/dev/null 2>&1; then
+    pm="zypper"
+    pm_update="zypper refresh"
+    pm_install="zypper install -y"
+    pkgs_build="cmake make gcc-c++ pkg-config qt6-base-devel qt6-declarative-devel"
+    pkgs_ecm="extra-cmake-modules"
+  elif command -v dnf >/dev/null 2>&1; then
+    pm="dnf"
+    pm_install="dnf install -y"
+    pm_provider_prefix="*/"
+    pkgs_build="cmake make gcc-c++ pkgconf-pkg-config qt6-qtbase-devel qt6-qtdeclarative-devel"
+    pkgs_ecm="extra-cmake-modules"
+  elif command -v pacman >/dev/null 2>&1; then
+    pm="pacman"
+    pm_install="pacman -Sy --noconfirm"
+    pkgs_build="cmake make gcc pkgconf qt6-base qt6-declarative"
+    pkgs_ecm="extra-cmake-modules"
+  else
+    printf '%s\n' "No supported package manager detected (apt-get/zypper/dnf/pacman). Skipping auto deps." >&2
+    return 0
+  fi
+
+  # Helper to install a list of packages, don't fail the whole script if some are missing.
   install_pkgs_best_effort() {
-    local installer="$1"
-    shift
-    run_root "$installer" "$@" || true
+    # shellcheck disable=SC2086
+    run_root $pm_install "$@" || true
   }
 
   # Attempt to resolve a package providing a given file/capability, then install it.
   install_provider_best_effort() {
     local provider_query="$1"
-
-    if command -v zypper >/dev/null 2>&1; then
-      local pkg
-      pkg="$(zypper --non-interactive se -x -f "$provider_query" 2>/dev/null | awk -F'|' 'NR>2 && $2 ~ /\\S/ {gsub(/^[ \\t]+|[ \\t]+$/, "", $2); print $2; exit}')" || true
-         if [ -n "${pkg:-}" ]; then
-        sudo -v 2>/dev/null || true
-        install_pkgs_best_effort zypper "install" "-y" "$pkg"
-      fi
-    elif command -v dnf >/dev/null 2>&1; then
-      local pkg
+    local pkg=""
+    if [ "$pm" = "zypper" ]; then
+      pkg="$(zypper --non-interactive se -x -f "$provider_query" 2>/dev/null | awk -F'|' 'NR>2 && $2 ~ /\S/ {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2; exit}')" || true
+    elif [ "$pm" = "dnf" ]; then
       pkg="$(dnf -q --cacheonly provides "$provider_query" 2>/dev/null | awk '/:/{print $1; exit}')" || true
-        if [ -n "${pkg:-}" ]; then
-        sudo -v 2>/dev/null || true
-        install_pkgs_best_effort dnf "install" "-y" "$pkg"
-      fi
-    elif command -v apt-get >/dev/null 2>&1; then
-      true
-    elif command -v pacman >/dev/null 2>&1; then
-      true
+    fi
+    if [ -n "${pkg:-}" ]; then
+      sudo -v 2>/dev/null || true
+      install_pkgs_best_effort "$pkg"
     fi
   }
 
-  if command -v apt-get >/dev/null 2>&1; then
-    run_root apt-get update
-    install_pkgs_best_effort apt-get install -y \
-      cmake make g++ pkg-config \
-      qt6-base-dev qt6-declarative-dev \
-      libsecret-1-dev
-    install_pkgs_best_effort apt-get install -y extra-cmake-modules || true
-    install_pkgs_best_effort apt-get install -y libkf6package-bin || true
-  elif command -v zypper >/dev/null 2>&1; then
-    run_root zypper refresh
-    install_pkgs_best_effort zypper install -y \
-      cmake make gcc-c++ pkg-config \
-      qt6-base-devel qt6-declarative-devel
-    install_pkgs_best_effort zypper install -y extra-cmake-modules || true
-    command -v kpackagetool6 >/dev/null 2>&1 || install_provider_best_effort "kpackagetool6"
-    rpm -q extra-cmake-modules >/dev/null 2>&1 || install_provider_best_effort "ECMConfig.cmake"
-    rpm -q kf6-plasma-devel >/dev/null 2>&1 || install_provider_best_effort "KF6PlasmaConfig.cmake"
-  elif command -v dnf >/dev/null 2>&1; then
-    install_pkgs_best_effort dnf install -y \
-      cmake make gcc-c++ pkgconf-pkg-config \
-      qt6-qtbase-devel qt6-qtdeclarative-devel
-    install_pkgs_best_effort dnf install -y extra-cmake-modules || true
-    command -v kpackagetool6 >/dev/null 2>&1 || install_provider_best_effort "*/kpackagetool6"
-    rpm -q extra-cmake-modules >/dev/null 2>&1 || install_provider_best_effort "*/ECMConfig.cmake"
-    rpm -q kf6-plasma-devel >/dev/null 2>&1 || install_provider_best_effort "*/KF6PlasmaConfig.cmake"
-  elif command -v pacman >/dev/null 2>&1; then
-    install_pkgs_best_effort pacman -Sy --noconfirm \
-      cmake make gcc pkgconf \
-      qt6-base qt6-declarative
-    install_pkgs_best_effort pacman -Sy --noconfirm extra-cmake-modules || true
+  # Run update if needed
+  [ -n "$pm_update" ] && run_root $pm_update
+
+  # Install core build deps
+  # shellcheck disable=SC2086
+  install_pkgs_best_effort $pkgs_build
+
+  # Install ECM
+  install_pkgs_best_effort "$pkgs_ecm"
+
+  # Install kpackage tool (apt has a direct package name, zypper/dnf use provider lookup)
+  if [ -n "${pkgs_kpackage:-}" ]; then
+    install_pkgs_best_effort "$pkgs_kpackage"
   else
-    printf '%s\n' "No supported package manager detected (apt-get/zypper/dnf/pacman). Skipping auto deps." >&2
-    return 0
+    command -v kpackagetool6 >/dev/null 2>&1 || install_provider_best_effort "${pm_provider_prefix}kpackagetool6"
+  fi
+
+  # Install remaining providers (zypper/dnf only, skip if already present)
+  if [ "$pm" = "zypper" ] || [ "$pm" = "dnf" ]; then
+    rpm -q extra-cmake-modules >/dev/null 2>&1 || install_provider_best_effort "${pm_provider_prefix}ECMConfig.cmake"
+    rpm -q kf6-plasma-devel >/dev/null 2>&1 || install_provider_best_effort "${pm_provider_prefix}KF6PlasmaConfig.cmake"
+  fi
+
+  # Fedora-specific output note
+  if [ "$pm" = "dnf" ]; then
+    printf '%s\n' "NOTE: On Fedora, sudo password prompts may appear mid-output. This is normal — the install continues in the background."
+    printf '%s\n' "NOTE: The final '== Install Complete ==' banner may be hidden above the prompt. Run with --no-deps on subsequent installs for clean output."
   fi
 }
 
@@ -333,6 +349,7 @@ FINGERPRINT_FILE="$PLASMOID_DIR/.build_fingerprint"
   | xargs -r md5sum 2>/dev/null \
   | md5sum \
   | cut -d' ' -f1 > "$FINGERPRINT_FILE"
+
 printf '\n'
 printf '%s\n' "========================================"
 printf '%s\n' "  Proxmox Plasmoid - Install Complete  "
