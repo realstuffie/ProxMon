@@ -47,6 +47,18 @@ rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/lxc.svg"
 # Remove saved settings
 rm -rf "${HOME}/.config/proxmox-plasmoid" || true
 
+# Remove auto-update watcher
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl --user disable --now proxmox-plasmoid-rebuild.path 2>/dev/null || true
+  systemctl --user disable --now proxmox-plasmoid-rebuild.service 2>/dev/null || true
+  systemctl --user daemon-reload
+  rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/proxmox-plasmoid-rebuild.path"
+  rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/proxmox-plasmoid-rebuild.service"
+fi
+
+# Remove plasmoid dir (contains check-and-rebuild.sh, install.sh, fingerprint, log)
+rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
+
 printf '\n'
 printf '%s\n' "Uninstallation complete!"
 printf '\n'
