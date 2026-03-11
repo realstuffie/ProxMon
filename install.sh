@@ -86,7 +86,7 @@ install_deps_best_effort() {
     pkgs_ecm="extra-cmake-modules"
   elif command -v pacman >/dev/null 2>&1; then
     pm="pacman"
-    pm_install="pacman -Sy --noconfirm"
+    pm_install="pacman -Sy --noconfirm --needed"
     pkgs_build="cmake make gcc pkgconf qt6-base qt6-declarative"
     pkgs_ecm="extra-cmake-modules"
   else
