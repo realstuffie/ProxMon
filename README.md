@@ -4,14 +4,14 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ## Features
 
-- 📊 **Real-time monitoring** — Node status (CPU, Memory, Uptime)
-- 🖥️ **VM & Container tracking** — All VMs and LXC containers with status
-- 🖧 **Multi-node cluster support**
-- 🔔 **Desktop notifications** — State change alerts with rate limiting and filters
-- 🔌 **Power commands** — Start, Stop, Restart VMs/CTs
-- 🔒 **Secure** — API token authentication with SSL support, Local keychain integration 
-- 🎨 **Theme integration** — Adapts to your Plasma theme
-- 🔧 **Developer mode** — Triple-click footer for verbose logging
+-  **Real-time monitoring** — Node status (CPU, Memory, Uptime)
+-  **VM & Container tracking** — All VMs and LXC containers with status
+-  **Multi-node cluster support**
+-  **Desktop notifications** — State change alerts with rate limiting and filters
+-  **Power commands** — Start, Stop, Restart VMs/CTs
+-  **Secure** — API token authentication with SSL support, Local keychain integration 
+-  **Theme integration** — Adapts to your Plasma theme
+-  **Developer mode** — Triple-click footer for verbose logging
 
 ## Screenshots
 
@@ -45,7 +45,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 ### Known bugs / limitations
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
-- On Fedora/openSUSE, the completion banner on first install may be hidden above the prompt due to package manager output. The install completes successfully — run `systemctl --user status proxmox-plasmoid-rebuild.path` to confirm, or re-run with `--no-deps` for clean output.
+
 
 ## Installation
 
@@ -161,12 +161,6 @@ journalctl --user -f | grep -i proxmox
 systemctl --user status proxmox-plasmoid-rebuild.path
 tail -f ~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/rebuild.log
 ```
-
-## Known Issues
-
-- **Fedora/openSUSE first install:** The completion banner may be hidden above the prompt due to package manager output. The install completes successfully — run `systemctl --user status proxmox-plasmoid-rebuild.path` to confirm, or re-run with `--no-deps` for clean output.
-
-- **Legacy keyring key migration:** If the widget shows "Missing Token Secret" after upgrading from an older version, re-enter the secret and click **Update Keyring**.
 
 ## Uninstall
 
