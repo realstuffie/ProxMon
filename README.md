@@ -135,7 +135,7 @@ bash install.sh --install-standalone-qml-module
 
 ### Ubuntu 26.04 AppArmor
 
-AppArmor may block plasmashell network calls. Check for denials:
+AppArmor class=net denial was a kernel bug fixed in 6.19.0-9.9
 
 ```bash
 sudo journalctl -k -b --no-pager | grep -i 'apparmor="DENIED".*profile="plasmashell"'
