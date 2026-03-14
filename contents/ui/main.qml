@@ -126,6 +126,10 @@ PlasmoidItem {
     property bool actionPermHintShown: false
     property string actionPermHint: ""
 
+    // Debug log (capped to debugLogMaxLines entries)
+    property var debugLog: []
+    readonly property int debugLogMaxLines: 100
+
     property bool hasCoreConfig: {
         if (connectionMode === "multiHost") {
             // core config is at least one endpoint entry (host + tokenId)
@@ -415,16 +419,21 @@ PlasmoidItem {
 
     // Debug logging (actions always log; devMode gates noisy logs elsewhere)
     function logDebug(message) {
-        var now = new Date()
-        var timestamp = now.getFullYear() + "-" +
-            (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
-            now.getDate().toString().padStart(2, '0') + " " +
-            now.getHours().toString().padStart(2, '0') + ":" +
-            now.getMinutes().toString().padStart(2, '0') + ":" +
-            now.getSeconds().toString().padStart(2, '0') + "." +
-            now.getMilliseconds().toString().padStart(3, '0')
-        console.log("[Proxmox " + timestamp + "] " + message)
-    }
+    var now = new Date()
+    var timestamp = now.getFullYear() + "-" +
+        (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
+        now.getDate().toString().padStart(2, '0') + " " +
+        now.getHours().toString().padStart(2, '0') + ":" +
+        now.getMinutes().toString().padStart(2, '0') + ":" +
+        now.getSeconds().toString().padStart(2, '0') + "." +
+        now.getMilliseconds().toString().padStart(3, '0')
+    var line = "[Proxmox " + timestamp + "] " + message
+    console.log(line)
+    var newLog = debugLog.slice()
+    newLog.push(line)
+    if (newLog.length > debugLogMaxLines) newLog.splice(0, newLog.length - debugLogMaxLines)
+    debugLog = newLog
+}
 
     function buildDebugInfo() {
         var info = {
@@ -441,7 +450,8 @@ PlasmoidItem {
             errorMessage: errorMessage,
             nodeCount: displayedNodeList.length,
             vmCount: displayedVmData.length,
-            lxcCount: displayedLxcData.length
+            lxcCount: displayedLxcData.length,
+            log: debugLog
         }
         return JSON.stringify(info, null, 2)
     }
