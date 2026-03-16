@@ -126,6 +126,10 @@ PlasmoidItem {
     property bool actionPermHintShown: false
     property string actionPermHint: ""
 
+    // Debug log (capped to debugLogMaxLines entries)
+    property var debugLog: []
+    readonly property int debugLogMaxLines: 100
+
     property bool hasCoreConfig: {
         if (connectionMode === "multiHost") {
             // core config is at least one endpoint entry (host + tokenId)
@@ -415,16 +419,21 @@ PlasmoidItem {
 
     // Debug logging (actions always log; devMode gates noisy logs elsewhere)
     function logDebug(message) {
-        var now = new Date()
-        var timestamp = now.getFullYear() + "-" +
-            (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
-            now.getDate().toString().padStart(2, '0') + " " +
-            now.getHours().toString().padStart(2, '0') + ":" +
-            now.getMinutes().toString().padStart(2, '0') + ":" +
-            now.getSeconds().toString().padStart(2, '0') + "." +
-            now.getMilliseconds().toString().padStart(3, '0')
-        console.log("[Proxmox " + timestamp + "] " + message)
-    }
+    var now = new Date()
+    var timestamp = now.getFullYear() + "-" +
+        (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
+        now.getDate().toString().padStart(2, '0') + " " +
+        now.getHours().toString().padStart(2, '0') + ":" +
+        now.getMinutes().toString().padStart(2, '0') + ":" +
+        now.getSeconds().toString().padStart(2, '0') + "." +
+        now.getMilliseconds().toString().padStart(3, '0')
+    var line = "[Proxmox " + timestamp + "] " + message
+    console.log(line)
+    var newLog = debugLog.slice()
+    newLog.push(line)
+    if (newLog.length > debugLogMaxLines) newLog.splice(0, newLog.length - debugLogMaxLines)
+    debugLog = newLog
+}
 
     function buildDebugInfo() {
         var info = {
@@ -441,7 +450,8 @@ PlasmoidItem {
             errorMessage: errorMessage,
             nodeCount: displayedNodeList.length,
             vmCount: displayedVmData.length,
-            lxcCount: displayedLxcData.length
+            lxcCount: displayedLxcData.length,
+            log: debugLog
         }
         return JSON.stringify(info, null, 2)
     }
@@ -1611,6 +1621,36 @@ PlasmoidItem {
             secretState = "error"
             logDebug("secretStore: " + message)
         }
+
+        onKeysReady: function(keys) {
+            logDebug("secretStore.onKeysReady: " + keys.length + " key(s) found")
+            if (keys.length === 0 || hasCoreConfig) return
+
+            if (keys.length === 1) {
+                var key = keys[0]
+                var match = key.match(/^apiTokenSecret:(.+)@(.+):(\d+)$/)
+                if (match) {
+                    var tokenId = match[1]
+                    var host = match[2]
+                    var port = parseInt(match[3])
+                    logDebug("secretStore.onKeysReady: Auto-restoring host=" + host + " port=" + port + " tokenId=" + tokenId)
+                                        Plasmoid.configuration.proxmoxHost = host
+                    Plasmoid.configuration.proxmoxPort = port
+                    Plasmoid.configuration.apiTokenId = tokenId
+                    // Reset secretState so resolveSecretIfNeeded() doesn't bail out early
+                    secretState = "idle"
+                    resolveSecretIfNeeded()
+                } else {
+                    logDebug("secretStore.onKeysReady: Could not parse key format: " + key)
+                }
+            } else {
+                logDebug("secretStore.onKeysReady: Multiple keys found, manual config required: " + keys.join(", "))
+            }
+        }
+
+        onKeyListError: function(message) {
+            logDebug("secretStore.keyListError: " + message)
+        }
     }
 
     function resolveSecretIfNeeded() {
@@ -1684,7 +1724,8 @@ PlasmoidItem {
         resolveSecretIfNeeded()
 
         if (!hasCoreConfig && connectionMode === "single") {
-            logDebug("Component.onCompleted: Missing core config, loading defaults")
+            logDebug("Component.onCompleted: Missing core config, attempting KWallet key detection")
+            secretStore.listKWalletKeys()
             loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
         }
     }
@@ -1708,8 +1749,6 @@ PlasmoidItem {
                     if (s.host) Plasmoid.configuration.proxmoxHost = s.host
                     if (s.port) Plasmoid.configuration.proxmoxPort = s.port
                     if (s.tokenId) Plasmoid.configuration.apiTokenId = s.tokenId
-                    // Legacy: keep for migration; will be moved into keyring on first load.
-                    if (s.tokenSecret) Plasmoid.configuration.apiTokenSecret = s.tokenSecret
                     if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
                     if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
                     if (s.enableNotifications !== undefined) Plasmoid.configuration.enableNotifications = s.enableNotifications
@@ -1717,14 +1756,9 @@ PlasmoidItem {
                     proxmoxHost = s.host || ""
                     proxmoxPort = s.port || 8006
                     apiTokenId = s.tokenId || ""
-                    resolvedApiTokenSecret = s.tokenSecret || ""
-                    if (resolvedApiTokenSecret && resolvedApiTokenSecret.length > 0) {
-                        secretState = "ready"
-                    }
                     refreshInterval = (s.refreshInterval || 30) * 1000
                     ignoreSsl = s.ignoreSsl !== false
                     enableNotifications = s.enableNotifications !== false
-
                     defaultsLoaded = true
                     logDebug("loadDefaults: Settings applied - host: " + proxmoxHost)
                 } catch (e) {

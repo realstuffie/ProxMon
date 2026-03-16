@@ -1,6 +1,7 @@
 #pragma once
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 class SecretStore : public QObject {
     Q_OBJECT
@@ -20,6 +21,7 @@ public:
     Q_INVOKABLE void readSecret();
     Q_INVOKABLE void writeSecret(const QString &secret);
     Q_INVOKABLE void deleteSecret();
+    Q_INVOKABLE void listKWalletKeys();
 
 signals:
     void serviceChanged();
@@ -29,6 +31,8 @@ signals:
     void writeFinished(bool ok, const QString &error);
     void deleteFinished(bool ok, const QString &error);
     void error(const QString &message);
+    void keysReady(const QStringList &keys);
+    void keyListError(const QString &message);
 
 private:
     QString m_service = QStringLiteral("ProxMon");
