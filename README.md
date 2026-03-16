@@ -42,7 +42,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - KDE Plasma 6.0+
 - Proxmox VE 7.0+ with API access
 
-### Known bugs / limitations
+### Known bugs / limitations (see wiki for more info)
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
 
@@ -131,23 +131,6 @@ If your distro blocks loading the packaged native plugin path:
 ```bash
 bash install.sh --install-standalone-qml-module
 ```
-
-### Ubuntu 26.04 AppArmor
-
-AppArmor class=net denial was a kernel bug fixed in 6.19.0-9.9
-
-```bash
-sudo journalctl -k -b --no-pager | grep -i 'apparmor="DENIED".*profile="plasmashell"'
-```
-
-Workaround (complain mode — logs but does not block):
-
-```bash
-sudo aa-complain plasmashell
-plasmashell --replace &
-```
-
-Revert with `sudo aa-enforce plasmashell`.
 
 ### Logs
 
