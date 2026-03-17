@@ -1822,22 +1822,6 @@ PlasmoidItem {
                         duration: 150
                         easing.type: Easing.InQuad
                     }
-                    PropertyAnimation {
-                        target: proxmoxIcon
-                        property: "scale"
-                        from: 1.0
-                        to: 1.15
-                        duration: 120
-                        easing.type: Easing.OutQuad
-                    }
-                    PropertyAnimation {
-                        target: proxmoxIcon
-                        property: "scale"
-                        from: 1.15
-                        to: 1.0
-                        duration: 120
-                        easing.type: Easing.InQuad
-                    }
                     PauseAnimation {
                         duration: 400
                     }
