@@ -1,4 +1,4 @@
-# ProxMon
+# Proxmox Monitor
 
 A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your desktop panel.
 
