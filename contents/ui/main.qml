@@ -319,17 +319,26 @@ PlasmoidItem {
             }
         }
 
-        onError: function(seq, kind, node, message) {
+onError: function(seq, kind, node, message) {
             if (seq !== refreshSeq) return
             if (connectionMode !== "single") return
 
             logDebug("api error: " + kind + " " + node + " - " + message)
-            errorMessage = message || "Connection failed"
-            pendingNodeRequests = 0
-            isRefreshing = false
-            loading = false
 
-            scheduleRetry(errorMessage)
+            if (kind === "nodes") {
+                errorMessage = message || "Connection failed"
+                pendingNodeRequests = 0
+                isRefreshing = false
+                loading = false
+                scheduleRetry(errorMessage)
+                return
+            }
+
+            logDebug("api error: partial failure on node " + node + ", continuing")
+            partialFailure = true
+            pendingNodeRequests--
+            if (pendingNodeRequests < 0) pendingNodeRequests = 0
+            checkRequestsComplete()
         }
 
         onReplyFor: function(seq, sessionKey, kind, node, data) {
@@ -1030,6 +1039,7 @@ PlasmoidItem {
             isRefreshing = false
             loading = false
 
+            if (partialFailure) lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss") + " ⚠"
             logDebug("checkRequestsComplete: Display data updated")
 
             // Check for state changes and send notifications
@@ -1048,6 +1058,9 @@ PlasmoidItem {
     // Confirmation prompt state
     property var pendingAction: null
 
+    // True when at least per-node request failed but others succeeded
+    property bool partialFailure: false
+
     // Confirm is two-click (see confirmAndRunAction()); QQC2.Popup overlays are unreliable in plasmoids.
 
     Timer {
@@ -1056,14 +1069,19 @@ PlasmoidItem {
         repeat: false
         onTriggered: {
             if (pendingNodeRequests > 0) {
-                logDebug("refreshWatchdog: Timed out, pending requests: " + pendingNodeRequests)
-                // Cancel in-flight requests to avoid late reply storms.
+                logDebug("refreshWatchdog: Timed out with " + pendingNodeRequests + " pending")
                 api.cancelAll()
-                errorMessage = "Request timed out"
                 pendingNodeRequests = 0
-                isRefreshing = false
-                loading = false
-                scheduleRetry("Request timed out")
+
+                if (tempVmData.length > 0 || tempLxcData.length > 0) {
+                    errorMessage = "Partial data (some nodes timed out)"
+                    checkRequestsComplete()
+                } else {
+                    errorMessage = "Request timed out"
+                    isRefreshing = false
+                    loading = false
+                    scheduleRetry("Request timed out")
+                }
             }
         }
     }
@@ -1161,7 +1179,7 @@ PlasmoidItem {
         tempVmData = []
         tempLxcData = []
         errorMessage = ""
-
+        partialFailure = false
         resetMultiTempData()
 
         refreshWatchdog.restart()
@@ -2048,7 +2066,7 @@ PlasmoidItem {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.margins: 10
-            visible: errorMessage !== "" && configured
+            visible: errorMessage !== "" && !partialFailure && configured
             spacing: 8
 
             RowLayout {

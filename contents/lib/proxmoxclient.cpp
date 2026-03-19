@@ -128,7 +128,7 @@ QNetworkRequest buildRequest(const QString &host, int port, const QString &path,
     // Header format: Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID
     const QByteArray auth = QByteArray("PVEAPIToken=") + tokenId.toUtf8() + "=" + tokenSecret.toUtf8();
     req.setRawHeader("Authorization", auth);
-
+    req.setTransferTimeout(10000);
     return req;
 }
 
