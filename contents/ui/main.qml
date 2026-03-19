@@ -2183,12 +2183,6 @@ onError: function(seq, kind, node, message) {
                         property var nodeLxc: getLxcForNode(nodeName)
                         property bool isCollapsed: isNodeCollapsed(nodeName)
 
-                        // Force relayout on collapse/expand (prevents footer "float" glitches)
-                        onIsCollapsedChanged: {
-                            scrollView.forceLayout()
-                            fullRep.forceLayout()
-                        }
-
                         // Node card
                         Rectangle {
                             Layout.fillWidth: true
@@ -2857,11 +2851,6 @@ onError: function(seq, kind, node, message) {
                                 readonly property var nodeVms: getVmsForNodeMulti(sessionKey, nodeName)
                                 readonly property var nodeLxc: getLxcForNodeMulti(sessionKey, nodeName)
                                 property bool isCollapsed: isNodeCollapsed(nodeName, sessionKey)
-
-                                onIsCollapsedChanged: {
-                                    scrollView.forceLayout()
-                                    fullRep.forceLayout()
-                                }
 
                                 Rectangle {
                                     Layout.fillWidth: true
