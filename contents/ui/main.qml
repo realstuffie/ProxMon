@@ -1818,7 +1818,11 @@ onError: function(seq, kind, node, message) {
                 source: Qt.resolvedUrl("../icons/proxmox-monitor.svg")
                 implicitWidth: 22
                 implicitHeight: 22
-
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: root.expanded = !root.expanded
+                }
+            
                 SequentialAnimation {
                     id: heartbeatAnimation
                     running: loading || isRefreshing
