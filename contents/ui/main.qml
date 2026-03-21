@@ -1895,12 +1895,17 @@ onError: function(seq, kind, node, message) {
                     if (errorMessage) return "!"
 
                     if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
-                        var totalCpu = 0
-                        for (var i = 0; i < displayedProxmoxData.data.length; i++) {
-                            totalCpu += displayedProxmoxData.data[i].cpu
-                        }
-                        return Math.round((totalCpu / displayedProxmoxData.data.length) * 100) + "%"
+                    var totalCpu = 0
+                    var onlineCount = 0
+                    for (var i = 0; i < displayedProxmoxData.data.length; i++) {
+                    if (displayedProxmoxData.data[i].status === "online") {
+                    totalCpu += displayedProxmoxData.data[i].cpu
+                    onlineCount++
                     }
+                }
+                if (onlineCount === 0) return "!"
+                return Math.round((totalCpu / onlineCount) * 100) + "%"
+                }
                     return "-"
                 }
                 font.pixelSize: 13
