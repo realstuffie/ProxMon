@@ -59,6 +59,10 @@ KCM.SimpleKCM {
     property alias cfg_redactNotifyIdentities: redactNotifyIdentitiesCheck.checked
     property bool cfg_redactNotifyIdentitiesDefault: true
 
+    //Low latency mode (shorter network timeouts, may increase error rate on slow connections)
+    property alias cfg_lowLatency: lowLatencyCheck.checked
+    property bool cfg_lowLatencyDefault: false
+
     ColumnLayout {
         anchors.left: parent.left
         anchors.right: parent.right
@@ -188,6 +192,36 @@ KCM.SimpleKCM {
         }
 
         // Separator
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            Layout.bottomMargin: 10
+            implicitHeight: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.3
+        }
+
+        // ==================== NETWORK SECTION ====================
+        Kirigami.Heading {
+            text: "Network"
+            level: 2
+        }
+
+        QQC2.CheckBox {
+            id: lowLatencyCheck
+            text: "Low latency mode (5s request timeout, recommended for LAN)"
+            checked: root.cfg_lowLatency
+            onCheckedChanged: root.cfg_lowLatency = checked
+        }
+
+        QQC2.Label {
+            text: "Reduces the time before an unreachable node is marked as failed. Disable for WAN or high-latency connections."
+            font.pixelSize: 11
+            opacity: 0.6
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+        }
+
         Rectangle {
             Layout.fillWidth: true
             Layout.topMargin: 10

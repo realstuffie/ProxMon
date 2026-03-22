@@ -262,6 +262,7 @@ PlasmoidItem {
         tokenId: apiTokenId
         tokenSecret: resolvedApiTokenSecret
         ignoreSslErrors: ignoreSsl
+        lowLatency: Plasmoid.configuration.lowLatency !== false
 
         onReply: function(seq, kind, node, data) {
             // Ignore late responses from older refresh cycles
@@ -319,17 +320,26 @@ PlasmoidItem {
             }
         }
 
-        onError: function(seq, kind, node, message) {
+onError: function(seq, kind, node, message) {
             if (seq !== refreshSeq) return
             if (connectionMode !== "single") return
 
             logDebug("api error: " + kind + " " + node + " - " + message)
-            errorMessage = message || "Connection failed"
-            pendingNodeRequests = 0
-            isRefreshing = false
-            loading = false
 
-            scheduleRetry(errorMessage)
+            if (kind === "nodes") {
+                errorMessage = message || "Connection failed"
+                pendingNodeRequests = 0
+                isRefreshing = false
+                loading = false
+                scheduleRetry(errorMessage)
+                return
+            }
+
+            logDebug("api error: partial failure on node " + node + ", continuing")
+            partialFailure = true
+            pendingNodeRequests--
+            if (pendingNodeRequests < 0) pendingNodeRequests = 0
+            checkRequestsComplete()
         }
 
         onReplyFor: function(seq, sessionKey, kind, node, data) {
@@ -1030,6 +1040,7 @@ PlasmoidItem {
             isRefreshing = false
             loading = false
 
+            if (partialFailure) lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss") + " ⚠"
             logDebug("checkRequestsComplete: Display data updated")
 
             // Check for state changes and send notifications
@@ -1048,6 +1059,9 @@ PlasmoidItem {
     // Confirmation prompt state
     property var pendingAction: null
 
+    // True when at least per-node request failed but others succeeded
+    property bool partialFailure: false
+
     // Confirm is two-click (see confirmAndRunAction()); QQC2.Popup overlays are unreliable in plasmoids.
 
     Timer {
@@ -1056,14 +1070,19 @@ PlasmoidItem {
         repeat: false
         onTriggered: {
             if (pendingNodeRequests > 0) {
-                logDebug("refreshWatchdog: Timed out, pending requests: " + pendingNodeRequests)
-                // Cancel in-flight requests to avoid late reply storms.
+                logDebug("refreshWatchdog: Timed out with " + pendingNodeRequests + " pending")
                 api.cancelAll()
-                errorMessage = "Request timed out"
                 pendingNodeRequests = 0
-                isRefreshing = false
-                loading = false
-                scheduleRetry("Request timed out")
+
+                if (tempVmData.length > 0 || tempLxcData.length > 0) {
+                    errorMessage = "Partial data (some nodes timed out)"
+                    checkRequestsComplete()
+                } else {
+                    errorMessage = "Request timed out"
+                    isRefreshing = false
+                    loading = false
+                    scheduleRetry("Request timed out")
+                }
             }
         }
     }
@@ -1161,7 +1180,7 @@ PlasmoidItem {
         tempVmData = []
         tempLxcData = []
         errorMessage = ""
-
+        partialFailure = false
         resetMultiTempData()
 
         refreshWatchdog.restart()
@@ -1800,7 +1819,11 @@ PlasmoidItem {
                 source: Qt.resolvedUrl("../icons/proxmox-monitor.svg")
                 implicitWidth: 22
                 implicitHeight: 22
-
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: root.expanded = !root.expanded
+                }
+            
                 SequentialAnimation {
                     id: heartbeatAnimation
                     running: loading || isRefreshing
@@ -1820,22 +1843,6 @@ PlasmoidItem {
                         from: 1.2
                         to: 1.0
                         duration: 150
-                        easing.type: Easing.InQuad
-                    }
-                    PropertyAnimation {
-                        target: proxmoxIcon
-                        property: "scale"
-                        from: 1.0
-                        to: 1.15
-                        duration: 120
-                        easing.type: Easing.OutQuad
-                    }
-                    PropertyAnimation {
-                        target: proxmoxIcon
-                        property: "scale"
-                        from: 1.15
-                        to: 1.0
-                        duration: 120
                         easing.type: Easing.InQuad
                     }
                     PauseAnimation {
@@ -1889,12 +1896,17 @@ PlasmoidItem {
                     if (errorMessage) return "!"
 
                     if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
-                        var totalCpu = 0
-                        for (var i = 0; i < displayedProxmoxData.data.length; i++) {
-                            totalCpu += displayedProxmoxData.data[i].cpu
-                        }
-                        return Math.round((totalCpu / displayedProxmoxData.data.length) * 100) + "%"
+                    var totalCpu = 0
+                    var onlineCount = 0
+                    for (var i = 0; i < displayedProxmoxData.data.length; i++) {
+                    if (displayedProxmoxData.data[i].status === "online") {
+                    totalCpu += displayedProxmoxData.data[i].cpu
+                    onlineCount++
                     }
+                }
+                if (onlineCount === 0) return "!"
+                return Math.round((totalCpu / onlineCount) * 100) + "%"
+                }
                     return "-"
                 }
                 font.pixelSize: 13
@@ -2064,7 +2076,7 @@ PlasmoidItem {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.margins: 10
-            visible: errorMessage !== "" && configured
+            visible: errorMessage !== "" && !partialFailure && configured
             spacing: 8
 
             RowLayout {
@@ -2180,12 +2192,6 @@ PlasmoidItem {
                         property var nodeVms: getVmsForNode(nodeName)
                         property var nodeLxc: getLxcForNode(nodeName)
                         property bool isCollapsed: isNodeCollapsed(nodeName)
-
-                        // Force relayout on collapse/expand (prevents footer "float" glitches)
-                        onIsCollapsedChanged: {
-                            scrollView.forceLayout()
-                            fullRep.forceLayout()
-                        }
 
                         // Node card
                         Rectangle {
@@ -2855,11 +2861,6 @@ PlasmoidItem {
                                 readonly property var nodeVms: getVmsForNodeMulti(sessionKey, nodeName)
                                 readonly property var nodeLxc: getLxcForNodeMulti(sessionKey, nodeName)
                                 property bool isCollapsed: isNodeCollapsed(nodeName, sessionKey)
-
-                                onIsCollapsedChanged: {
-                                    scrollView.forceLayout()
-                                    fullRep.forceLayout()
-                                }
 
                                 Rectangle {
                                     Layout.fillWidth: true
