@@ -44,9 +44,6 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Known bugs / limitations (see wiki for more info)
 
-- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
-
-
 ## Installation
 
 ```bash
