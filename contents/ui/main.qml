@@ -262,6 +262,7 @@ PlasmoidItem {
         tokenId: apiTokenId
         tokenSecret: resolvedApiTokenSecret
         ignoreSslErrors: ignoreSsl
+        lowLatency: Plasmoid.configuration.lowLatency !== false
 
         onReply: function(seq, kind, node, data) {
             // Ignore late responses from older refresh cycles

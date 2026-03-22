@@ -33,6 +33,11 @@ public:
     bool ignoreSslErrors() const { return m_ignoreSslErrors; }
     void setIgnoreSslErrors(bool v);
 
+    //Low latency properties for quick updates, but require mutating object state and are not multi-session friendly.
+    Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatency NOTIFY lowLatencyChanged)
+    bool lowLatency() const { return m_lowLatency; }
+    void setLowLatency(bool v);
+
     // Single-session (legacy)
     Q_INVOKABLE void requestNodes(int seq);
     Q_INVOKABLE void requestQemu(const QString &node, int seq);
@@ -76,6 +81,7 @@ signals:
     void tokenIdChanged();
     void tokenSecretChanged();
     void ignoreSslErrorsChanged();
+    void lowLatencyChanged();
 
     // kind: "nodes" | "qemu" | "lxc"
     void reply(int seq, const QString &kind, const QString &node, const QVariant &data);
@@ -125,6 +131,6 @@ private:
     QString m_tokenId;
     QString m_tokenSecret;
     bool m_ignoreSslErrors = false;
-
+    bool m_lowLatency = false;
     QSet<QNetworkReply *> m_inFlight;
 };

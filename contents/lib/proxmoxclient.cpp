@@ -65,6 +65,12 @@ void ProxmoxClient::requestLxc(const QString &node, int seq) {
     request(QStringLiteral("/nodes/%1/lxc").arg(node), seq, QStringLiteral("lxc"), node);
 }
 
+void ProxmoxClient::setLowLatency(bool v) {
+    if (m_lowLatency == v) return;
+    m_lowLatency = v;
+    emit lowLatencyChanged();
+}
+
 void ProxmoxClient::requestNodesFor(const QString &sessionKey,
                                     const QString &host,
                                     int port,
@@ -117,7 +123,7 @@ void ProxmoxClient::requestAction(const QString &kind, const QString &node, int 
 
 namespace {
 
-QNetworkRequest buildRequest(const QString &host, int port, const QString &path, const QString &tokenId, const QString &tokenSecret) {
+QNetworkRequest buildRequest(const QString &host, int port, const QString &path, const QString &tokenId, const QString &tokenSecret, int transferTimeoutMs = 10000) {
     const QUrl url(QStringLiteral("https://%1:%2/api2/json%3").arg(host).arg(port).arg(path));
 
     QNetworkRequest req(url);
@@ -128,7 +134,7 @@ QNetworkRequest buildRequest(const QString &host, int port, const QString &path,
     // Header format: Authorization: PVEAPIToken=USER@REALM!TOKENID=UUID
     const QByteArray auth = QByteArray("PVEAPIToken=") + tokenId.toUtf8() + "=" + tokenSecret.toUtf8();
     req.setRawHeader("Authorization", auth);
-    req.setTransferTimeout(10000);
+    req.setTransferTimeout(transferTimeoutMs);
     return req;
 }
 
@@ -256,7 +262,7 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
         return;
     }
 
-    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret);
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, m_lowLatency ? 5000 : 10000);
     QNetworkReply *r = m_nam.get(req);
 
     m_inFlight.insert(r);
@@ -299,7 +305,7 @@ void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind
         return;
     }
 
-    QNetworkRequest req = buildRequest(m_host, m_port, path, m_tokenId, m_tokenSecret);
+    QNetworkRequest req = buildRequest(m_host, m_port, path, m_tokenId, m_tokenSecret, m_lowLatency ? 5000 : 10000);
 
     // Proxmox accepts an empty body for these actions.
     QNetworkReply *r = m_nam.post(req, QByteArray());
