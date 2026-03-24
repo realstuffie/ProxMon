@@ -432,6 +432,19 @@ onError: function(seq, kind, node, message) {
     }
 
 
+    // Redact sensitive identity fragments in debug logs / copied debug output.
+    // Matches "user@realm" and "!tokenid" style segments.
+    property string secretRedactRegex: "([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)|!([A-Za-z0-9._:-]+)"
+
+    function redactSecretsForDebug(str) {
+        str = String(str || "")
+        return str.replace(new RegExp(secretRedactRegex, "g"), function(match, user, realm, tokenId) {
+            if (user && realm) return "REDACTED@" + realm
+            if (tokenId) return "!REDACTED"
+            return match
+        })
+    }
+
     // Debug logging (actions always log; devMode gates noisy logs elsewhere)
     function logDebug(message) {
     var now = new Date()
@@ -442,7 +455,8 @@ onError: function(seq, kind, node, message) {
         now.getMinutes().toString().padStart(2, '0') + ":" +
         now.getSeconds().toString().padStart(2, '0') + "." +
         now.getMilliseconds().toString().padStart(3, '0')
-    var line = "[Proxmox " + timestamp + "] " + message
+    var safeMessage = redactSecretsForDebug(message)
+    var line = "[Proxmox " + timestamp + "] " + safeMessage
     console.log(line)
     var newLog = debugLog.slice()
     newLog.push(line)
@@ -478,7 +492,6 @@ onError: function(seq, kind, node, message) {
         var primaryScanLines = 1000
         var fallbackScanLines = 2000
         var filterRegex = "proxmox|proxmon"
-
         var cmdParts = [
             "sh -lc 'set -e;",
             "if command -v journalctl >/dev/null 2>&1; then",
