@@ -472,17 +472,29 @@ onError: function(seq, kind, node, message) {
     }
 
     function copyDebugInfo() {
-        var text = buildDebugInfo()
+        // Pull plasmashell logs, keep only ProxMon lines, limit copied output.
+        var linesToCopy = 100
+        var sinceWindow = "30 min ago"
+        var primaryScanLines = 1000
+        var fallbackScanLines = 2000
+        var filterRegex = "proxmox|proxmon"
 
-        // Copy debug info to clipboard (no secrets)
-        var cmd = "sh -lc " + "'" +
-            "if command -v wl-copy >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | wl-copy; " +
-            "elif command -v xclip >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | xclip -selection clipboard; " +
-            "else exit 1; fi" +
-            "'"
+        var cmdParts = [
+            "sh -lc 'set -e;",
+            "if command -v journalctl >/dev/null 2>&1; then",
+            "LOGS=$(journalctl --user --unit=plasma-plasmashell.service --since \"" + sinceWindow + "\" -n " + primaryScanLines + " --no-pager 2>/dev/null | grep -Ei \"" + filterRegex + "\" | tail -n " + linesToCopy + " || true);",
+            "if [ -z \"$LOGS\" ]; then",
+            "LOGS=$(journalctl --user --since \"" + sinceWindow + "\" -n " + fallbackScanLines + " --no-pager 2>/dev/null | grep \"plasmashell\" | grep -Ei \"" + filterRegex + "\" | tail -n " + linesToCopy + " || true);",
+            "fi;",
+            "if command -v wl-copy >/dev/null 2>&1; then printf %s \"$LOGS\" | wl-copy;",
+            "elif command -v xclip >/dev/null 2>&1; then printf %s \"$LOGS\" | xclip -selection clipboard;",
+            "else exit 1; fi;",
+            "else exit 1; fi'"
+        ]
 
+        var cmd = cmdParts.join(" ")
         executable.connectSource(cmd)
-        sendNotification("Debug info copied", "Copied widget debug info to clipboard (no secrets).", "dialog-information")
+        sendNotification("Debug logs copied")
     }
 
     // ==================== NOTIFICATION FUNCTIONS ====================
