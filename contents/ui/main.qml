@@ -275,13 +275,18 @@ PlasmoidItem {
                     loading = false
                 }
 
+                if (data && data.data) {
+                    data.data.sort(function(a, b) {
+                        return a.node.localeCompare(b.node)
+                    })
+                }
                 proxmoxData = data
                 errorMessage = ""
                 lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
                 resetRetryState()
 
                 if (proxmoxData && proxmoxData.data && proxmoxData.data.length > 0) {
-                    nodeList = proxmoxData.data.map(function(n) { return n.node })
+                    nodeList = proxmoxData.data.map(function(n) { return n.node }).sort()
 
                     tempVmData = []
                     tempLxcData = []
