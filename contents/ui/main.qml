@@ -2805,18 +2805,6 @@ onError: function(seq, kind, node, message) {
                                 Layout.leftMargin: 4
                             }
                         }
-
-                        // Node separator
-                        Rectangle {
-                            Layout.fillWidth: true
-                            // Keep a gutter so the separator line doesn't run under the overlay scrollbar
-                            Layout.rightMargin: scrollView.__scrollbarReserve
-                            Layout.preferredHeight: 1
-                            color: Kirigami.Theme.disabledTextColor
-                            opacity: 0.3
-                            visible: nodeIndex < (root.displayedProxmoxData.data.length - 1)
-                            Layout.topMargin: 4
-                        }
                     }
                 }
 
@@ -3158,15 +3146,6 @@ onError: function(seq, kind, node, message) {
                                         font.pixelSize: 10
                                         Layout.leftMargin: 4
                                     }
-                                }
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 1
-                                    color: Kirigami.Theme.disabledTextColor
-                                    opacity: 0.3
-                                    visible: index < (nodes.length - 1)
-                                    Layout.topMargin: 4
                                 }
                             }
                         }
