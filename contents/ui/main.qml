@@ -2248,6 +2248,7 @@ onError: function(seq, kind, node, message) {
 
                                 RowLayout {
                                     spacing: 8
+                                    Layout.fillWidth: true
 
                                     Kirigami.Icon {
                                         source: isCollapsed ? "arrow-right" : "arrow-down"
@@ -2264,6 +2265,8 @@ onError: function(seq, kind, node, message) {
                                     PlasmaComponents.Label {
                                         text: anonymizeNodeName(nodeModel.node, nodeIndex)
                                         font.bold: true
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
                                     }
 
                                         Rectangle {
@@ -2901,6 +2904,7 @@ onError: function(seq, kind, node, message) {
 
                                         RowLayout {
                                             spacing: 8
+                                            Layout.fillWidth: true
 
                                             Kirigami.Icon {
                                                 source: isCollapsed ? "arrow-right" : "arrow-down"
