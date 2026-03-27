@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Network Qml DBus)
 
 set(CMAKE_AUTOMOC ON)
+set(QT_QML_LINT_OPTIONS --disable-warning unqualified)
 
 # Bundled dependency: QtKeychain (stores secrets in the desktop keyring: KWallet/libsecret/etc)
 # Build it with Qt6 (this project uses Qt6)

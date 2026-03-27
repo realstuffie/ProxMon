@@ -275,13 +275,18 @@ PlasmoidItem {
                     loading = false
                 }
 
+                if (data && data.data) {
+                    data.data.sort(function(a, b) {
+                        return a.node.localeCompare(b.node)
+                    })
+                }
                 proxmoxData = data
                 errorMessage = ""
                 lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
                 resetRetryState()
 
                 if (proxmoxData && proxmoxData.data && proxmoxData.data.length > 0) {
-                    nodeList = proxmoxData.data.map(function(n) { return n.node })
+                    nodeList = proxmoxData.data.map(function(n) { return n.node }).sort()
 
                     tempVmData = []
                     tempLxcData = []
@@ -427,6 +432,19 @@ onError: function(seq, kind, node, message) {
     }
 
 
+    // Redact sensitive identity fragments in debug logs / copied debug output.
+    // Matches "user@realm" and "!tokenid" style segments.
+    property string secretRedactRegex: "([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)|!([A-Za-z0-9._:-]+)"
+
+    function redactSecretsForDebug(str) {
+        str = String(str || "")
+        return str.replace(new RegExp(secretRedactRegex, "g"), function(match, user, realm, tokenId) {
+            if (user && realm) return "REDACTED@" + realm
+            if (tokenId) return "!REDACTED"
+            return match
+        })
+    }
+
     // Debug logging (actions always log; devMode gates noisy logs elsewhere)
     function logDebug(message) {
     var now = new Date()
@@ -437,7 +455,8 @@ onError: function(seq, kind, node, message) {
         now.getMinutes().toString().padStart(2, '0') + ":" +
         now.getSeconds().toString().padStart(2, '0') + "." +
         now.getMilliseconds().toString().padStart(3, '0')
-    var line = "[Proxmox " + timestamp + "] " + message
+    var safeMessage = redactSecretsForDebug(message)
+    var line = "[Proxmox " + timestamp + "] " + safeMessage
     console.log(line)
     var newLog = debugLog.slice()
     newLog.push(line)
@@ -467,17 +486,28 @@ onError: function(seq, kind, node, message) {
     }
 
     function copyDebugInfo() {
-        var text = buildDebugInfo()
+        // Pull plasmashell logs, keep only ProxMon lines, limit copied output.
+        var linesToCopy = 100
+        var sinceWindow = "30 min ago"
+        var primaryScanLines = 1000
+        var fallbackScanLines = 2000
+        var filterRegex = "proxmox|proxmon"
+        var cmdParts = [
+            "sh -lc 'set -e;",
+            "if command -v journalctl >/dev/null 2>&1; then",
+            "LOGS=$(journalctl --user --unit=plasma-plasmashell.service --since \"" + sinceWindow + "\" -n " + primaryScanLines + " --no-pager 2>/dev/null | grep -Ei \"" + filterRegex + "\" | tail -n " + linesToCopy + " || true);",
+            "if [ -z \"$LOGS\" ]; then",
+            "LOGS=$(journalctl --user --since \"" + sinceWindow + "\" -n " + fallbackScanLines + " --no-pager 2>/dev/null | grep \"plasmashell\" | grep -Ei \"" + filterRegex + "\" | tail -n " + linesToCopy + " || true);",
+            "fi;",
+            "if command -v wl-copy >/dev/null 2>&1; then printf %s \"$LOGS\" | wl-copy;",
+            "elif command -v xclip >/dev/null 2>&1; then printf %s \"$LOGS\" | xclip -selection clipboard;",
+            "else exit 1; fi;",
+            "else exit 1; fi'"
+        ]
 
-        // Copy debug info to clipboard (no secrets)
-        var cmd = "sh -lc " + "'" +
-            "if command -v wl-copy >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | wl-copy; " +
-            "elif command -v xclip >/dev/null 2>&1; then printf %s " + escapeShell(text) + " | xclip -selection clipboard; " +
-            "else exit 1; fi" +
-            "'"
-
+        var cmd = cmdParts.join(" ")
         executable.connectSource(cmd)
-        sendNotification("Debug info copied", "Copied widget debug info to clipboard (no secrets).", "dialog-information")
+        sendNotification("Debug logs copied")
     }
 
     // ==================== NOTIFICATION FUNCTIONS ====================
@@ -2218,6 +2248,7 @@ onError: function(seq, kind, node, message) {
 
                                 RowLayout {
                                     spacing: 8
+                                    Layout.fillWidth: true
 
                                     Kirigami.Icon {
                                         source: isCollapsed ? "arrow-right" : "arrow-down"
@@ -2234,6 +2265,8 @@ onError: function(seq, kind, node, message) {
                                     PlasmaComponents.Label {
                                         text: anonymizeNodeName(nodeModel.node, nodeIndex)
                                         font.bold: true
+                                        Layout.fillWidth: true
+                                        elide: Text.ElideRight
                                     }
 
                                         Rectangle {
@@ -2775,18 +2808,6 @@ onError: function(seq, kind, node, message) {
                                 Layout.leftMargin: 4
                             }
                         }
-
-                        // Node separator
-                        Rectangle {
-                            Layout.fillWidth: true
-                            // Keep a gutter so the separator line doesn't run under the overlay scrollbar
-                            Layout.rightMargin: scrollView.__scrollbarReserve
-                            Layout.preferredHeight: 1
-                            color: Kirigami.Theme.disabledTextColor
-                            opacity: 0.3
-                            visible: nodeIndex < (root.displayedProxmoxData.data.length - 1)
-                            Layout.topMargin: 4
-                        }
                     }
                 }
 
@@ -2883,6 +2904,7 @@ onError: function(seq, kind, node, message) {
 
                                         RowLayout {
                                             spacing: 8
+                                            Layout.fillWidth: true
 
                                             Kirigami.Icon {
                                                 source: isCollapsed ? "arrow-right" : "arrow-down"
@@ -3128,15 +3150,6 @@ onError: function(seq, kind, node, message) {
                                         font.pixelSize: 10
                                         Layout.leftMargin: 4
                                     }
-                                }
-
-                                Rectangle {
-                                    Layout.fillWidth: true
-                                    Layout.preferredHeight: 1
-                                    color: Kirigami.Theme.disabledTextColor
-                                    opacity: 0.3
-                                    visible: index < (nodes.length - 1)
-                                    Layout.topMargin: 4
                                 }
                             }
                         }
