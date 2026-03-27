@@ -445,24 +445,27 @@ onError: function(seq, kind, node, message) {
         })
     }
 
-    // Debug logging (actions always log; devMode gates noisy logs elsewhere)
+    // Debug logging is gated behind developer mode to avoid flooding the user journal.
     function logDebug(message) {
-    var now = new Date()
-    var timestamp = now.getFullYear() + "-" +
-        (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
-        now.getDate().toString().padStart(2, '0') + " " +
-        now.getHours().toString().padStart(2, '0') + ":" +
-        now.getMinutes().toString().padStart(2, '0') + ":" +
-        now.getSeconds().toString().padStart(2, '0') + "." +
-        now.getMilliseconds().toString().padStart(3, '0')
-    var safeMessage = redactSecretsForDebug(message)
-    var line = "[Proxmox " + timestamp + "] " + safeMessage
-    console.log(line)
-    var newLog = debugLog.slice()
-    newLog.push(line)
-    if (newLog.length > debugLogMaxLines) newLog.splice(0, newLog.length - debugLogMaxLines)
-    debugLog = newLog
-}
+        if (!devMode) return
+
+        var now = new Date()
+        var timestamp = now.getFullYear() + "-" +
+            (now.getMonth() + 1).toString().padStart(2, '0') + "-" +
+            now.getDate().toString().padStart(2, '0') + " " +
+            now.getHours().toString().padStart(2, '0') + ":" +
+            now.getMinutes().toString().padStart(2, '0') + ":" +
+            now.getSeconds().toString().padStart(2, '0') + "." +
+            now.getMilliseconds().toString().padStart(3, '0')
+        var safeMessage = redactSecretsForDebug(message)
+        var line = "[Proxmox " + timestamp + "] " + safeMessage
+        console.log(line)
+
+        var newLog = debugLog.slice()
+        newLog.push(line)
+        if (newLog.length > debugLogMaxLines) newLog.splice(0, newLog.length - debugLogMaxLines)
+        debugLog = newLog
+    }
 
     function buildDebugInfo() {
         var info = {
@@ -983,7 +986,7 @@ onError: function(seq, kind, node, message) {
         if (footerClickCount >= 3) {
             devMode = !devMode
             footerClickCount = 0
-            console.log("[Proxmox] Developer mode: " + (devMode ? "ENABLED" : "DISABLED"))
+            logDebug("Developer mode: ENABLED")
         }
         footerClickTimer.restart()
     }
