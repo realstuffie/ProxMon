@@ -1,0 +1,200 @@
+import QtQuick.tooling 1.2
+
+Module {
+    Component {
+        file: "proxmoxclient.h"
+        lineNumber: 8
+        name: "ProxmoxClient"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["org.kde.plasma.proxmox/ProxmoxClient 1.0"]
+        exportMetaObjectRevisions: [256]
+
+        Property { name: "host"; type: "QString"; read: "host"; write: "setHost"; notify: "hostChanged" }
+        Property { name: "port"; type: "int"; read: "port"; write: "setPort"; notify: "portChanged" }
+        Property { name: "tokenId"; type: "QString"; read: "tokenId"; write: "setTokenId"; notify: "tokenIdChanged" }
+        Property { name: "tokenSecret"; type: "QString"; read: "tokenSecret"; write: "setTokenSecret"; notify: "tokenSecretChanged" }
+        Property { name: "ignoreSslErrors"; type: "bool"; read: "ignoreSslErrors"; write: "setIgnoreSslErrors"; notify: "ignoreSslErrorsChanged" }
+        Property { name: "lowLatency"; type: "bool"; read: "lowLatency"; write: "setLowLatency"; notify: "lowLatencyChanged" }
+
+        Signal { name: "hostChanged" }
+        Signal { name: "portChanged" }
+        Signal { name: "tokenIdChanged" }
+        Signal { name: "tokenSecretChanged" }
+        Signal { name: "ignoreSslErrorsChanged" }
+        Signal { name: "lowLatencyChanged" }
+        Signal {
+            name: "reply"
+            Parameter { name: "seq"; type: "int" }
+            Parameter { name: "kind"; type: "QString" }
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "data"; type: "QVariant" }
+        }
+        Signal {
+            name: "error"
+            Parameter { name: "seq"; type: "int" }
+            Parameter { name: "kind"; type: "QString" }
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "message"; type: "QString" }
+        }
+        Signal {
+            name: "replyFor"
+            Parameter { name: "seq"; type: "int" }
+            Parameter { name: "sessionKey"; type: "QString" }
+            Parameter { name: "kind"; type: "QString" }
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "data"; type: "QVariant" }
+        }
+        Signal {
+            name: "errorFor"
+            Parameter { name: "seq"; type: "int" }
+            Parameter { name: "sessionKey"; type: "QString" }
+            Parameter { name: "kind"; type: "QString" }
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "message"; type: "QString" }
+        }
+        Signal {
+            name: "actionReply"
+            Parameter { name: "seq"; type: "int" }
+            Parameter { name: "actionKind"; type: "QString" }
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "vmid"; type: "int" }
+            Parameter { name: "action"; type: "QString" }
+            Parameter { name: "data"; type: "QVariant" }
+        }
+        Signal {
+            name: "actionError"
+            Parameter { name: "seq"; type: "int" }
+            Parameter { name: "actionKind"; type: "QString" }
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "vmid"; type: "int" }
+            Parameter { name: "action"; type: "QString" }
+            Parameter { name: "message"; type: "QString" }
+        }
+
+        Method {
+            name: "requestNodes"
+            Parameter { name: "seq"; type: "int" }
+        }
+        Method {
+            name: "requestQemu"
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "seq"; type: "int" }
+        }
+        Method {
+            name: "requestLxc"
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "seq"; type: "int" }
+        }
+        Method {
+            name: "requestNodesFor"
+            Parameter { name: "sessionKey"; type: "QString" }
+            Parameter { name: "host"; type: "QString" }
+            Parameter { name: "port"; type: "int" }
+            Parameter { name: "tokenId"; type: "QString" }
+            Parameter { name: "tokenSecret"; type: "QString" }
+            Parameter { name: "ignoreSslErrors"; type: "bool" }
+            Parameter { name: "seq"; type: "int" }
+        }
+        Method {
+            name: "requestQemuFor"
+            Parameter { name: "sessionKey"; type: "QString" }
+            Parameter { name: "host"; type: "QString" }
+            Parameter { name: "port"; type: "int" }
+            Parameter { name: "tokenId"; type: "QString" }
+            Parameter { name: "tokenSecret"; type: "QString" }
+            Parameter { name: "ignoreSslErrors"; type: "bool" }
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "seq"; type: "int" }
+        }
+        Method {
+            name: "requestLxcFor"
+            Parameter { name: "sessionKey"; type: "QString" }
+            Parameter { name: "host"; type: "QString" }
+            Parameter { name: "port"; type: "int" }
+            Parameter { name: "tokenId"; type: "QString" }
+            Parameter { name: "tokenSecret"; type: "QString" }
+            Parameter { name: "ignoreSslErrors"; type: "bool" }
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "seq"; type: "int" }
+        }
+        Method {
+            name: "requestAction"
+            Parameter { name: "kind"; type: "QString" }
+            Parameter { name: "node"; type: "QString" }
+            Parameter { name: "vmid"; type: "int" }
+            Parameter { name: "action"; type: "QString" }
+            Parameter { name: "seq"; type: "int" }
+        }
+        Method { name: "cancelAll" }
+    }
+
+    Component {
+        file: "secretstore.h"
+        lineNumber: 5
+        name: "SecretStore"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["org.kde.plasma.proxmox/SecretStore 1.0"]
+        exportMetaObjectRevisions: [256]
+
+        Property { name: "service"; type: "QString"; read: "service"; write: "setService"; notify: "serviceChanged" }
+        Property { name: "key"; type: "QString"; read: "key"; write: "setKey"; notify: "keyChanged" }
+
+        Signal { name: "serviceChanged" }
+        Signal { name: "keyChanged" }
+        Signal {
+            name: "secretReady"
+            Parameter { name: "secret"; type: "QString" }
+        }
+        Signal {
+            name: "writeFinished"
+            Parameter { name: "ok"; type: "bool" }
+            Parameter { name: "error"; type: "QString" }
+        }
+        Signal {
+            name: "deleteFinished"
+            Parameter { name: "ok"; type: "bool" }
+            Parameter { name: "error"; type: "QString" }
+        }
+        Signal {
+            name: "error"
+            Parameter { name: "message"; type: "QString" }
+        }
+        Signal {
+            name: "keysReady"
+            Parameter { name: "keys"; type: "QStringList" }
+        }
+        Signal {
+            name: "keyListError"
+            Parameter { name: "message"; type: "QString" }
+        }
+
+        Method { name: "readSecret" }
+        Method {
+            name: "writeSecret"
+            Parameter { name: "secret"; type: "QString" }
+        }
+        Method { name: "deleteSecret" }
+        Method { name: "listKWalletKeys" }
+    }
+
+    Component {
+        file: "notifier.h"
+        lineNumber: 8
+        name: "Notifier"
+        accessSemantics: "reference"
+        prototype: "QObject"
+        exports: ["org.kde.plasma.proxmox/Notifier 1.0"]
+        exportMetaObjectRevisions: [256]
+
+        Method {
+            name: "notify"
+            type: "bool"
+            Parameter { name: "title"; type: "QString" }
+            Parameter { name: "message"; type: "QString" }
+            Parameter { name: "iconName"; type: "QString" }
+            Parameter { name: "timeoutMs"; type: "int" }
+        }
+    }
+}
