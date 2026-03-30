@@ -32,7 +32,7 @@ PlasmoidItem {
         txt += " · " + runningVMs + "/" + displayedVmData.length + " VMs"
         txt += " · " + runningLXC + "/" + displayedLxcData.length + " CTs"
         if (lastUpdate) txt += "\nUpdated: " + lastUpdate
-        return txt
+        return txt 
     }
 
     // ==================== CONNECTION / MODE ====================
@@ -2053,6 +2053,8 @@ onError: function(seq, kind, node, message) {
                     return "Not Configured"
                 }
                 font.bold: true
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
                 Layout.alignment: Qt.AlignHCenter
             }
 
@@ -2066,6 +2068,7 @@ onError: function(seq, kind, node, message) {
                 }
                 opacity: 0.7
                 wrapMode: Text.WordWrap
+                Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 Layout.alignment: Qt.AlignHCenter
                 Layout.maximumWidth: 320
