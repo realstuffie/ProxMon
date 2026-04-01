@@ -67,6 +67,7 @@ PlasmoidItem {
     // Per-endpoint secret load progress
     property int secretsResolved: 0
     property int secretsTotal: 0
+    property bool multiSecretHadError: false
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
@@ -271,10 +272,6 @@ PlasmoidItem {
             if (connectionMode !== "single") return
 
             if (kind === "nodes") {
-                if (!displayedProxmoxData) {
-                    loading = false
-                }
-
                 if (data && data.data) {
                     data.data.sort(function(a, b) {
                         return a.node.localeCompare(b.node)
@@ -518,7 +515,8 @@ onError: function(seq, kind, node, message) {
     // Escape regex special chars except "*" (wildcard)
     function escapeRegexPattern(str) {
         if (!str) return ""
-        // Escape everything that has meaning in a regex
+        // Escape regex metacharacters but intentionally leave "*" untouched so
+        // shouldNotify() can expand wildcard filters into ".*" afterwards.
         return str.replace(/[.+?^${}()|[\]\\]/g, "\\$&")
     }
 
@@ -551,7 +549,9 @@ onError: function(seq, kind, node, message) {
         var matches = filters.some(function(filter) {
             // Check for wildcard patterns
             if (filter.indexOf("*") !== -1) {
-                var escaped = escapeRegexPattern(filter).replace(/\\\*/g, ".*")
+                // Expand literal wildcard markers only after escaping the rest of
+                // the pattern; otherwise inputs like "web*" become /^web\*$/.
+                var escaped = escapeRegexPattern(filter).replace(/\*/g, ".*")
                 var regex = new RegExp("^" + escaped + "$")
                 return regex.test(nameL) || regex.test(vmidStr)
             }
@@ -644,11 +644,174 @@ onError: function(seq, kind, node, message) {
     // Test notifications function (dev mode)
     function testNotifications() {
         logDebug("Testing notifications...")
-        sendNotification("VM Stopped", "test-vm (100) on pve1 is now stopped", "dialog-warning", "test:vmStopped")
+        sendNotification("VM Stopped", "test-vm (100) on pve1 is now stopped", "dialog-warning")
+    }
+
+    // Multi-host notification state keys must be namespaced by endpoint/session so
+    // identical node names / VMIDs on different endpoints do not overwrite each other.
+    function multiHostNodeStateKey(sessionKey, nodeName) {
+        return String(sessionKey) + "::" + String(nodeName || "")
+    }
+
+    function multiHostVmStateKey(sessionKey, nodeName, vmid) {
+        return String(sessionKey) + "::" + String(nodeName || "") + "_vm_" + vmid
+    }
+
+    function multiHostLxcStateKey(sessionKey, nodeName, vmid) {
+        return String(sessionKey) + "::" + String(nodeName || "") + "_lxc_" + vmid
     }
 
     // Check for state changes and send notifications
     function checkStateChanges() {
+        if (connectionMode === "multiHost") {
+            // No displayed endpoint buckets means there is nothing stable to compare yet.
+            if (!displayedEndpoints || displayedEndpoints.length === 0) return
+
+            if (!initialLoadComplete) {
+                logDebug("checkStateChanges(multi): Initial load, recording states")
+
+                // Record initial node states per endpoint/session.
+                for (var mn = 0; mn < displayedEndpoints.length; mn++) {
+                    var endpoint = displayedEndpoints[mn]
+                    if (!endpoint || !endpoint.sessionKey || !endpoint.nodes) continue
+
+                    for (var mni = 0; mni < endpoint.nodes.length; mni++) {
+                        var multiNode = endpoint.nodes[mni]
+                        previousNodeStates[multiHostNodeStateKey(endpoint.sessionKey, multiNode.node)] = multiNode.status
+                    }
+                }
+
+                // Record initial VM states per endpoint/session. Items missing sessionKey
+                // are ignored silently so partial/malformed multi-host data does not spam logs.
+                for (var mvi = 0; mvi < displayedVmData.length; mvi++) {
+                    var multiVm = displayedVmData[mvi]
+                    if (!multiVm || !multiVm.sessionKey) continue
+                    previousVmStates[multiHostVmStateKey(multiVm.sessionKey, multiVm.node, multiVm.vmid)] = multiVm.status
+                }
+
+                // Record initial LXC states per endpoint/session.
+                for (var mli = 0; mli < displayedLxcData.length; mli++) {
+                    var multiLxc = displayedLxcData[mli]
+                    if (!multiLxc || !multiLxc.sessionKey) continue
+                    previousLxcStates[multiHostLxcStateKey(multiLxc.sessionKey, multiLxc.node, multiLxc.vmid)] = multiLxc.status
+                }
+
+                initialLoadComplete = true
+                logDebug("checkStateChanges: Recorded " + Object.keys(previousNodeStates).length + " node states, " +
+                         Object.keys(previousVmStates).length + " VM states, " +
+                         Object.keys(previousLxcStates).length + " LXC states")
+                return
+            }
+
+            // Check nodes for state changes per endpoint/session.
+            if (notifyOnNodeChange) {
+                for (var mei = 0; mei < displayedEndpoints.length; mei++) {
+                    var endpointData = displayedEndpoints[mei]
+                    if (!endpointData || !endpointData.sessionKey || !endpointData.nodes) continue
+
+                    for (var mni2 = 0; mni2 < endpointData.nodes.length; mni2++) {
+                        var nodeDataMulti = endpointData.nodes[mni2]
+                        var nodeStateKey = multiHostNodeStateKey(endpointData.sessionKey, nodeDataMulti.node)
+                        var prevNodeStateMulti = previousNodeStates[nodeStateKey]
+
+                        if (prevNodeStateMulti !== undefined && prevNodeStateMulti !== nodeDataMulti.status) {
+                            logDebug("checkStateChanges: Node " + nodeDataMulti.node + " changed from " + prevNodeStateMulti + " to " + nodeDataMulti.status)
+
+                            if (prevNodeStateMulti === "online" && nodeDataMulti.status !== "online") {
+                                sendNotification(
+                                    "Node Offline",
+                                    nodeDataMulti.node + " is now " + nodeDataMulti.status,
+                                    "dialog-error",
+                                    "node:" + nodeDataMulti.node + ":offline"
+                                )
+                            } else if (prevNodeStateMulti !== "online" && nodeDataMulti.status === "online") {
+                                sendNotification(
+                                    "Node Online",
+                                    nodeDataMulti.node + " is back online",
+                                    "dialog-information",
+                                    "node:" + nodeDataMulti.node + ":online"
+                                )
+                            }
+                        }
+                        previousNodeStates[nodeStateKey] = nodeDataMulti.status
+                    }
+                }
+            }
+
+            // Check VMs for state changes per endpoint/session while keeping existing
+            // notification content and rate-limit keys unchanged.
+            for (var mvm = 0; mvm < displayedVmData.length; mvm++) {
+                var vmItemMulti = displayedVmData[mvm]
+                if (!vmItemMulti || !vmItemMulti.sessionKey) continue
+
+                var vmStateKeyMulti = multiHostVmStateKey(vmItemMulti.sessionKey, vmItemMulti.node, vmItemMulti.vmid)
+                var prevVmStateMulti = previousVmStates[vmStateKeyMulti]
+
+                if (prevVmStateMulti !== undefined && prevVmStateMulti !== vmItemMulti.status) {
+                    logDebug("checkStateChanges: VM " + vmItemMulti.name + " changed from " + prevVmStateMulti + " to " + vmItemMulti.status)
+
+                    if (shouldNotify(vmItemMulti.name, vmItemMulti.vmid)) {
+                        if (notifyOnStop && prevVmStateMulti === "running" && vmItemMulti.status !== "running") {
+                            sendNotification(
+                                "VM Stopped",
+                                vmItemMulti.name + " (" + vmItemMulti.vmid + ") on " + vmItemMulti.node + " is now " + vmItemMulti.status,
+                                "dialog-warning",
+                                "vm:" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":stopped"
+                            )
+                        } else if (notifyOnStart && prevVmStateMulti !== "running" && vmItemMulti.status === "running") {
+                            sendNotification(
+                                "VM Started",
+                                vmItemMulti.name + " (" + vmItemMulti.vmid + ") on " + vmItemMulti.node + " is now running",
+                                "dialog-information",
+                                "vm:" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":running"
+                            )
+                        }
+                    } else {
+                        logDebug("checkStateChanges: Notification filtered for VM " + vmItemMulti.name)
+                    }
+                }
+                previousVmStates[vmStateKeyMulti] = vmItemMulti.status
+            }
+
+            // Check LXCs for state changes per endpoint/session while keeping existing
+            // notification content and rate-limit keys unchanged.
+            for (var mlx = 0; mlx < displayedLxcData.length; mlx++) {
+                var lxcItemMulti = displayedLxcData[mlx]
+                if (!lxcItemMulti || !lxcItemMulti.sessionKey) continue
+
+                var lxcStateKeyMulti = multiHostLxcStateKey(lxcItemMulti.sessionKey, lxcItemMulti.node, lxcItemMulti.vmid)
+                var prevLxcStateMulti = previousLxcStates[lxcStateKeyMulti]
+
+                if (prevLxcStateMulti !== undefined && prevLxcStateMulti !== lxcItemMulti.status) {
+                    logDebug("checkStateChanges: LXC " + lxcItemMulti.name + " changed from " + prevLxcStateMulti + " to " + lxcItemMulti.status)
+
+                    if (shouldNotify(lxcItemMulti.name, lxcItemMulti.vmid)) {
+                        if (notifyOnStop && prevLxcStateMulti === "running" && lxcItemMulti.status !== "running") {
+                            sendNotification(
+                                "Container Stopped",
+                                lxcItemMulti.name + " (" + lxcItemMulti.vmid + ") on " + lxcItemMulti.node + " is now " + lxcItemMulti.status,
+                                "dialog-warning",
+                                "lxc:" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":stopped"
+                            )
+                        } else if (notifyOnStart && prevLxcStateMulti !== "running" && lxcItemMulti.status === "running") {
+                            sendNotification(
+                                "Container Started",
+                                lxcItemMulti.name + " (" + lxcItemMulti.vmid + ") on " + lxcItemMulti.node + " is now running",
+                                "dialog-information",
+                                "lxc:" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":running"
+                            )
+                        }
+                    } else {
+                        logDebug("checkStateChanges: Notification filtered for LXC " + lxcItemMulti.name)
+                    }
+                }
+                previousLxcStates[lxcStateKeyMulti] = lxcItemMulti.status
+            }
+
+            logDebug("checkStateChanges: State check complete")
+            return
+        }
+
         if (!initialLoadComplete) {
             logDebug("checkStateChanges: Initial load, recording states")
 
@@ -1328,6 +1491,7 @@ onError: function(seq, kind, node, message) {
 
     function startMultiSecretResolution() {
         secretsResolved = 0
+        multiSecretHadError = false
         tempEndpoints = []
         secretQueue = buildSecretQueue()
         secretsTotal = secretQueue.length
@@ -1347,7 +1511,13 @@ onError: function(seq, kind, node, message) {
         if (secretQueueIndex >= secretQueue.length) {
             // done
             endpoints = tempEndpoints.slice()
-            secretState = (endpoints.length > 0) ? "ready" : "missing"
+            if (endpoints.length > 0) {
+                secretState = "ready"
+            } else if (multiSecretHadError) {
+                secretState = "error"
+            } else {
+                secretState = "missing"
+            }
             return
         }
 
@@ -1511,7 +1681,9 @@ onError: function(seq, kind, node, message) {
         isRefreshing = false
         loading = false
 
-        // TODO: state change notifications across endpoints (future).
+        // Reuse the shared state-change notification path now that multi-host state
+        // keys are namespaced by endpoint/session.
+        checkStateChanges()
     }
 
     // Try multiple keys for backwards compatibility (older formatting / pre-normalization).
@@ -1670,6 +1842,17 @@ onError: function(seq, kind, node, message) {
         }
 
         onError: function(message) {
+            if (connectionMode === "multiHost" && secretState === "loading" && secretQueue && secretQueue.length > 0) {
+                // Hard keyring failures should keep the multi-host queue moving while
+                // preserving the distinction between "missing" and "error".
+                multiSecretHadError = true
+                secretsResolved += 1
+                secretQueueIndex += 1
+                logDebug("secretStore: " + message)
+                readNextMultiSecret()
+                return
+            }
+
             secretState = "error"
             logDebug("secretStore: " + message)
         }
@@ -1928,17 +2111,40 @@ onError: function(seq, kind, node, message) {
 
                     if (errorMessage) return "!"
 
+                    if (connectionMode === "multiHost") {
+                    if (!displayedEndpoints || displayedEndpoints.length === 0) return "-"
+                    var totalCpu = 0
+                    var onlineCount = 0
+                    for (var ei = 0; ei < displayedEndpoints.length; ei++) {
+                    var endpoint = displayedEndpoints[ei]
+                    if (!endpoint || !endpoint.nodes) continue
+                    for (var ni = 0; ni < endpoint.nodes.length; ni++) {
+                    var node = endpoint.nodes[ni]
+                    if (node && node.status === "online") {
+                    // Multi-host compact CPU must use the same clamped percentage
+                    // path as the single-host/full-card UI.
+                    totalCpu += safeCpuPercent(node.cpu)
+                    onlineCount++
+                    }
+                    }
+                    }
+                    if (onlineCount === 0) return "!"
+                    return Math.round(totalCpu / onlineCount) + "%"
+                    }
+
                     if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
                     var totalCpu = 0
                     var onlineCount = 0
                     for (var i = 0; i < displayedProxmoxData.data.length; i++) {
                     if (displayedProxmoxData.data[i].status === "online") {
-                    totalCpu += displayedProxmoxData.data[i].cpu
+                    // safeCpuPercent() already returns a clamped 0..100 percentage,
+                    // so average those values directly without multiplying by 100 again.
+                    totalCpu += safeCpuPercent(displayedProxmoxData.data[i].cpu)
                     onlineCount++
                     }
                 }
                 if (onlineCount === 0) return "!"
-                return Math.round((totalCpu / onlineCount) * 100) + "%"
+                return Math.round(totalCpu / onlineCount) + "%"
                 }
                     return "-"
                 }
@@ -1974,7 +2180,11 @@ onError: function(seq, kind, node, message) {
             Layout.preferredHeight: 36
 
             PlasmaComponents.Label {
-                text: configured ? "Proxmox - " + anonymizeHost(proxmoxHost) : "Proxmox Monitor"
+                text: configured
+                    ? (connectionMode === "multiHost"
+                       ? "Proxmox - " + displayedEndpoints.length + " hosts"
+                       : "Proxmox - " + anonymizeHost(proxmoxHost))
+                    : "Proxmox Monitor"
                 font.bold: true
                 Layout.fillWidth: true
             }
@@ -2927,6 +3137,8 @@ onError: function(seq, kind, node, message) {
                                             PlasmaComponents.Label {
                                                 text: anonymizeNodeName(nodeName, index)
                                                 font.bold: true
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
                                             }
 
                                             Rectangle {
