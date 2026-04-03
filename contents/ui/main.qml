@@ -722,14 +722,14 @@ onError: function(seq, kind, node, message) {
                                     "Node Offline",
                                     nodeDataMulti.node + " is now " + nodeDataMulti.status,
                                     "dialog-error",
-                                    "node:" + nodeDataMulti.node + ":offline"
+                                    "node:" + endpointData.sessionKey + ":" + nodeDataMulti.node + ":offline"
                                 )
                             } else if (prevNodeStateMulti !== "online" && nodeDataMulti.status === "online") {
                                 sendNotification(
                                     "Node Online",
                                     nodeDataMulti.node + " is back online",
                                     "dialog-information",
-                                    "node:" + nodeDataMulti.node + ":online"
+                                    "node:" + endpointData.sessionKey + ":" + nodeDataMulti.node + ":online"
                                 )
                             }
                         }
@@ -756,14 +756,14 @@ onError: function(seq, kind, node, message) {
                                 "VM Stopped",
                                 vmItemMulti.name + " (" + vmItemMulti.vmid + ") on " + vmItemMulti.node + " is now " + vmItemMulti.status,
                                 "dialog-warning",
-                                "vm:" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":stopped"
+                                "vm:" + vmItemMulti.sessionKey + ":" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":stopped"
                             )
                         } else if (notifyOnStart && prevVmStateMulti !== "running" && vmItemMulti.status === "running") {
                             sendNotification(
                                 "VM Started",
                                 vmItemMulti.name + " (" + vmItemMulti.vmid + ") on " + vmItemMulti.node + " is now running",
                                 "dialog-information",
-                                "vm:" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":running"
+                                "vm:" + vmItemMulti.sessionKey + ":" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":running"
                             )
                         }
                     } else {
@@ -791,14 +791,14 @@ onError: function(seq, kind, node, message) {
                                 "Container Stopped",
                                 lxcItemMulti.name + " (" + lxcItemMulti.vmid + ") on " + lxcItemMulti.node + " is now " + lxcItemMulti.status,
                                 "dialog-warning",
-                                "lxc:" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":stopped"
+                                "lxc:" + lxcItemMulti.sessionKey + ":" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":stopped"
                             )
                         } else if (notifyOnStart && prevLxcStateMulti !== "running" && lxcItemMulti.status === "running") {
                             sendNotification(
                                 "Container Started",
                                 lxcItemMulti.name + " (" + lxcItemMulti.vmid + ") on " + lxcItemMulti.node + " is now running",
                                 "dialog-information",
-                                "lxc:" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":running"
+                                "lxc:" + lxcItemMulti.sessionKey + ":" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":running"
                             )
                         }
                     } else {
