@@ -3101,6 +3101,7 @@ onError: function(seq, kind, node, message) {
 
                                 Rectangle {
                                     Layout.fillWidth: true
+                                    Layout.rightMargin: scrollView.__scrollbarReserve
                                     Layout.preferredHeight: 70
                                     radius: uiRadiusL
                                     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.98)
@@ -3220,6 +3221,7 @@ onError: function(seq, kind, node, message) {
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     Layout.leftMargin: 12
+                                    Layout.rightMargin: scrollView.__scrollbarReserve
                                     visible: !isCollapsed
                                     spacing: 4
 
