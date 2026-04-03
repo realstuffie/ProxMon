@@ -149,7 +149,8 @@ KCM.SimpleKCM {
         var host = (entry && entry.host) ? String(entry.host).trim().toLowerCase() : ""
         var port = (entry && entry.port) ? String(entry.port) : "8006"
         var tokenId = (entry && entry.tokenId) ? String(entry.tokenId).trim() : ""
-        return "apiTokenSecret:" + tokenId + "@" + host + ":" + port
+        var key = (!host || !tokenId) ? "" : ("apiTokenSecret:" + tokenId + "@" + host + ":" + port)
+        return key
     }
 
     /*
@@ -438,6 +439,7 @@ KCM.SimpleKCM {
                                 onClicked: {
                                     var arr = ensureMultiHostsLen(5)
                                     var key = multiHostSecretKey(arr[idx])
+                                    if (!key) return
 
                                     // KCM cannot access keyring directly. Stash secrets temporarily in config;
                                     // the plasmoid runtime migrates them into the system keyring on next load.

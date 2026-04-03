@@ -157,7 +157,7 @@ PlasmoidItem {
         return hasCoreConfig && secretState === "ready" && resolvedApiTokenSecret !== ""
     }
     property bool defaultsLoaded: false
-    property bool devMode: false
+    property bool devMode: true
     property int footerClickCount: 0
 
     // Per-item action busy map: key "node:kind:vmid" => true
@@ -1436,7 +1436,9 @@ onError: function(seq, kind, node, message) {
     }
 
     function keyFor(host, port, tokenId) {
-        return "apiTokenSecret:" + normalizedTokenId(tokenId) + "@" + normalizedHost(host) + ":" + String(port)
+        var key = "apiTokenSecret:" + normalizedTokenId(tokenId) + "@" + normalizedHost(host) + ":" + String(port)
+        logDebug("keyFor: host='" + String(host || "") + "' tokenId='" + String(tokenId || "") + "' port='" + String(port) + "' => " + key)
+        return key
     }
 
     function parseKeyEntry(key) {
@@ -1513,9 +1515,13 @@ onError: function(seq, kind, node, message) {
 
     function parseSecretsMap() {
         try {
-            var m = JSON.parse(Plasmoid.configuration.multiHostSecretsJson || "{}")
+            var raw = Plasmoid.configuration.multiHostSecretsJson || "{}"
+            logDebug("parseSecretsMap: raw=" + raw)
+            var m = JSON.parse(raw)
             if (m && typeof m === "object") return m
-        } catch (e) {}
+        } catch (e) {
+            logDebug("parseSecretsMap: parse error " + e)
+        }
         return {}
     }
 
@@ -1767,8 +1773,9 @@ onError: function(seq, kind, node, message) {
 
                 var map = parseSecretsMap()
                 var stashed = map[sessionKey]
-                if (stashed && String(stashed).length > 0) {
-                    logDebug("secretStore: Updating multi-host secret from settings into keyring: " + sessionKey)
+                if (sessionKey && stashed && String(stashed).length > 0) {
+                    logDebug("secretStore: Updating multi-host secret from settings into keyring: sessionKey=" + sessionKey + " item.host=" + item.host + " item.tokenId=" + item.tokenId)
+                    logDebug("secretStore: writeSecret(multi-stash) key=" + secretStore.key)
                     secretStore.writeSecret(String(stashed))
                     delete map[sessionKey]
                     writeSecretsMap(map)
@@ -1814,9 +1821,10 @@ onError: function(seq, kind, node, message) {
             // Single-host path (legacy candidates)
             var pendingSecret = Plasmoid.configuration.apiTokenSecret
             if (pendingSecret && pendingSecret.length > 0) {
-                logDebug("secretStore: Updating secret from settings into keyring")
+                logDebug("secretStore: Updating secret from settings into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
                 var canonicalKey2 = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
                 secretStore.key = canonicalKey2
+                logDebug("secretStore: writeSecret(single-pending) key=" + secretStore.key)
                 secretStore.writeSecret(pendingSecret)
                 // Use resolvedApiTokenSecret so the apiTokenSecret binding to
                 // Plasmoid.configuration stays intact for future KCM updates.
@@ -1827,16 +1835,6 @@ onError: function(seq, kind, node, message) {
             }
 
             if (secret && secret.length > 0) {
-                // If we loaded from a legacy key, migrate into canonical normalized key.
-                var canonicalKey = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
-                if (secretStore.key !== canonicalKey) {
-                    logDebug("secretStore: Migrating secret to canonical key")
-                    var oldKey = secretStore.key
-                    secretStore.key = canonicalKey
-                    secretStore.writeSecret(secret)
-                    secretStore.key = oldKey
-                }
-
                 logDebug("secretStore: Secret loaded from keyring")
                 resolvedApiTokenSecret = secret
                 secretState = "ready"
@@ -1855,8 +1853,9 @@ onError: function(seq, kind, node, message) {
             // No keyring entry. If we still have a legacy plaintext secret in config,
             // migrate it into the keyring and immediately clear the plaintext value.
             if (Plasmoid.configuration.apiTokenSecret && Plasmoid.configuration.apiTokenSecret.length > 0) {
-                logDebug("secretStore: Migrating legacy plaintext secret into keyring")
+                logDebug("secretStore: Migrating legacy plaintext secret into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
                 secretStore.key = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
+                logDebug("secretStore: writeSecret(single-legacy) key=" + secretStore.key)
                 secretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
                 resolvedApiTokenSecret = Plasmoid.configuration.apiTokenSecret
                 Plasmoid.configuration.apiTokenSecret = ""
