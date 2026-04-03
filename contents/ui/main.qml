@@ -157,7 +157,7 @@ PlasmoidItem {
         return hasCoreConfig && secretState === "ready" && resolvedApiTokenSecret !== ""
     }
     property bool defaultsLoaded: false
-    property bool devMode: true
+    property bool devMode: false
     property int footerClickCount: 0
 
     // Per-item action busy map: key "node:kind:vmid" => true
@@ -1484,6 +1484,7 @@ onError: function(seq, kind, node, message) {
 
     property var secretQueue: []
     property int secretQueueIndex: 0
+    property var activeMultiSecretRequest: null
     property var tempEndpoints: []
 
     function parseMultiHosts() {
@@ -1537,6 +1538,7 @@ onError: function(seq, kind, node, message) {
         secretQueue = buildSecretQueue()
         secretsTotal = secretQueue.length
         secretQueueIndex = 0
+        activeMultiSecretRequest = null
 
         if (secretsTotal === 0) {
             endpoints = []
@@ -1563,8 +1565,12 @@ onError: function(seq, kind, node, message) {
         }
 
         var item = secretQueue[secretQueueIndex]
-        secretStore.key = item.sessionKey
-        secretStore.readSecret()
+        activeMultiSecretRequest = {
+            sessionKey: item.sessionKey,
+            item: item
+        }
+        multiSecretStore.key = item.sessionKey
+        multiSecretStore.readSecret()
     }
 
     // ---------- Multi-host: fetching / aggregation ----------
@@ -1755,79 +1761,23 @@ onError: function(seq, kind, node, message) {
 
         secretKeyCandidates = uniq
         secretKeyCandidateIndex = 0
-        secretStore.key = secretKeyCandidates[0]
-        secretStore.readSecret()
+        singleSecretStore.key = secretKeyCandidates[0]
+        singleSecretStore.readSecret()
     }
 
     ProxMon.SecretStore {
-        id: secretStore
+        id: singleSecretStore
         service: "ProxMon"
-        // key is set dynamically via startSecretReadCandidates() / startMultiSecretResolution()
-        key: keyFor(proxmoxHost, proxmoxPort, apiTokenId)
+        key: ""
 
         onSecretReady: function(secret) {
-            // Multi-host path (queue-driven)
-            if (connectionMode === "multiHost" && secretState === "loading" && secretQueue && secretQueue.length > 0) {
-                var item = secretQueue[secretQueueIndex]
-                var sessionKey = item ? item.sessionKey : ""
-
-                var map = parseSecretsMap()
-                var stashed = map[sessionKey]
-                if (sessionKey && stashed && String(stashed).length > 0) {
-                    logDebug("secretStore: Updating multi-host secret from settings into keyring: sessionKey=" + sessionKey + " item.host=" + item.host + " item.tokenId=" + item.tokenId)
-                    logDebug("secretStore: writeSecret(multi-stash) key=" + secretStore.key)
-                    secretStore.writeSecret(String(stashed))
-                    delete map[sessionKey]
-                    writeSecretsMap(map)
-
-                    tempEndpoints.push({
-                        sessionKey: sessionKey,
-                        label: item.label,
-                        host: item.host,
-                        port: item.port,
-                        tokenId: item.tokenId,
-                        secret: String(stashed),
-                        ignoreSsl: ignoreSsl
-                    })
-                    secretsResolved += 1
-                    secretQueueIndex += 1
-                    readNextMultiSecret()
-                    return
-                }
-
-                if (secret && secret.length > 0) {
-                    tempEndpoints.push({
-                        sessionKey: sessionKey,
-                        label: item.label,
-                        host: item.host,
-                        port: item.port,
-                        tokenId: item.tokenId,
-                        secret: secret,
-                        ignoreSsl: ignoreSsl
-                    })
-                    secretsResolved += 1
-                    secretQueueIndex += 1
-                    readNextMultiSecret()
-                    return
-                }
-
-                // Not found; skip this endpoint
-                secretsResolved += 1
-                secretQueueIndex += 1
-                readNextMultiSecret()
-                return
-            }
-
-            // Single-host path (legacy candidates)
             var pendingSecret = Plasmoid.configuration.apiTokenSecret
             if (pendingSecret && pendingSecret.length > 0) {
-                logDebug("secretStore: Updating secret from settings into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
+                logDebug("singleSecretStore: Updating secret from settings into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
                 var canonicalKey2 = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
-                secretStore.key = canonicalKey2
-                logDebug("secretStore: writeSecret(single-pending) key=" + secretStore.key)
-                secretStore.writeSecret(pendingSecret)
-                // Use resolvedApiTokenSecret so the apiTokenSecret binding to
-                // Plasmoid.configuration stays intact for future KCM updates.
+                singleSecretStore.key = canonicalKey2
+                logDebug("singleSecretStore: writeSecret(single-pending) key=" + singleSecretStore.key)
+                singleSecretStore.writeSecret(pendingSecret)
                 resolvedApiTokenSecret = pendingSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
@@ -1835,28 +1785,25 @@ onError: function(seq, kind, node, message) {
             }
 
             if (secret && secret.length > 0) {
-                logDebug("secretStore: Secret loaded from keyring")
+                logDebug("singleSecretStore: Secret loaded from keyring")
                 resolvedApiTokenSecret = secret
                 secretState = "ready"
                 return
             }
 
-            // Try next candidate key if available
             if (secretKeyCandidates && (secretKeyCandidateIndex + 1) < secretKeyCandidates.length) {
                 secretKeyCandidateIndex += 1
-                secretStore.key = secretKeyCandidates[secretKeyCandidateIndex]
-                logDebug("secretStore: Secret not found, trying next key candidate: " + secretStore.key)
-                secretStore.readSecret()
+                singleSecretStore.key = secretKeyCandidates[secretKeyCandidateIndex]
+                logDebug("singleSecretStore: Secret not found, trying next key candidate: " + singleSecretStore.key)
+                singleSecretStore.readSecret()
                 return
             }
 
-            // No keyring entry. If we still have a legacy plaintext secret in config,
-            // migrate it into the keyring and immediately clear the plaintext value.
             if (Plasmoid.configuration.apiTokenSecret && Plasmoid.configuration.apiTokenSecret.length > 0) {
-                logDebug("secretStore: Migrating legacy plaintext secret into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
-                secretStore.key = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
-                logDebug("secretStore: writeSecret(single-legacy) key=" + secretStore.key)
-                secretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
+                logDebug("singleSecretStore: Migrating legacy plaintext secret into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
+                singleSecretStore.key = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
+                logDebug("singleSecretStore: writeSecret(single-legacy) key=" + singleSecretStore.key)
+                singleSecretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
                 resolvedApiTokenSecret = Plasmoid.configuration.apiTokenSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
@@ -1864,68 +1811,125 @@ onError: function(seq, kind, node, message) {
             }
 
             secretState = "missing"
-            logDebug("secretStore: No keyring secret found (and no legacy secret)")
+            logDebug("singleSecretStore: No keyring secret found (and no legacy secret)")
         }
 
         onWriteFinished: function(ok, error) {
-            if (!ok) {
-                logDebug("secretStore: write failed: " + error)
-                // Still treat secret as ready if we already set apiTokenSecret from legacy config;
-                // failing to write just means it won't persist.
-            }
+            if (!ok) logDebug("singleSecretStore: write failed: " + error)
         }
 
         onError: function(message) {
-            if (connectionMode === "multiHost" && secretState === "loading" && secretQueue && secretQueue.length > 0) {
-                // Hard keyring failures should keep the multi-host queue moving while
-                // preserving the distinction between "missing" and "error".
-                multiSecretHadError = true
-                secretsResolved += 1
-                secretQueueIndex += 1
-                logDebug("secretStore: " + message)
-                readNextMultiSecret()
-                return
-            }
-
             secretState = "error"
-            logDebug("secretStore: " + message)
+            logDebug("singleSecretStore: " + message)
         }
 
         onKeysReady: function(keys) {
-            logDebug("secretStore.onKeysReady: " + keys.length + " key(s) found")
+            logDebug("singleSecretStore.onKeysReady: " + keys.length + " key(s) found")
             if (keys.length === 0 || hasCoreConfig) return
 
             if (keys.length === 1) {
                 var key = keys[0]
                 var parsed = parseKeyEntry(key)
                 if (parsed) {
-                    logDebug("secretStore.onKeysReady: Auto-restoring host=" + parsed.host + " port=" + parsed.port + " tokenId=" + parsed.tokenId)
+                    logDebug("singleSecretStore.onKeysReady: Auto-restoring host=" + parsed.host + " port=" + parsed.port + " tokenId=" + parsed.tokenId)
                     Plasmoid.configuration.connectionMode = "single"
                     Plasmoid.configuration.proxmoxHost = parsed.host
                     Plasmoid.configuration.proxmoxPort = parsed.port
                     Plasmoid.configuration.apiTokenId = parsed.tokenId
-                    // Reset secretState so resolveSecretIfNeeded() doesn't bail out early
                     secretState = "idle"
                     resolveSecretIfNeeded()
                 } else {
-                    logDebug("secretStore.onKeysReady: Could not parse key format: " + key)
+                    logDebug("singleSecretStore.onKeysReady: Could not parse key format: " + key)
                 }
             } else {
                 var entries = parseKeyEntries(keys)
                 if (entries.length > 1) {
-                    logDebug("secretStore.onKeysReady: Auto-restoring multi-host with " + entries.length + " key(s)")
+                    logDebug("singleSecretStore.onKeysReady: Auto-restoring multi-host with " + entries.length + " key(s)")
                     Plasmoid.configuration.connectionMode = "multiHost"
                     Plasmoid.configuration.multiHostsJson = JSON.stringify(entries)
                     secretState = "idle"
                     resolveSecretIfNeeded()
                 } else {
-                    logDebug("secretStore.onKeysReady: Multiple keys found, manual config required: " + keys.join(", "))
+                    logDebug("singleSecretStore.onKeysReady: Multiple keys found, manual config required: " + keys.join(", "))
                 }
             }
         }
 
         onKeyListError: function(message) {
-            logDebug("secretStore.keyListError: " + message)
+            logDebug("singleSecretStore.keyListError: " + message)
+        }
+    }
+
+    ProxMon.SecretStore {
+        id: multiSecretStore
+        service: "ProxMon"
+        key: ""
+
+        onSecretReady: function(secret) {
+            if (!activeMultiSecretRequest) return
+
+            var item = activeMultiSecretRequest.item
+            var sessionKey = activeMultiSecretRequest.sessionKey
+            var map = parseSecretsMap()
+            var stashed = map[sessionKey]
+            if (sessionKey && stashed && String(stashed).length > 0) {
+                logDebug("multiSecretStore: Updating multi-host secret from settings into keyring: sessionKey=" + sessionKey + " item.host=" + item.host + " item.tokenId=" + item.tokenId)
+                logDebug("multiSecretStore: writeSecret(multi-stash) key=" + multiSecretStore.key)
+                multiSecretStore.writeSecret(String(stashed))
+                delete map[sessionKey]
+                writeSecretsMap(map)
+
+                tempEndpoints.push({
+                    sessionKey: sessionKey,
+                    label: item.label,
+                    host: item.host,
+                    port: item.port,
+                    tokenId: item.tokenId,
+                    secret: String(stashed),
+                    ignoreSsl: ignoreSsl
+                })
+                secretsResolved += 1
+                secretQueueIndex += 1
+                activeMultiSecretRequest = null
+                readNextMultiSecret()
+                return
+            }
+
+            if (secret && secret.length > 0) {
+                tempEndpoints.push({
+                    sessionKey: sessionKey,
+                    label: item.label,
+                    host: item.host,
+                    port: item.port,
+                    tokenId: item.tokenId,
+                    secret: secret,
+                    ignoreSsl: ignoreSsl
+                })
+                secretsResolved += 1
+                secretQueueIndex += 1
+                activeMultiSecretRequest = null
+                readNextMultiSecret()
+                return
+            }
+
+            secretsResolved += 1
+            secretQueueIndex += 1
+            activeMultiSecretRequest = null
+            readNextMultiSecret()
+        }
+
+        onWriteFinished: function(ok, error) {
+            if (!ok) logDebug("multiSecretStore: write failed: " + error)
+        }
+
+        onError: function(message) {
+            if (!activeMultiSecretRequest) return
+            multiSecretHadError = true
+            secretsResolved += 1
+            secretQueueIndex += 1
+            activeMultiSecretRequest = null
+            logDebug("multiSecretStore: " + message)
+            readNextMultiSecret()
         }
     }
 
@@ -2001,7 +2005,7 @@ onError: function(seq, kind, node, message) {
 
         if (!hasCoreConfig && connectionMode === "single") {
             logDebug("Component.onCompleted: Missing core config, attempting KWallet key detection")
-            secretStore.listKWalletKeys()
+            singleSecretStore.listKWalletKeys()
             loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
         }
     }
