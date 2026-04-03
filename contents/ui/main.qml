@@ -158,7 +158,7 @@ PlasmoidItem {
         return hasCoreConfig && secretState === "ready" && resolvedApiTokenSecret !== ""
     }
     property bool defaultsLoaded: false
-    property bool devMode: false
+    property bool devMode: true
     property int footerClickCount: 0
 
     // Per-item action busy map: key "node:kind:vmid" => true
@@ -1340,11 +1340,6 @@ onError: function(seq, kind, node, message) {
         retryStatusText = ""
         armedActionKey = ""
         armedLabel = ""
-        displayedProxmoxData = null
-        displayedEndpoints = []
-        displayedNodeList = []
-        displayedVmData = []
-        displayedLxcData = []
         // If secrets need re-resolving (e.g. token changed), resolveSecretIfNeeded() handlers will do it.
         // Only refresh if we are configured.
         if (!configured) return
@@ -1359,9 +1354,30 @@ onError: function(seq, kind, node, message) {
     }
 
     function fetchData() {
-        if (!configured) {
-            logDebug("fetchData: Not configured, skipping")
-            return
+        if (connectionMode === "multiHost") {
+            if (!hasCoreConfig) {
+                logDebug("fetchData: Not configured, skipping")
+                return
+            }
+            var needsMultiSecrets = !endpoints || endpoints.length === 0
+            for (var si = 0; !needsMultiSecrets && si < endpoints.length; si++) {
+                if (!endpoints[si] || !endpoints[si].secret) needsMultiSecrets = true
+            }
+            if (secretState !== "ready" || needsMultiSecrets) {
+                logDebug("fetchData: Re-resolving multi-host secrets for refresh")
+                startMultiSecretResolution()
+                return
+            }
+        } else {
+            if (!hasCoreConfig) {
+                logDebug("fetchData: Not configured, skipping")
+                return
+            }
+            if (secretState !== "ready" || resolvedApiTokenSecret === "") {
+                logDebug("fetchData: Re-resolving single-host secret for refresh")
+                resolveSecretIfNeeded()
+                return
+            }
         }
 
         // Stop any previous in-flight requests before starting a new refresh.
@@ -1750,6 +1766,10 @@ onError: function(seq, kind, node, message) {
         lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
         resetRetryState()
 
+        for (var ci = 0; ci < endpoints.length; ci++) {
+            if (endpoints[ci]) endpoints[ci].secret = ""
+        }
+
         isRefreshing = false
         loading = false
 
@@ -1964,6 +1984,7 @@ onError: function(seq, kind, node, message) {
     function resolveSecretIfNeeded() {
         if (!hasCoreConfig) {
             endpoints = []
+            pendingResolvedRefresh = false
             secretState = "idle"
             return
         }
@@ -2008,6 +2029,11 @@ onError: function(seq, kind, node, message) {
         triggerRefreshFromConfigChange("multiHostsJson")
     }
     onConnectionModeChanged: {
+        displayedProxmoxData = null
+        displayedEndpoints = []
+        displayedNodeList = []
+        displayedVmData = []
+        displayedLxcData = []
         pendingResolvedRefresh = true
         resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("connectionMode")
