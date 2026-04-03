@@ -159,7 +159,7 @@ PlasmoidItem {
         return hasCoreConfig && secretState === "ready" && resolvedApiTokenSecret !== ""
     }
     property bool defaultsLoaded: false
-    property bool devMode: true
+    property bool devMode: false
     property int footerClickCount: 0
 
     // Per-item action busy map: key "node:kind:vmid" => true
@@ -597,12 +597,10 @@ onError: function(seq, kind, node, message) {
     // Send desktop notification
     function sendNotification(title, message, iconName, rateLimitKey) {
         if (!enableNotifications) {
-            logDebug("Notification suppressed (disabled): " + title + " - " + message)
             return
         }
 
         if (rateLimitKey && shouldRateLimitNotify(rateLimitKey)) {
-            logDebug("Notification suppressed (rate-limited): " + rateLimitKey)
             return
         }
 
@@ -699,9 +697,6 @@ onError: function(seq, kind, node, message) {
                 }
 
                 initialLoadComplete = true
-                logDebug("checkStateChanges: Recorded " + Object.keys(previousNodeStates).length + " node states, " +
-                         Object.keys(previousVmStates).length + " VM states, " +
-                         Object.keys(previousLxcStates).length + " LXC states")
                 return
             }
 
@@ -717,8 +712,6 @@ onError: function(seq, kind, node, message) {
                         var prevNodeStateMulti = previousNodeStates[nodeStateKey]
 
                         if (prevNodeStateMulti !== undefined && prevNodeStateMulti !== nodeDataMulti.status) {
-                            logDebug("checkStateChanges: Node " + nodeDataMulti.node + " changed from " + prevNodeStateMulti + " to " + nodeDataMulti.status)
-
                             if (prevNodeStateMulti === "online" && nodeDataMulti.status !== "online") {
                                 sendNotification(
                                     "Node Offline",
@@ -750,8 +743,6 @@ onError: function(seq, kind, node, message) {
                 var prevVmStateMulti = previousVmStates[vmStateKeyMulti]
 
                 if (prevVmStateMulti !== undefined && prevVmStateMulti !== vmItemMulti.status) {
-                    logDebug("checkStateChanges: VM " + vmItemMulti.name + " changed from " + prevVmStateMulti + " to " + vmItemMulti.status)
-
                     if (shouldNotify(vmItemMulti.name, vmItemMulti.vmid)) {
                         if (notifyOnStop && prevVmStateMulti === "running" && vmItemMulti.status !== "running") {
                             sendNotification(
@@ -768,8 +759,6 @@ onError: function(seq, kind, node, message) {
                                 "vm:" + vmItemMulti.sessionKey + ":" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":running"
                             )
                         }
-                    } else {
-                        logDebug("checkStateChanges: Notification filtered for VM " + vmItemMulti.name)
                     }
                 }
                 previousVmStates[vmStateKeyMulti] = vmItemMulti.status
@@ -785,8 +774,6 @@ onError: function(seq, kind, node, message) {
                 var prevLxcStateMulti = previousLxcStates[lxcStateKeyMulti]
 
                 if (prevLxcStateMulti !== undefined && prevLxcStateMulti !== lxcItemMulti.status) {
-                    logDebug("checkStateChanges: LXC " + lxcItemMulti.name + " changed from " + prevLxcStateMulti + " to " + lxcItemMulti.status)
-
                     if (shouldNotify(lxcItemMulti.name, lxcItemMulti.vmid)) {
                         if (notifyOnStop && prevLxcStateMulti === "running" && lxcItemMulti.status !== "running") {
                             sendNotification(
@@ -803,20 +790,15 @@ onError: function(seq, kind, node, message) {
                                 "lxc:" + lxcItemMulti.sessionKey + ":" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":running"
                             )
                         }
-                    } else {
-                        logDebug("checkStateChanges: Notification filtered for LXC " + lxcItemMulti.name)
                     }
                 }
                 previousLxcStates[lxcStateKeyMulti] = lxcItemMulti.status
             }
 
-            logDebug("checkStateChanges: State check complete")
             return
         }
 
         if (!initialLoadComplete) {
-            logDebug("checkStateChanges: Initial load, recording states")
-
             // Record initial node states
             if (displayedProxmoxData && displayedProxmoxData.data) {
                 for (var n = 0; n < displayedProxmoxData.data.length; n++) {
@@ -840,9 +822,6 @@ onError: function(seq, kind, node, message) {
             }
 
             initialLoadComplete = true
-            logDebug("checkStateChanges: Recorded " + Object.keys(previousNodeStates).length + " node states, " +
-                     Object.keys(previousVmStates).length + " VM states, " +
-                     Object.keys(previousLxcStates).length + " LXC states")
             return
         }
 
@@ -853,8 +832,6 @@ onError: function(seq, kind, node, message) {
                 var prevNodeState = previousNodeStates[nodeData.node]
 
                 if (prevNodeState !== undefined && prevNodeState !== nodeData.status) {
-                    logDebug("checkStateChanges: Node " + nodeData.node + " changed from " + prevNodeState + " to " + nodeData.status)
-
                     if (prevNodeState === "online" && nodeData.status !== "online") {
                         sendNotification(
                             "Node Offline",
@@ -901,8 +878,6 @@ onError: function(seq, kind, node, message) {
                             "vm:" + vmItem.node + ":" + vmItem.vmid + ":running"
                         )
                     }
-                } else {
-                    logDebug("checkStateChanges: Notification filtered for VM " + vmItem.name)
                 }
             }
             previousVmStates[vmStateKey] = vmItem.status
@@ -934,14 +909,11 @@ onError: function(seq, kind, node, message) {
                             "lxc:" + lxcItem.node + ":" + lxcItem.vmid + ":running"
                         )
                     }
-                } else {
-                    logDebug("checkStateChanges: Notification filtered for LXC " + lxcItem.name)
                 }
             }
             previousLxcStates[lxcStateKey] = lxcItem.status
         }
 
-        logDebug("checkStateChanges: State check complete")
     }
 
     // ==================== NODE DATA FUNCTIONS ====================
