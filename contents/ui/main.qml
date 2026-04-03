@@ -68,6 +68,7 @@ PlasmoidItem {
     property int secretsResolved: 0
     property int secretsTotal: 0
     property bool multiSecretHadError: false
+    property bool pendingResolvedRefresh: false
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
@@ -1339,9 +1340,21 @@ onError: function(seq, kind, node, message) {
         retryStatusText = ""
         armedActionKey = ""
         armedLabel = ""
+        displayedProxmoxData = null
+        displayedEndpoints = []
+        displayedNodeList = []
+        displayedVmData = []
+        displayedLxcData = []
         // If secrets need re-resolving (e.g. token changed), resolveSecretIfNeeded() handlers will do it.
         // Only refresh if we are configured.
         if (!configured) return
+        configRefreshDebounce.restart()
+    }
+
+    function refreshAfterSecretReady() {
+        if (!pendingResolvedRefresh) return
+        pendingResolvedRefresh = false
+        if (!configured || loading || isRefreshing) return
         configRefreshDebounce.restart()
     }
 
@@ -1556,6 +1569,7 @@ onError: function(seq, kind, node, message) {
             endpoints = tempEndpoints.slice()
             if (endpoints.length > 0) {
                 secretState = "ready"
+                refreshAfterSecretReady()
             } else if (multiSecretHadError) {
                 secretState = "error"
             } else {
@@ -1781,6 +1795,7 @@ onError: function(seq, kind, node, message) {
                 resolvedApiTokenSecret = pendingSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
+                refreshAfterSecretReady()
                 return
             }
 
@@ -1788,6 +1803,7 @@ onError: function(seq, kind, node, message) {
                 logDebug("singleSecretStore: Secret loaded from keyring")
                 resolvedApiTokenSecret = secret
                 secretState = "ready"
+                refreshAfterSecretReady()
                 return
             }
 
@@ -1807,6 +1823,7 @@ onError: function(seq, kind, node, message) {
                 resolvedApiTokenSecret = Plasmoid.configuration.apiTokenSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
+                refreshAfterSecretReady()
                 return
             }
 
@@ -1975,10 +1992,12 @@ onError: function(seq, kind, node, message) {
         triggerRefreshFromConfigChange("apiTokenSecret")
     }
     onMultiHostsJsonChanged: {
+        pendingResolvedRefresh = true
         if (connectionMode === "multiHost") resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("multiHostsJson")
     }
     onConnectionModeChanged: {
+        pendingResolvedRefresh = true
         resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("connectionMode")
     }
