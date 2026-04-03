@@ -1439,6 +1439,41 @@ onError: function(seq, kind, node, message) {
         return "apiTokenSecret:" + normalizedTokenId(tokenId) + "@" + normalizedHost(host) + ":" + String(port)
     }
 
+    function parseKeyEntry(key) {
+        if (!key || key.indexOf("apiTokenSecret:") !== 0) return null
+        var body = String(key).slice("apiTokenSecret:".length)
+        var colon = body.lastIndexOf(":")
+        if (colon <= 0 || colon >= body.length - 1) return null
+        var left = body.slice(0, colon)
+        var port = parseInt(body.slice(colon + 1))
+        var at = left.lastIndexOf("@")
+        if (at <= 0 || at >= left.length - 1 || !port) return null
+        return {
+            tokenId: left.slice(0, at),
+            host: left.slice(at + 1),
+            port: port
+        }
+    }
+
+    function parseKeyEntries(keys) {
+        var entries = []
+        var seen = {}
+        for (var i = 0; i < keys.length; i++) {
+            var parsed = parseKeyEntry(keys[i])
+            if (!parsed) continue
+            var dedupeKey = keyFor(parsed.host, parsed.port, parsed.tokenId)
+            if (seen[dedupeKey]) continue
+            seen[dedupeKey] = true
+            entries.push({
+                name: parsed.host,
+                host: parsed.host,
+                port: parsed.port,
+                tokenId: parsed.tokenId
+            })
+        }
+        return entries
+    }
+
     function endpointNodeKey(sessionKey, nodeName) {
         return String(sessionKey) + "::" + String(nodeName || "")
     }
@@ -1863,15 +1898,13 @@ onError: function(seq, kind, node, message) {
 
             if (keys.length === 1) {
                 var key = keys[0]
-                var match = key.match(/^apiTokenSecret:(.+)@(.+):(\d+)$/)
-                if (match) {
-                    var tokenId = match[1]
-                    var host = match[2]
-                    var port = parseInt(match[3])
-                    logDebug("secretStore.onKeysReady: Auto-restoring host=" + host + " port=" + port + " tokenId=" + tokenId)
-                                        Plasmoid.configuration.proxmoxHost = host
-                    Plasmoid.configuration.proxmoxPort = port
-                    Plasmoid.configuration.apiTokenId = tokenId
+                var parsed = parseKeyEntry(key)
+                if (parsed) {
+                    logDebug("secretStore.onKeysReady: Auto-restoring host=" + parsed.host + " port=" + parsed.port + " tokenId=" + parsed.tokenId)
+                    Plasmoid.configuration.connectionMode = "single"
+                    Plasmoid.configuration.proxmoxHost = parsed.host
+                    Plasmoid.configuration.proxmoxPort = parsed.port
+                    Plasmoid.configuration.apiTokenId = parsed.tokenId
                     // Reset secretState so resolveSecretIfNeeded() doesn't bail out early
                     secretState = "idle"
                     resolveSecretIfNeeded()
@@ -1879,7 +1912,16 @@ onError: function(seq, kind, node, message) {
                     logDebug("secretStore.onKeysReady: Could not parse key format: " + key)
                 }
             } else {
-                logDebug("secretStore.onKeysReady: Multiple keys found, manual config required: " + keys.join(", "))
+                var entries = parseKeyEntries(keys)
+                if (entries.length > 1) {
+                    logDebug("secretStore.onKeysReady: Auto-restoring multi-host with " + entries.length + " key(s)")
+                    Plasmoid.configuration.connectionMode = "multiHost"
+                    Plasmoid.configuration.multiHostsJson = JSON.stringify(entries)
+                    secretState = "idle"
+                    resolveSecretIfNeeded()
+                } else {
+                    logDebug("secretStore.onKeysReady: Multiple keys found, manual config required: " + keys.join(", "))
+                }
             }
         }
 
