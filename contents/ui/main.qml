@@ -1471,6 +1471,17 @@ onError: function(seq, kind, node, message) {
     }
 
     function parseKeyEntries(keys) {
+        var existingByKey = {}
+        var existing = parseMultiHosts()
+        for (var ei = 0; ei < existing.length; ei++) {
+            var ex = existing[ei] || {}
+            var exHost = (ex.host || "").trim()
+            var exTokenId = (ex.tokenId || "").trim()
+            if (!exHost || !exTokenId) continue
+            var exPort = (ex.port !== undefined && ex.port !== null) ? Number(ex.port) : 8006
+            existingByKey[keyFor(exHost, exPort, exTokenId)] = (ex.name || "").trim()
+        }
+
         var entries = []
         var seen = {}
         for (var i = 0; i < keys.length; i++) {
@@ -1480,7 +1491,7 @@ onError: function(seq, kind, node, message) {
             if (seen[dedupeKey]) continue
             seen[dedupeKey] = true
             entries.push({
-                name: parsed.host,
+                name: existingByKey[dedupeKey] || parsed.host,
                 host: parsed.host,
                 port: parsed.port,
                 tokenId: parsed.tokenId
