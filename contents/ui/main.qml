@@ -20,7 +20,7 @@ PlasmoidItem {
     toolTipSubText: {
         if (!configured) {
             if (!hasCoreConfig) return "Not configured — right-click to configure"
-            if (secretState === "loading") return "Loading credentials…"
+            if (secretState === "loading" || refreshResolvingSecrets) return "Loading credentials…"
             if (secretState === "missing") return "Missing token secret — open settings"
             if (secretState === "error") return "Keyring error — check logs"
             return "Not configured"
@@ -60,6 +60,7 @@ PlasmoidItem {
 
     // secretState: idle|loading|ready|missing|error
     property string secretState: "idle"
+    property bool refreshResolvingSecrets: false
 
     // Endpoints resolved in multi-host mode:
     // [{ sessionKey, label, host, port, tokenId, secret, ignoreSsl }]
@@ -1365,6 +1366,7 @@ onError: function(seq, kind, node, message) {
             }
             if (secretState !== "ready" || needsMultiSecrets) {
                 logDebug("fetchData: Re-resolving multi-host secrets for refresh")
+                refreshResolvingSecrets = true
                 startMultiSecretResolution()
                 return
             }
@@ -1375,6 +1377,7 @@ onError: function(seq, kind, node, message) {
             }
             if (secretState !== "ready" || resolvedApiTokenSecret === "") {
                 logDebug("fetchData: Re-resolving single-host secret for refresh")
+                refreshResolvingSecrets = true
                 resolveSecretIfNeeded()
                 return
             }
@@ -1582,6 +1585,7 @@ onError: function(seq, kind, node, message) {
 
         if (secretsTotal === 0) {
             endpoints = []
+            refreshResolvingSecrets = false
             secretState = hasCoreConfig ? "missing" : "idle"
             return
         }
@@ -1596,10 +1600,13 @@ onError: function(seq, kind, node, message) {
             endpoints = tempEndpoints.slice()
             if (endpoints.length > 0) {
                 secretState = "ready"
+                refreshResolvingSecrets = false
                 refreshAfterSecretReady()
             } else if (multiSecretHadError) {
+                refreshResolvingSecrets = false
                 secretState = "error"
             } else {
+                refreshResolvingSecrets = false
                 secretState = "missing"
             }
             return
@@ -1620,6 +1627,11 @@ onError: function(seq, kind, node, message) {
 
     function resetMultiTempData() {
         tempEndpointsData = ({})
+        for (var i = 0; i < endpoints.length; i++) {
+            var ep = endpoints[i]
+            if (!ep) continue
+            ensureEndpointBucket(ep.sessionKey)
+        }
     }
 
     function ensureEndpointBucket(sessionKey) {
@@ -1638,6 +1650,7 @@ onError: function(seq, kind, node, message) {
             label: meta ? meta.label : "",
             host: meta ? meta.host : "",
             port: meta ? meta.port : 8006,
+            error: "",
             nodes: [],
             vms: [],
             lxcs: []
@@ -1650,18 +1663,26 @@ onError: function(seq, kind, node, message) {
 
     function bucketsToArray(map) {
         var arr = []
-        var keys = Object.keys(map || {})
-        // stable order: by label then host
-        keys.sort(function(a, b) {
-            var aa = map[a] || {}
-            var bb = map[b] || {}
-            var la = (aa.label || aa.host || aa.sessionKey || "")
-            var lb = (bb.label || bb.host || bb.sessionKey || "")
+        for (var i = 0; i < endpoints.length; i++) {
+            var ep = endpoints[i]
+            if (!ep) continue
+            var bucket = map[ep.sessionKey] || {}
+            arr.push({
+                sessionKey: ep.sessionKey,
+                label: ep.label,
+                host: ep.host,
+                port: ep.port,
+                error: bucket.error || "",
+                nodes: bucket.nodes || [],
+                vms: bucket.vms || [],
+                lxcs: bucket.lxcs || []
+            })
+        }
+        arr.sort(function(a, b) {
+            var la = (a.label || a.host || a.sessionKey || "")
+            var lb = (b.label || b.host || b.sessionKey || "")
             return String(la).localeCompare(String(lb))
         })
-        for (var i = 0; i < keys.length; i++) {
-            arr.push(map[keys[i]])
-        }
         return arr
     }
 
@@ -1709,10 +1730,12 @@ onError: function(seq, kind, node, message) {
 
     function handleMultiError(sessionKey, kind, node, message) {
         logDebug("api error (multi): " + sessionKey + " " + kind + " " + node + " - " + message)
-        // Record the error but keep going — one failing endpoint should not discard
-        // results from the other endpoints that may already be in-flight or finished.
-        // Record the last error message for display; partial results will still appear.
         errorMessage = message || "Connection failed"
+
+        var bucket = ensureEndpointBucket(sessionKey)
+        if (bucket && kind === "nodes") {
+            bucket.error = message || "Connection failed"
+        }
 
         // Decrement pending count for this individual request and continue.
         // If this is the last outstanding request, checkMultiRequestsComplete() will
@@ -1826,6 +1849,7 @@ onError: function(seq, kind, node, message) {
                 resolvedApiTokenSecret = pendingSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
+                refreshResolvingSecrets = false
                 refreshAfterSecretReady()
                 return
             }
@@ -1834,6 +1858,7 @@ onError: function(seq, kind, node, message) {
                 logDebug("singleSecretStore: Secret loaded from keyring")
                 resolvedApiTokenSecret = secret
                 secretState = "ready"
+                refreshResolvingSecrets = false
                 refreshAfterSecretReady()
                 return
             }
@@ -1854,10 +1879,12 @@ onError: function(seq, kind, node, message) {
                 resolvedApiTokenSecret = Plasmoid.configuration.apiTokenSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
+                refreshResolvingSecrets = false
                 refreshAfterSecretReady()
                 return
             }
 
+            refreshResolvingSecrets = false
             secretState = "missing"
             logDebug("singleSecretStore: No keyring secret found (and no legacy secret)")
         }
@@ -1867,6 +1894,7 @@ onError: function(seq, kind, node, message) {
         }
 
         onError: function(message) {
+            refreshResolvingSecrets = false
             secretState = "error"
             logDebug("singleSecretStore: " + message)
         }
@@ -2358,7 +2386,7 @@ onError: function(seq, kind, node, message) {
             PlasmaComponents.Label {
                 text: {
                     if (!hasCoreConfig) return "Not Configured"
-                    if (secretState === "loading") return "Loading Credentials…"
+                    if (secretState === "loading" || refreshResolvingSecrets) return "Loading Credentials…"
                     if (secretState === "missing") return "Missing Token Secret"
                     if (secretState === "error") return "Credentials Error"
                     return "Not Configured"
@@ -2372,7 +2400,7 @@ onError: function(seq, kind, node, message) {
             PlasmaComponents.Label {
                 text: {
                     if (!hasCoreConfig) return "Right-click → Configure Widget"
-                    if (secretState === "loading") return "Reading API token secret from keyring…"
+                    if (secretState === "loading" || refreshResolvingSecrets) return "Reading API token secret from keyring…"
                     if (secretState === "missing") return "Open settings and re-enter the API Token Secret."
                     if (secretState === "error") return "Keyring access failed. Check logs (journalctl --user -f)."
                     return "Right-click → Configure Widget"
@@ -3144,6 +3172,7 @@ onError: function(seq, kind, node, message) {
                         readonly property var endpoint: modelData
                         readonly property string sessionKey: endpoint ? endpoint.sessionKey : ""
                         readonly property string endpointLabel: endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : "")
+                        readonly property string endpointError: endpoint && endpoint.error ? endpoint.error : ""
                         readonly property var nodes: endpoint && endpoint.nodes ? endpoint.nodes : []
 
                         Rectangle {
@@ -3181,6 +3210,16 @@ onError: function(seq, kind, node, message) {
                                     font.pixelSize: 10
                                 }
                             }
+                        }
+
+                        PlasmaComponents.Label {
+                            visible: endpointError !== ""
+                            text: endpointError
+                            color: Kirigami.Theme.negativeTextColor
+                            font.pixelSize: 10
+                            wrapMode: Text.WordWrap
+                            Layout.leftMargin: 6
+                            Layout.rightMargin: scrollView.__scrollbarReserve
                         }
 
                         Repeater {
