@@ -44,6 +44,12 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Known bugs / limitations (see wiki for more info)
 
+- On some Plasma stacks (observed on Fedora and Manjaro), applying connection changes may not immediately refresh the running widget until the widget or Plasma is reloaded, either by logging out and back in or by running:
+
+  ```bash
+  kquitapp6 plasmashell && kstart plasmashell
+  ```
+  
 ## Installation
 
 ```bash
