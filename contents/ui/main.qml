@@ -20,7 +20,7 @@ PlasmoidItem {
     toolTipSubText: {
         if (!configured) {
             if (!hasCoreConfig) return "Not configured — right-click to configure"
-            if (secretState === "loading") return "Loading credentials…"
+            if (secretState === "loading" || refreshResolvingSecrets) return "Loading credentials…"
             if (secretState === "missing") return "Missing token secret — open settings"
             if (secretState === "error") return "Keyring error — check logs"
             return "Not configured"
@@ -32,7 +32,7 @@ PlasmoidItem {
         txt += " · " + runningVMs + "/" + displayedVmData.length + " VMs"
         txt += " · " + runningLXC + "/" + displayedLxcData.length + " CTs"
         if (lastUpdate) txt += "\nUpdated: " + lastUpdate
-        return txt
+        return txt 
     }
 
     // ==================== CONNECTION / MODE ====================
@@ -60,6 +60,7 @@ PlasmoidItem {
 
     // secretState: idle|loading|ready|missing|error
     property string secretState: "idle"
+    property bool refreshResolvingSecrets: false
 
     // Endpoints resolved in multi-host mode:
     // [{ sessionKey, label, host, port, tokenId, secret, ignoreSsl }]
@@ -67,6 +68,8 @@ PlasmoidItem {
     // Per-endpoint secret load progress
     property int secretsResolved: 0
     property int secretsTotal: 0
+    property bool multiSecretHadError: false
+    property bool pendingResolvedRefresh: false
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
@@ -271,10 +274,6 @@ PlasmoidItem {
             if (connectionMode !== "single") return
 
             if (kind === "nodes") {
-                if (!displayedProxmoxData) {
-                    loading = false
-                }
-
                 if (data && data.data) {
                     data.data.sort(function(a, b) {
                         return a.node.localeCompare(b.node)
@@ -518,7 +517,8 @@ onError: function(seq, kind, node, message) {
     // Escape regex special chars except "*" (wildcard)
     function escapeRegexPattern(str) {
         if (!str) return ""
-        // Escape everything that has meaning in a regex
+        // Escape regex metacharacters but intentionally leave "*" untouched so
+        // shouldNotify() can expand wildcard filters into ".*" afterwards.
         return str.replace(/[.+?^${}()|[\]\\]/g, "\\$&")
     }
 
@@ -551,7 +551,9 @@ onError: function(seq, kind, node, message) {
         var matches = filters.some(function(filter) {
             // Check for wildcard patterns
             if (filter.indexOf("*") !== -1) {
-                var escaped = escapeRegexPattern(filter).replace(/\\\*/g, ".*")
+                // Expand literal wildcard markers only after escaping the rest of
+                // the pattern; otherwise inputs like "web*" become /^web\*$/.
+                var escaped = escapeRegexPattern(filter).replace(/\*/g, ".*")
                 var regex = new RegExp("^" + escaped + "$")
                 return regex.test(nameL) || regex.test(vmidStr)
             }
@@ -595,12 +597,10 @@ onError: function(seq, kind, node, message) {
     // Send desktop notification
     function sendNotification(title, message, iconName, rateLimitKey) {
         if (!enableNotifications) {
-            logDebug("Notification suppressed (disabled): " + title + " - " + message)
             return
         }
 
         if (rateLimitKey && shouldRateLimitNotify(rateLimitKey)) {
-            logDebug("Notification suppressed (rate-limited): " + rateLimitKey)
             return
         }
 
@@ -644,14 +644,161 @@ onError: function(seq, kind, node, message) {
     // Test notifications function (dev mode)
     function testNotifications() {
         logDebug("Testing notifications...")
-        sendNotification("VM Stopped", "test-vm (100) on pve1 is now stopped", "dialog-warning", "test:vmStopped")
+        sendNotification("VM Stopped", "test-vm (100) on pve1 is now stopped", "dialog-warning")
+    }
+
+    // Multi-host notification state keys must be namespaced by endpoint/session so
+    // identical node names / VMIDs on different endpoints do not overwrite each other.
+    function multiHostNodeStateKey(sessionKey, nodeName) {
+        return String(sessionKey) + "::" + String(nodeName || "")
+    }
+
+    function multiHostVmStateKey(sessionKey, nodeName, vmid) {
+        return String(sessionKey) + "::" + String(nodeName || "") + "_vm_" + vmid
+    }
+
+    function multiHostLxcStateKey(sessionKey, nodeName, vmid) {
+        return String(sessionKey) + "::" + String(nodeName || "") + "_lxc_" + vmid
     }
 
     // Check for state changes and send notifications
     function checkStateChanges() {
-        if (!initialLoadComplete) {
-            logDebug("checkStateChanges: Initial load, recording states")
+        if (connectionMode === "multiHost") {
+            // No displayed endpoint buckets means there is nothing stable to compare yet.
+            if (!displayedEndpoints || displayedEndpoints.length === 0) return
 
+            if (!initialLoadComplete) {
+                logDebug("checkStateChanges(multi): Initial load, recording states")
+
+                // Record initial node states per endpoint/session.
+                for (var mn = 0; mn < displayedEndpoints.length; mn++) {
+                    var endpoint = displayedEndpoints[mn]
+                    if (!endpoint || !endpoint.sessionKey || !endpoint.nodes) continue
+
+                    for (var mni = 0; mni < endpoint.nodes.length; mni++) {
+                        var multiNode = endpoint.nodes[mni]
+                        previousNodeStates[multiHostNodeStateKey(endpoint.sessionKey, multiNode.node)] = multiNode.status
+                    }
+                }
+
+                // Record initial VM states per endpoint/session. Items missing sessionKey
+                // are ignored silently so partial/malformed multi-host data does not spam logs.
+                for (var mvi = 0; mvi < displayedVmData.length; mvi++) {
+                    var multiVm = displayedVmData[mvi]
+                    if (!multiVm || !multiVm.sessionKey) continue
+                    previousVmStates[multiHostVmStateKey(multiVm.sessionKey, multiVm.node, multiVm.vmid)] = multiVm.status
+                }
+
+                // Record initial LXC states per endpoint/session.
+                for (var mli = 0; mli < displayedLxcData.length; mli++) {
+                    var multiLxc = displayedLxcData[mli]
+                    if (!multiLxc || !multiLxc.sessionKey) continue
+                    previousLxcStates[multiHostLxcStateKey(multiLxc.sessionKey, multiLxc.node, multiLxc.vmid)] = multiLxc.status
+                }
+
+                initialLoadComplete = true
+                return
+            }
+
+            // Check nodes for state changes per endpoint/session.
+            if (notifyOnNodeChange) {
+                for (var mei = 0; mei < displayedEndpoints.length; mei++) {
+                    var endpointData = displayedEndpoints[mei]
+                    if (!endpointData || !endpointData.sessionKey || !endpointData.nodes) continue
+
+                    for (var mni2 = 0; mni2 < endpointData.nodes.length; mni2++) {
+                        var nodeDataMulti = endpointData.nodes[mni2]
+                        var nodeStateKey = multiHostNodeStateKey(endpointData.sessionKey, nodeDataMulti.node)
+                        var prevNodeStateMulti = previousNodeStates[nodeStateKey]
+
+                        if (prevNodeStateMulti !== undefined && prevNodeStateMulti !== nodeDataMulti.status) {
+                            if (prevNodeStateMulti === "online" && nodeDataMulti.status !== "online") {
+                                sendNotification(
+                                    "Node Offline",
+                                    nodeDataMulti.node + " is now " + nodeDataMulti.status,
+                                    "dialog-error",
+                                    "node:" + endpointData.sessionKey + ":" + nodeDataMulti.node + ":offline"
+                                )
+                            } else if (prevNodeStateMulti !== "online" && nodeDataMulti.status === "online") {
+                                sendNotification(
+                                    "Node Online",
+                                    nodeDataMulti.node + " is back online",
+                                    "dialog-information",
+                                    "node:" + endpointData.sessionKey + ":" + nodeDataMulti.node + ":online"
+                                )
+                            }
+                        }
+                        previousNodeStates[nodeStateKey] = nodeDataMulti.status
+                    }
+                }
+            }
+
+            // Check VMs for state changes per endpoint/session while keeping existing
+            // notification content and rate-limit keys unchanged.
+            for (var mvm = 0; mvm < displayedVmData.length; mvm++) {
+                var vmItemMulti = displayedVmData[mvm]
+                if (!vmItemMulti || !vmItemMulti.sessionKey) continue
+
+                var vmStateKeyMulti = multiHostVmStateKey(vmItemMulti.sessionKey, vmItemMulti.node, vmItemMulti.vmid)
+                var prevVmStateMulti = previousVmStates[vmStateKeyMulti]
+
+                if (prevVmStateMulti !== undefined && prevVmStateMulti !== vmItemMulti.status) {
+                    if (shouldNotify(vmItemMulti.name, vmItemMulti.vmid)) {
+                        if (notifyOnStop && prevVmStateMulti === "running" && vmItemMulti.status !== "running") {
+                            sendNotification(
+                                "VM Stopped",
+                                vmItemMulti.name + " (" + vmItemMulti.vmid + ") on " + vmItemMulti.node + " is now " + vmItemMulti.status,
+                                "dialog-warning",
+                                "vm:" + vmItemMulti.sessionKey + ":" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":stopped"
+                            )
+                        } else if (notifyOnStart && prevVmStateMulti !== "running" && vmItemMulti.status === "running") {
+                            sendNotification(
+                                "VM Started",
+                                vmItemMulti.name + " (" + vmItemMulti.vmid + ") on " + vmItemMulti.node + " is now running",
+                                "dialog-information",
+                                "vm:" + vmItemMulti.sessionKey + ":" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":running"
+                            )
+                        }
+                    }
+                }
+                previousVmStates[vmStateKeyMulti] = vmItemMulti.status
+            }
+
+            // Check LXCs for state changes per endpoint/session while keeping existing
+            // notification content and rate-limit keys unchanged.
+            for (var mlx = 0; mlx < displayedLxcData.length; mlx++) {
+                var lxcItemMulti = displayedLxcData[mlx]
+                if (!lxcItemMulti || !lxcItemMulti.sessionKey) continue
+
+                var lxcStateKeyMulti = multiHostLxcStateKey(lxcItemMulti.sessionKey, lxcItemMulti.node, lxcItemMulti.vmid)
+                var prevLxcStateMulti = previousLxcStates[lxcStateKeyMulti]
+
+                if (prevLxcStateMulti !== undefined && prevLxcStateMulti !== lxcItemMulti.status) {
+                    if (shouldNotify(lxcItemMulti.name, lxcItemMulti.vmid)) {
+                        if (notifyOnStop && prevLxcStateMulti === "running" && lxcItemMulti.status !== "running") {
+                            sendNotification(
+                                "Container Stopped",
+                                lxcItemMulti.name + " (" + lxcItemMulti.vmid + ") on " + lxcItemMulti.node + " is now " + lxcItemMulti.status,
+                                "dialog-warning",
+                                "lxc:" + lxcItemMulti.sessionKey + ":" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":stopped"
+                            )
+                        } else if (notifyOnStart && prevLxcStateMulti !== "running" && lxcItemMulti.status === "running") {
+                            sendNotification(
+                                "Container Started",
+                                lxcItemMulti.name + " (" + lxcItemMulti.vmid + ") on " + lxcItemMulti.node + " is now running",
+                                "dialog-information",
+                                "lxc:" + lxcItemMulti.sessionKey + ":" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":running"
+                            )
+                        }
+                    }
+                }
+                previousLxcStates[lxcStateKeyMulti] = lxcItemMulti.status
+            }
+
+            return
+        }
+
+        if (!initialLoadComplete) {
             // Record initial node states
             if (displayedProxmoxData && displayedProxmoxData.data) {
                 for (var n = 0; n < displayedProxmoxData.data.length; n++) {
@@ -675,9 +822,6 @@ onError: function(seq, kind, node, message) {
             }
 
             initialLoadComplete = true
-            logDebug("checkStateChanges: Recorded " + Object.keys(previousNodeStates).length + " node states, " +
-                     Object.keys(previousVmStates).length + " VM states, " +
-                     Object.keys(previousLxcStates).length + " LXC states")
             return
         }
 
@@ -688,8 +832,6 @@ onError: function(seq, kind, node, message) {
                 var prevNodeState = previousNodeStates[nodeData.node]
 
                 if (prevNodeState !== undefined && prevNodeState !== nodeData.status) {
-                    logDebug("checkStateChanges: Node " + nodeData.node + " changed from " + prevNodeState + " to " + nodeData.status)
-
                     if (prevNodeState === "online" && nodeData.status !== "online") {
                         sendNotification(
                             "Node Offline",
@@ -736,8 +878,6 @@ onError: function(seq, kind, node, message) {
                             "vm:" + vmItem.node + ":" + vmItem.vmid + ":running"
                         )
                     }
-                } else {
-                    logDebug("checkStateChanges: Notification filtered for VM " + vmItem.name)
                 }
             }
             previousVmStates[vmStateKey] = vmItem.status
@@ -769,14 +909,11 @@ onError: function(seq, kind, node, message) {
                             "lxc:" + lxcItem.node + ":" + lxcItem.vmid + ":running"
                         )
                     }
-                } else {
-                    logDebug("checkStateChanges: Notification filtered for LXC " + lxcItem.name)
                 }
             }
             previousLxcStates[lxcStateKey] = lxcItem.status
         }
 
-        logDebug("checkStateChanges: State check complete")
     }
 
     // ==================== NODE DATA FUNCTIONS ====================
@@ -1182,10 +1319,40 @@ onError: function(seq, kind, node, message) {
         configRefreshDebounce.restart()
     }
 
+    function refreshAfterSecretReady() {
+        if (!pendingResolvedRefresh) return
+        pendingResolvedRefresh = false
+        if (!configured || loading || isRefreshing) return
+        configRefreshDebounce.restart()
+    }
+
     function fetchData() {
-        if (!configured) {
-            logDebug("fetchData: Not configured, skipping")
-            return
+        if (connectionMode === "multiHost") {
+            if (!hasCoreConfig) {
+                logDebug("fetchData: Not configured, skipping")
+                return
+            }
+            var needsMultiSecrets = !endpoints || endpoints.length === 0
+            for (var si = 0; !needsMultiSecrets && si < endpoints.length; si++) {
+                if (!endpoints[si] || !endpoints[si].secret) needsMultiSecrets = true
+            }
+            if (secretState !== "ready" || needsMultiSecrets) {
+                logDebug("fetchData: Re-resolving multi-host secrets for refresh")
+                refreshResolvingSecrets = true
+                startMultiSecretResolution()
+                return
+            }
+        } else {
+            if (!hasCoreConfig) {
+                logDebug("fetchData: Not configured, skipping")
+                return
+            }
+            if (secretState !== "ready" || resolvedApiTokenSecret === "") {
+                logDebug("fetchData: Re-resolving single-host secret for refresh")
+                refreshResolvingSecrets = true
+                resolveSecretIfNeeded()
+                return
+            }
         }
 
         // Stop any previous in-flight requests before starting a new refresh.
@@ -1273,7 +1440,55 @@ onError: function(seq, kind, node, message) {
     }
 
     function keyFor(host, port, tokenId) {
-        return "apiTokenSecret:" + normalizedTokenId(tokenId) + "@" + normalizedHost(host) + ":" + String(port)
+        var key = "apiTokenSecret:" + normalizedTokenId(tokenId) + "@" + normalizedHost(host) + ":" + String(port)
+        logDebug("keyFor: host='" + String(host || "") + "' tokenId='" + String(tokenId || "") + "' port='" + String(port) + "' => " + key)
+        return key
+    }
+
+    function parseKeyEntry(key) {
+        if (!key || key.indexOf("apiTokenSecret:") !== 0) return null
+        var body = String(key).slice("apiTokenSecret:".length)
+        var colon = body.lastIndexOf(":")
+        if (colon <= 0 || colon >= body.length - 1) return null
+        var left = body.slice(0, colon)
+        var port = parseInt(body.slice(colon + 1))
+        var at = left.lastIndexOf("@")
+        if (at <= 0 || at >= left.length - 1 || !port) return null
+        return {
+            tokenId: left.slice(0, at),
+            host: left.slice(at + 1),
+            port: port
+        }
+    }
+
+    function parseKeyEntries(keys) {
+        var existingByKey = {}
+        var existing = parseMultiHosts()
+        for (var ei = 0; ei < existing.length; ei++) {
+            var ex = existing[ei] || {}
+            var exHost = (ex.host || "").trim()
+            var exTokenId = (ex.tokenId || "").trim()
+            if (!exHost || !exTokenId) continue
+            var exPort = (ex.port !== undefined && ex.port !== null) ? Number(ex.port) : 8006
+            existingByKey[keyFor(exHost, exPort, exTokenId)] = (ex.name || "").trim()
+        }
+
+        var entries = []
+        var seen = {}
+        for (var i = 0; i < keys.length; i++) {
+            var parsed = parseKeyEntry(keys[i])
+            if (!parsed) continue
+            var dedupeKey = keyFor(parsed.host, parsed.port, parsed.tokenId)
+            if (seen[dedupeKey]) continue
+            seen[dedupeKey] = true
+            entries.push({
+                name: existingByKey[dedupeKey] || parsed.host,
+                host: parsed.host,
+                port: parsed.port,
+                tokenId: parsed.tokenId
+            })
+        }
+        return entries
     }
 
     function endpointNodeKey(sessionKey, nodeName) {
@@ -1284,6 +1499,7 @@ onError: function(seq, kind, node, message) {
 
     property var secretQueue: []
     property int secretQueueIndex: 0
+    property var activeMultiSecretRequest: null
     property var tempEndpoints: []
 
     function parseMultiHosts() {
@@ -1315,9 +1531,13 @@ onError: function(seq, kind, node, message) {
 
     function parseSecretsMap() {
         try {
-            var m = JSON.parse(Plasmoid.configuration.multiHostSecretsJson || "{}")
+            var raw = Plasmoid.configuration.multiHostSecretsJson || "{}"
+            logDebug("parseSecretsMap: raw=" + raw)
+            var m = JSON.parse(raw)
             if (m && typeof m === "object") return m
-        } catch (e) {}
+        } catch (e) {
+            logDebug("parseSecretsMap: parse error " + e)
+        }
         return {}
     }
 
@@ -1328,13 +1548,16 @@ onError: function(seq, kind, node, message) {
 
     function startMultiSecretResolution() {
         secretsResolved = 0
+        multiSecretHadError = false
         tempEndpoints = []
         secretQueue = buildSecretQueue()
         secretsTotal = secretQueue.length
         secretQueueIndex = 0
+        activeMultiSecretRequest = null
 
         if (secretsTotal === 0) {
             endpoints = []
+            refreshResolvingSecrets = false
             secretState = hasCoreConfig ? "missing" : "idle"
             return
         }
@@ -1347,13 +1570,27 @@ onError: function(seq, kind, node, message) {
         if (secretQueueIndex >= secretQueue.length) {
             // done
             endpoints = tempEndpoints.slice()
-            secretState = (endpoints.length > 0) ? "ready" : "missing"
+            if (endpoints.length > 0) {
+                secretState = "ready"
+                refreshResolvingSecrets = false
+                refreshAfterSecretReady()
+            } else if (multiSecretHadError) {
+                refreshResolvingSecrets = false
+                secretState = "error"
+            } else {
+                refreshResolvingSecrets = false
+                secretState = "missing"
+            }
             return
         }
 
         var item = secretQueue[secretQueueIndex]
-        secretStore.key = item.sessionKey
-        secretStore.readSecret()
+        activeMultiSecretRequest = {
+            sessionKey: item.sessionKey,
+            item: item
+        }
+        multiSecretStore.key = item.sessionKey
+        multiSecretStore.readSecret()
     }
 
     // ---------- Multi-host: fetching / aggregation ----------
@@ -1362,6 +1599,11 @@ onError: function(seq, kind, node, message) {
 
     function resetMultiTempData() {
         tempEndpointsData = ({})
+        for (var i = 0; i < endpoints.length; i++) {
+            var ep = endpoints[i]
+            if (!ep) continue
+            ensureEndpointBucket(ep.sessionKey)
+        }
     }
 
     function ensureEndpointBucket(sessionKey) {
@@ -1380,6 +1622,7 @@ onError: function(seq, kind, node, message) {
             label: meta ? meta.label : "",
             host: meta ? meta.host : "",
             port: meta ? meta.port : 8006,
+            error: "",
             nodes: [],
             vms: [],
             lxcs: []
@@ -1392,18 +1635,26 @@ onError: function(seq, kind, node, message) {
 
     function bucketsToArray(map) {
         var arr = []
-        var keys = Object.keys(map || {})
-        // stable order: by label then host
-        keys.sort(function(a, b) {
-            var aa = map[a] || {}
-            var bb = map[b] || {}
-            var la = (aa.label || aa.host || aa.sessionKey || "")
-            var lb = (bb.label || bb.host || bb.sessionKey || "")
+        for (var i = 0; i < endpoints.length; i++) {
+            var ep = endpoints[i]
+            if (!ep) continue
+            var bucket = map[ep.sessionKey] || {}
+            arr.push({
+                sessionKey: ep.sessionKey,
+                label: ep.label,
+                host: ep.host,
+                port: ep.port,
+                error: bucket.error || "",
+                nodes: bucket.nodes || [],
+                vms: bucket.vms || [],
+                lxcs: bucket.lxcs || []
+            })
+        }
+        arr.sort(function(a, b) {
+            var la = (a.label || a.host || a.sessionKey || "")
+            var lb = (b.label || b.host || b.sessionKey || "")
             return String(la).localeCompare(String(lb))
         })
-        for (var i = 0; i < keys.length; i++) {
-            arr.push(map[keys[i]])
-        }
         return arr
     }
 
@@ -1451,10 +1702,12 @@ onError: function(seq, kind, node, message) {
 
     function handleMultiError(sessionKey, kind, node, message) {
         logDebug("api error (multi): " + sessionKey + " " + kind + " " + node + " - " + message)
-        // Record the error but keep going — one failing endpoint should not discard
-        // results from the other endpoints that may already be in-flight or finished.
-        // Record the last error message for display; partial results will still appear.
         errorMessage = message || "Connection failed"
+
+        var bucket = ensureEndpointBucket(sessionKey)
+        if (bucket && kind === "nodes") {
+            bucket.error = message || "Connection failed"
+        }
 
         // Decrement pending count for this individual request and continue.
         // If this is the last outstanding request, checkMultiRequestsComplete() will
@@ -1508,10 +1761,16 @@ onError: function(seq, kind, node, message) {
         lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
         resetRetryState()
 
+        for (var ci = 0; ci < endpoints.length; ci++) {
+            if (endpoints[ci]) endpoints[ci].secret = ""
+        }
+
         isRefreshing = false
         loading = false
 
-        // TODO: state change notifications across endpoints (future).
+        // Reuse the shared state-change notification path now that multi-host state
+        // keys are namespaced by endpoint/session.
+        checkStateChanges()
     }
 
     // Try multiple keys for backwards compatibility (older formatting / pre-normalization).
@@ -1542,172 +1801,190 @@ onError: function(seq, kind, node, message) {
 
         secretKeyCandidates = uniq
         secretKeyCandidateIndex = 0
-        secretStore.key = secretKeyCandidates[0]
-        secretStore.readSecret()
+        singleSecretStore.key = secretKeyCandidates[0]
+        singleSecretStore.readSecret()
     }
 
     ProxMon.SecretStore {
-        id: secretStore
+        id: singleSecretStore
         service: "ProxMon"
-        // key is set dynamically via startSecretReadCandidates() / startMultiSecretResolution()
-        key: keyFor(proxmoxHost, proxmoxPort, apiTokenId)
+        key: ""
 
         onSecretReady: function(secret) {
-            // Multi-host path (queue-driven)
-            if (connectionMode === "multiHost" && secretState === "loading" && secretQueue && secretQueue.length > 0) {
-                var item = secretQueue[secretQueueIndex]
-                var sessionKey = item ? item.sessionKey : ""
-
-                var map = parseSecretsMap()
-                var stashed = map[sessionKey]
-                if (stashed && String(stashed).length > 0) {
-                    logDebug("secretStore: Updating multi-host secret from settings into keyring: " + sessionKey)
-                    secretStore.writeSecret(String(stashed))
-                    delete map[sessionKey]
-                    writeSecretsMap(map)
-
-                    tempEndpoints.push({
-                        sessionKey: sessionKey,
-                        label: item.label,
-                        host: item.host,
-                        port: item.port,
-                        tokenId: item.tokenId,
-                        secret: String(stashed),
-                        ignoreSsl: ignoreSsl
-                    })
-                    secretsResolved += 1
-                    secretQueueIndex += 1
-                    readNextMultiSecret()
-                    return
-                }
-
-                if (secret && secret.length > 0) {
-                    tempEndpoints.push({
-                        sessionKey: sessionKey,
-                        label: item.label,
-                        host: item.host,
-                        port: item.port,
-                        tokenId: item.tokenId,
-                        secret: secret,
-                        ignoreSsl: ignoreSsl
-                    })
-                    secretsResolved += 1
-                    secretQueueIndex += 1
-                    readNextMultiSecret()
-                    return
-                }
-
-                // Not found; skip this endpoint
-                secretsResolved += 1
-                secretQueueIndex += 1
-                readNextMultiSecret()
-                return
-            }
-
-            // Single-host path (legacy candidates)
             var pendingSecret = Plasmoid.configuration.apiTokenSecret
             if (pendingSecret && pendingSecret.length > 0) {
-                logDebug("secretStore: Updating secret from settings into keyring")
+                logDebug("singleSecretStore: Updating secret from settings into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
                 var canonicalKey2 = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
-                secretStore.key = canonicalKey2
-                secretStore.writeSecret(pendingSecret)
-                // Use resolvedApiTokenSecret so the apiTokenSecret binding to
-                // Plasmoid.configuration stays intact for future KCM updates.
+                singleSecretStore.key = canonicalKey2
+                logDebug("singleSecretStore: writeSecret(single-pending) key=" + singleSecretStore.key)
+                singleSecretStore.writeSecret(pendingSecret)
                 resolvedApiTokenSecret = pendingSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
+                refreshResolvingSecrets = false
+                refreshAfterSecretReady()
                 return
             }
 
             if (secret && secret.length > 0) {
-                // If we loaded from a legacy key, migrate into canonical normalized key.
-                var canonicalKey = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
-                if (secretStore.key !== canonicalKey) {
-                    logDebug("secretStore: Migrating secret to canonical key")
-                    var oldKey = secretStore.key
-                    secretStore.key = canonicalKey
-                    secretStore.writeSecret(secret)
-                    secretStore.key = oldKey
-                }
-
-                logDebug("secretStore: Secret loaded from keyring")
+                logDebug("singleSecretStore: Secret loaded from keyring")
                 resolvedApiTokenSecret = secret
                 secretState = "ready"
+                refreshResolvingSecrets = false
+                refreshAfterSecretReady()
                 return
             }
 
-            // Try next candidate key if available
             if (secretKeyCandidates && (secretKeyCandidateIndex + 1) < secretKeyCandidates.length) {
                 secretKeyCandidateIndex += 1
-                secretStore.key = secretKeyCandidates[secretKeyCandidateIndex]
-                logDebug("secretStore: Secret not found, trying next key candidate: " + secretStore.key)
-                secretStore.readSecret()
+                singleSecretStore.key = secretKeyCandidates[secretKeyCandidateIndex]
+                logDebug("singleSecretStore: Secret not found, trying next key candidate: " + singleSecretStore.key)
+                singleSecretStore.readSecret()
                 return
             }
 
-            // No keyring entry. If we still have a legacy plaintext secret in config,
-            // migrate it into the keyring and immediately clear the plaintext value.
             if (Plasmoid.configuration.apiTokenSecret && Plasmoid.configuration.apiTokenSecret.length > 0) {
-                logDebug("secretStore: Migrating legacy plaintext secret into keyring")
-                secretStore.key = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
-                secretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
+                logDebug("singleSecretStore: Migrating legacy plaintext secret into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
+                singleSecretStore.key = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
+                logDebug("singleSecretStore: writeSecret(single-legacy) key=" + singleSecretStore.key)
+                singleSecretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
                 resolvedApiTokenSecret = Plasmoid.configuration.apiTokenSecret
                 Plasmoid.configuration.apiTokenSecret = ""
                 secretState = "ready"
+                refreshResolvingSecrets = false
+                refreshAfterSecretReady()
                 return
             }
 
+            refreshResolvingSecrets = false
             secretState = "missing"
-            logDebug("secretStore: No keyring secret found (and no legacy secret)")
+            logDebug("singleSecretStore: No keyring secret found (and no legacy secret)")
         }
 
         onWriteFinished: function(ok, error) {
-            if (!ok) {
-                logDebug("secretStore: write failed: " + error)
-                // Still treat secret as ready if we already set apiTokenSecret from legacy config;
-                // failing to write just means it won't persist.
-            }
+            if (!ok) logDebug("singleSecretStore: write failed: " + error)
         }
 
         onError: function(message) {
+            refreshResolvingSecrets = false
             secretState = "error"
-            logDebug("secretStore: " + message)
+            logDebug("singleSecretStore: " + message)
         }
 
         onKeysReady: function(keys) {
-            logDebug("secretStore.onKeysReady: " + keys.length + " key(s) found")
+            logDebug("singleSecretStore.onKeysReady: " + keys.length + " key(s) found")
             if (keys.length === 0 || hasCoreConfig) return
 
             if (keys.length === 1) {
                 var key = keys[0]
-                var match = key.match(/^apiTokenSecret:(.+)@(.+):(\d+)$/)
-                if (match) {
-                    var tokenId = match[1]
-                    var host = match[2]
-                    var port = parseInt(match[3])
-                    logDebug("secretStore.onKeysReady: Auto-restoring host=" + host + " port=" + port + " tokenId=" + tokenId)
-                                        Plasmoid.configuration.proxmoxHost = host
-                    Plasmoid.configuration.proxmoxPort = port
-                    Plasmoid.configuration.apiTokenId = tokenId
-                    // Reset secretState so resolveSecretIfNeeded() doesn't bail out early
+                var parsed = parseKeyEntry(key)
+                if (parsed) {
+                    logDebug("singleSecretStore.onKeysReady: Auto-restoring host=" + parsed.host + " port=" + parsed.port + " tokenId=" + parsed.tokenId)
+                    Plasmoid.configuration.connectionMode = "single"
+                    Plasmoid.configuration.proxmoxHost = parsed.host
+                    Plasmoid.configuration.proxmoxPort = parsed.port
+                    Plasmoid.configuration.apiTokenId = parsed.tokenId
                     secretState = "idle"
                     resolveSecretIfNeeded()
                 } else {
-                    logDebug("secretStore.onKeysReady: Could not parse key format: " + key)
+                    logDebug("singleSecretStore.onKeysReady: Could not parse key format: " + key)
                 }
             } else {
-                logDebug("secretStore.onKeysReady: Multiple keys found, manual config required: " + keys.join(", "))
+                var entries = parseKeyEntries(keys)
+                if (entries.length > 1) {
+                    logDebug("singleSecretStore.onKeysReady: Auto-restoring multi-host with " + entries.length + " key(s)")
+                    Plasmoid.configuration.connectionMode = "multiHost"
+                    Plasmoid.configuration.multiHostsJson = JSON.stringify(entries)
+                    secretState = "idle"
+                    resolveSecretIfNeeded()
+                } else {
+                    logDebug("singleSecretStore.onKeysReady: Multiple keys found, manual config required: " + keys.join(", "))
+                }
             }
         }
 
         onKeyListError: function(message) {
-            logDebug("secretStore.keyListError: " + message)
+            logDebug("singleSecretStore.keyListError: " + message)
+        }
+    }
+
+    ProxMon.SecretStore {
+        id: multiSecretStore
+        service: "ProxMon"
+        key: ""
+
+        onSecretReady: function(secret) {
+            if (!activeMultiSecretRequest) return
+
+            var item = activeMultiSecretRequest.item
+            var sessionKey = activeMultiSecretRequest.sessionKey
+            var map = parseSecretsMap()
+            var stashed = map[sessionKey]
+            if (sessionKey && stashed && String(stashed).length > 0) {
+                logDebug("multiSecretStore: Updating multi-host secret from settings into keyring: sessionKey=" + sessionKey + " item.host=" + item.host + " item.tokenId=" + item.tokenId)
+                logDebug("multiSecretStore: writeSecret(multi-stash) key=" + multiSecretStore.key)
+                multiSecretStore.writeSecret(String(stashed))
+                delete map[sessionKey]
+                writeSecretsMap(map)
+
+                tempEndpoints.push({
+                    sessionKey: sessionKey,
+                    label: item.label,
+                    host: item.host,
+                    port: item.port,
+                    tokenId: item.tokenId,
+                    secret: String(stashed),
+                    ignoreSsl: ignoreSsl
+                })
+                secretsResolved += 1
+                secretQueueIndex += 1
+                activeMultiSecretRequest = null
+                readNextMultiSecret()
+                return
+            }
+
+            if (secret && secret.length > 0) {
+                tempEndpoints.push({
+                    sessionKey: sessionKey,
+                    label: item.label,
+                    host: item.host,
+                    port: item.port,
+                    tokenId: item.tokenId,
+                    secret: secret,
+                    ignoreSsl: ignoreSsl
+                })
+                secretsResolved += 1
+                secretQueueIndex += 1
+                activeMultiSecretRequest = null
+                readNextMultiSecret()
+                return
+            }
+
+            secretsResolved += 1
+            secretQueueIndex += 1
+            activeMultiSecretRequest = null
+            readNextMultiSecret()
+        }
+
+        onWriteFinished: function(ok, error) {
+            if (!ok) logDebug("multiSecretStore: write failed: " + error)
+        }
+
+        onError: function(message) {
+            if (!activeMultiSecretRequest) return
+            multiSecretHadError = true
+            secretsResolved += 1
+            secretQueueIndex += 1
+            activeMultiSecretRequest = null
+            logDebug("multiSecretStore: " + message)
+            readNextMultiSecret()
         }
     }
 
     function resolveSecretIfNeeded() {
         if (!hasCoreConfig) {
             endpoints = []
+            pendingResolvedRefresh = false
             secretState = "idle"
             return
         }
@@ -1747,10 +2024,17 @@ onError: function(seq, kind, node, message) {
         triggerRefreshFromConfigChange("apiTokenSecret")
     }
     onMultiHostsJsonChanged: {
+        pendingResolvedRefresh = true
         if (connectionMode === "multiHost") resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("multiHostsJson")
     }
     onConnectionModeChanged: {
+        displayedProxmoxData = null
+        displayedEndpoints = []
+        displayedNodeList = []
+        displayedVmData = []
+        displayedLxcData = []
+        pendingResolvedRefresh = true
         resolveSecretIfNeeded()
         triggerRefreshFromConfigChange("connectionMode")
     }
@@ -1777,7 +2061,7 @@ onError: function(seq, kind, node, message) {
 
         if (!hasCoreConfig && connectionMode === "single") {
             logDebug("Component.onCompleted: Missing core config, attempting KWallet key detection")
-            secretStore.listKWalletKeys()
+            singleSecretStore.listKWalletKeys()
             loadDefaults.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
         }
     }
@@ -1928,17 +2212,40 @@ onError: function(seq, kind, node, message) {
 
                     if (errorMessage) return "!"
 
+                    if (connectionMode === "multiHost") {
+                    if (!displayedEndpoints || displayedEndpoints.length === 0) return "-"
+                    var totalCpu = 0
+                    var onlineCount = 0
+                    for (var ei = 0; ei < displayedEndpoints.length; ei++) {
+                    var endpoint = displayedEndpoints[ei]
+                    if (!endpoint || !endpoint.nodes) continue
+                    for (var ni = 0; ni < endpoint.nodes.length; ni++) {
+                    var node = endpoint.nodes[ni]
+                    if (node && node.status === "online") {
+                    // Multi-host compact CPU must use the same clamped percentage
+                    // path as the single-host/full-card UI.
+                    totalCpu += safeCpuPercent(node.cpu)
+                    onlineCount++
+                    }
+                    }
+                    }
+                    if (onlineCount === 0) return "!"
+                    return Math.round(totalCpu / onlineCount) + "%"
+                    }
+
                     if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
                     var totalCpu = 0
                     var onlineCount = 0
                     for (var i = 0; i < displayedProxmoxData.data.length; i++) {
                     if (displayedProxmoxData.data[i].status === "online") {
-                    totalCpu += displayedProxmoxData.data[i].cpu
+                    // safeCpuPercent() already returns a clamped 0..100 percentage,
+                    // so average those values directly without multiplying by 100 again.
+                    totalCpu += safeCpuPercent(displayedProxmoxData.data[i].cpu)
                     onlineCount++
                     }
                 }
                 if (onlineCount === 0) return "!"
-                return Math.round((totalCpu / onlineCount) * 100) + "%"
+                return Math.round(totalCpu / onlineCount) + "%"
                 }
                     return "-"
                 }
@@ -1974,7 +2281,11 @@ onError: function(seq, kind, node, message) {
             Layout.preferredHeight: 36
 
             PlasmaComponents.Label {
-                text: configured ? "Proxmox - " + anonymizeHost(proxmoxHost) : "Proxmox Monitor"
+                text: configured
+                    ? (connectionMode === "multiHost"
+                       ? "Proxmox - " + displayedEndpoints.length + " hosts"
+                       : "Proxmox - " + anonymizeHost(proxmoxHost))
+                    : "Proxmox Monitor"
                 font.bold: true
                 Layout.fillWidth: true
             }
@@ -2047,25 +2358,28 @@ onError: function(seq, kind, node, message) {
             PlasmaComponents.Label {
                 text: {
                     if (!hasCoreConfig) return "Not Configured"
-                    if (secretState === "loading") return "Loading Credentials…"
+                    if (secretState === "loading" || refreshResolvingSecrets) return "Loading Credentials…"
                     if (secretState === "missing") return "Missing Token Secret"
                     if (secretState === "error") return "Credentials Error"
                     return "Not Configured"
                 }
                 font.bold: true
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
                 Layout.alignment: Qt.AlignHCenter
             }
 
             PlasmaComponents.Label {
                 text: {
                     if (!hasCoreConfig) return "Right-click → Configure Widget"
-                    if (secretState === "loading") return "Reading API token secret from keyring…"
+                    if (secretState === "loading" || refreshResolvingSecrets) return "Reading API token secret from keyring…"
                     if (secretState === "missing") return "Open settings and re-enter the API Token Secret."
                     if (secretState === "error") return "Keyring access failed. Check logs (journalctl --user -f)."
                     return "Right-click → Configure Widget"
                 }
                 opacity: 0.7
                 wrapMode: Text.WordWrap
+                Layout.fillWidth: true
                 horizontalAlignment: Text.AlignHCenter
                 Layout.alignment: Qt.AlignHCenter
                 Layout.maximumWidth: 320
@@ -2830,6 +3144,7 @@ onError: function(seq, kind, node, message) {
                         readonly property var endpoint: modelData
                         readonly property string sessionKey: endpoint ? endpoint.sessionKey : ""
                         readonly property string endpointLabel: endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : "")
+                        readonly property string endpointError: endpoint && endpoint.error ? endpoint.error : ""
                         readonly property var nodes: endpoint && endpoint.nodes ? endpoint.nodes : []
 
                         Rectangle {
@@ -2869,6 +3184,16 @@ onError: function(seq, kind, node, message) {
                             }
                         }
 
+                        PlasmaComponents.Label {
+                            visible: endpointError !== ""
+                            text: endpointError
+                            color: Kirigami.Theme.negativeTextColor
+                            font.pixelSize: 10
+                            wrapMode: Text.WordWrap
+                            Layout.leftMargin: 6
+                            Layout.rightMargin: scrollView.__scrollbarReserve
+                        }
+
                         Repeater {
                             model: nodes
 
@@ -2888,6 +3213,7 @@ onError: function(seq, kind, node, message) {
 
                                 Rectangle {
                                     Layout.fillWidth: true
+                                    Layout.rightMargin: scrollView.__scrollbarReserve
                                     Layout.preferredHeight: 70
                                     radius: uiRadiusL
                                     color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.98)
@@ -2924,6 +3250,8 @@ onError: function(seq, kind, node, message) {
                                             PlasmaComponents.Label {
                                                 text: anonymizeNodeName(nodeName, index)
                                                 font.bold: true
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
                                             }
 
                                             Rectangle {
@@ -3005,6 +3333,7 @@ onError: function(seq, kind, node, message) {
                                 ColumnLayout {
                                     Layout.fillWidth: true
                                     Layout.leftMargin: 12
+                                    Layout.rightMargin: scrollView.__scrollbarReserve
                                     visible: !isCollapsed
                                     spacing: 4
 

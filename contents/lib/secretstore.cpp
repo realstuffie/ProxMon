@@ -34,8 +34,9 @@ void SecretStore::readSecret() {
                 return;
             }
 
+            // Hard keyring failures must not be reported as an empty/missing secret,
+            // otherwise multi-host resolution can misclassify them as legacy/missing state.
             emit error(job->errorString());
-            emit secretReady(QString());
             job->deleteLater();
             return;
         }

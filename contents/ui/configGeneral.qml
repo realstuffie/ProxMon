@@ -149,7 +149,8 @@ KCM.SimpleKCM {
         var host = (entry && entry.host) ? String(entry.host).trim().toLowerCase() : ""
         var port = (entry && entry.port) ? String(entry.port) : "8006"
         var tokenId = (entry && entry.tokenId) ? String(entry.tokenId).trim() : ""
-        return "apiTokenSecret:" + tokenId + "@" + host + ":" + port
+        var key = (!host || !tokenId) ? "" : ("apiTokenSecret:" + tokenId + "@" + host + ":" + port)
+        return key
     }
 
     /*
@@ -325,7 +326,7 @@ KCM.SimpleKCM {
         ColumnLayout {
             Layout.fillWidth: true
             visible: (root.cfg_connectionMode || "single") === "multiHost"
-            spacing: 10
+            spacing: 12
 
             QQC2.Label {
                 text: "Configure up to 5 Proxmox endpoints. Secrets are stored in the system keyring after Apply."
@@ -344,74 +345,86 @@ KCM.SimpleKCM {
                     property int idx: index
                     property var entry: (ensureMultiHostsLen(5)[idx])
 
-                    contentItem: ColumnLayout {
-                        spacing: 8
+                    header: Kirigami.Heading {
+                        text: "Endpoint " + (idx + 1)
+                        level: 4
+                    }
 
-                        RowLayout {
-                            spacing: 8
-                            QQC2.Label { text: "Label:"; Layout.preferredWidth: 60 }
-                            QQC2.TextField {
-                                Layout.fillWidth: true
-                                text: entry.name || ""
-                                placeholderText: "e.g. Home / Work"
-                                onTextChanged: {
-                                    var arr = ensureMultiHostsLen(5)
-                                    arr[idx].name = text
-                                    saveMultiHosts(arr)
-                                }
+                    contentItem: GridLayout {
+                        columns: 2
+                        columnSpacing: 15
+                        rowSpacing: 12
+                        width: parent ? parent.width : implicitWidth
+
+                        QQC2.Label {
+                            text: "Label:"
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        }
+                        QQC2.TextField {
+                            Layout.fillWidth: true
+                            text: entry.name || ""
+                            placeholderText: "e.g. Home / Work"
+                            onTextChanged: {
+                                var arr = ensureMultiHostsLen(5)
+                                arr[idx].name = text
+                                saveMultiHosts(arr)
                             }
                         }
 
-                        RowLayout {
-                            spacing: 8
-                            QQC2.Label { text: "Host:"; Layout.preferredWidth: 60 }
-                            QQC2.TextField {
-                                Layout.fillWidth: true
-                                text: entry.host || ""
-                                placeholderText: "192.168.1.100 or proxmox.local"
-                                onTextChanged: {
-                                    var arr = ensureMultiHostsLen(5)
-                                    arr[idx].host = text
-                                    saveMultiHosts(arr)
-                                }
+                        QQC2.Label {
+                            text: "Host:"
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        }
+                        QQC2.TextField {
+                            Layout.fillWidth: true
+                            text: entry.host || ""
+                            placeholderText: "192.168.1.100 or proxmox.local"
+                            onTextChanged: {
+                                var arr = ensureMultiHostsLen(5)
+                                arr[idx].host = text
+                                saveMultiHosts(arr)
                             }
                         }
 
-                        RowLayout {
-                            spacing: 8
-                            QQC2.Label { text: "Port:"; Layout.preferredWidth: 60 }
-                            QQC2.SpinBox {
-                                from: 1
-                                to: 65535
-                                value: entry.port || 8006
-                                editable: true
-                                onValueModified: {
-                                    var arr = ensureMultiHostsLen(5)
-                                    arr[idx].port = value
-                                    saveMultiHosts(arr)
-                                }
-                            }
-                            Item { Layout.fillWidth: true }
+                        QQC2.Label {
+                            text: "Port:"
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         }
-
-                        RowLayout {
-                            spacing: 8
-                            QQC2.Label { text: "Token ID:"; Layout.preferredWidth: 60 }
-                            QQC2.TextField {
-                                Layout.fillWidth: true
-                                text: entry.tokenId || ""
-                                placeholderText: "user@realm!tokenname"
-                                onTextChanged: {
-                                    var arr = ensureMultiHostsLen(5)
-                                    arr[idx].tokenId = text
-                                    saveMultiHosts(arr)
-                                }
+                        QQC2.SpinBox {
+                            from: 1
+                            to: 65535
+                            value: entry.port || 8006
+                            editable: true
+                            onValueModified: {
+                                var arr = ensureMultiHostsLen(5)
+                                arr[idx].port = value
+                                saveMultiHosts(arr)
                             }
                         }
 
+                        QQC2.Label {
+                            text: "API Token ID:"
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        }
+                        QQC2.TextField {
+                            Layout.fillWidth: true
+                            text: entry.tokenId || ""
+                            placeholderText: "user@realm!tokenname"
+                            onTextChanged: {
+                                var arr = ensureMultiHostsLen(5)
+                                arr[idx].tokenId = text
+                                saveMultiHosts(arr)
+                            }
+                        }
+
+                        QQC2.Label {
+                            text: "API Token Secret:"
+                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        }
                         RowLayout {
+                            Layout.fillWidth: true
                             spacing: 8
-                            QQC2.Label { text: "Secret:"; Layout.preferredWidth: 60 }
+
                             QQC2.TextField {
                                 id: mhSecretField
                                 Layout.fillWidth: true
@@ -426,6 +439,7 @@ KCM.SimpleKCM {
                                 onClicked: {
                                     var arr = ensureMultiHostsLen(5)
                                     var key = multiHostSecretKey(arr[idx])
+                                    if (!key) return
 
                                     // KCM cannot access keyring directly. Stash secrets temporarily in config;
                                     // the plasmoid runtime migrates them into the system keyring on next load.
@@ -437,6 +451,17 @@ KCM.SimpleKCM {
                                     // Reduce risk of the secret lingering on screen / being re-saved accidentally.
                                     mhSecretField.text = ""
                                 }
+                            }
+
+                            QQC2.Button {
+                                text: "Forget"
+                                icon.name: "edit-clear"
+                                onClicked: {
+                                    mhSecretField.text = ""
+                                }
+
+                                QQC2.ToolTip.visible: hovered
+                                QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
                             }
                         }
                     }

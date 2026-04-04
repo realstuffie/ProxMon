@@ -166,6 +166,12 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.4.3
+
+- Multi-host reliability improvements for key autodetect, secret migration, and config restore
+- More accurate refresh/loading state while credentials are being resolved
+- Reduced default debug noise and small UI polish/fixups
+
 ### v0.4.2
 
 - Auto-rebuild watcher: detects libplasma/Qt soname bumps and rebuilds the native plugin automatically
