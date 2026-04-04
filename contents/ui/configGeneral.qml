@@ -282,44 +282,6 @@ KCM.SimpleKCM {
                 }
             }
 
-            QQC2.Label {
-                text: "Refresh Interval:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            RowLayout {
-                spacing: 8
-                QQC2.SpinBox {
-                    id: refreshField
-                    from: 5
-                    to: 3600
-                    value: 30
-                    editable: true
-                }
-                QQC2.Label {
-                    text: "seconds"
-                    opacity: 0.7
-                }
-            }
-
-            QQC2.Label {
-                text: "SSL Verification:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            QQC2.CheckBox {
-                id: ignoreSslCheck
-                checked: true
-                text: "Ignore SSL certificate errors"
-            }
-
-            QQC2.Label {
-                text: "Notifications:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            QQC2.CheckBox {
-                id: enableNotificationsCheck
-                checked: true
-                text: "Enable desktop notifications"
-            }
         }
 
         // Multi-host configuration
@@ -466,6 +428,52 @@ KCM.SimpleKCM {
                         }
                     }
                 }
+            }
+        }
+
+        GridLayout {
+            columns: 2
+            columnSpacing: 15
+            rowSpacing: 12
+            Layout.fillWidth: true
+
+            QQC2.Label {
+                text: "Refresh Interval:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+            RowLayout {
+                spacing: 8
+                QQC2.SpinBox {
+                    id: refreshField
+                    from: 5
+                    to: 3600
+                    value: 30
+                    editable: true
+                }
+                QQC2.Label {
+                    text: "seconds"
+                    opacity: 0.7
+                }
+            }
+
+            QQC2.Label {
+                text: "SSL Verification:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+            QQC2.CheckBox {
+                id: ignoreSslCheck
+                checked: true
+                text: "Ignore SSL certificate errors"
+            }
+
+            QQC2.Label {
+                text: "Notifications:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+            QQC2.CheckBox {
+                id: enableNotificationsCheck
+                checked: true
+                text: "Enable desktop notifications"
             }
         }
 

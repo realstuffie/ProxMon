@@ -17,6 +17,7 @@ class ProxmoxClient : public QObject {
 
 public:
     explicit ProxmoxClient(QObject *parent = nullptr);
+    ~ProxmoxClient() override;
 
     QString host() const { return m_host; }
     void setHost(const QString &v);

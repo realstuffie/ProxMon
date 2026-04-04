@@ -152,11 +152,15 @@ PlasmoidItem {
     }
 
     // "configured" means we have at least one usable endpoint and secrets resolved.
+    // During refresh-time secret re-resolution, keep the widget in configured state
+    // so it does not flash the not-configured UI between refreshes.
     property bool configured: {
         if (connectionMode === "multiHost") {
-            return secretState === "ready" && endpoints && endpoints.length > 0
+            if (secretState === "ready" && endpoints && endpoints.length > 0) return true
+            return refreshResolvingSecrets && displayedEndpoints && displayedEndpoints.length > 0
         }
-        return hasCoreConfig && secretState === "ready" && resolvedApiTokenSecret !== ""
+        if (hasCoreConfig && secretState === "ready" && resolvedApiTokenSecret !== "") return true
+        return hasCoreConfig && refreshResolvingSecrets && resolvedApiTokenSecret !== ""
     }
     property bool defaultsLoaded: false
     property bool devMode: false
@@ -1606,6 +1610,11 @@ onError: function(seq, kind, node, message) {
         }
     }
 
+    function isEndpointTimeout(message) {
+        var m = String(message || "").toLowerCase()
+        return m.indexOf("timed out") !== -1 || m.indexOf("timeout") !== -1
+    }
+
     function ensureEndpointBucket(sessionKey) {
         var b = tempEndpointsData[sessionKey]
         if (b) return b
@@ -1623,6 +1632,7 @@ onError: function(seq, kind, node, message) {
             host: meta ? meta.host : "",
             port: meta ? meta.port : 8006,
             error: "",
+            offline: false,
             nodes: [],
             vms: [],
             lxcs: []
@@ -1645,6 +1655,7 @@ onError: function(seq, kind, node, message) {
                 host: ep.host,
                 port: ep.port,
                 error: bucket.error || "",
+                offline: !!bucket.offline,
                 nodes: bucket.nodes || [],
                 vms: bucket.vms || [],
                 lxcs: bucket.lxcs || []
@@ -1663,6 +1674,8 @@ onError: function(seq, kind, node, message) {
         if (kind === "nodes") {
             var bucket = ensureEndpointBucket(sessionKey)
             var list = (data && data.data) ? data.data.slice() : []
+            bucket.offline = false
+            bucket.error = ""
             // annotate nodes with sessionKey for uniqueness/collapsing
             for (var i = 0; i < list.length; i++) {
                 list[i].sessionKey = sessionKey
@@ -1707,6 +1720,12 @@ onError: function(seq, kind, node, message) {
         var bucket = ensureEndpointBucket(sessionKey)
         if (bucket && kind === "nodes") {
             bucket.error = message || "Connection failed"
+            bucket.offline = isEndpointTimeout(message)
+            if (bucket.offline) {
+                bucket.nodes = []
+                bucket.vms = []
+                bucket.lxcs = []
+            }
         }
 
         // Decrement pending count for this individual request and continue.
@@ -3145,6 +3164,7 @@ onError: function(seq, kind, node, message) {
                         readonly property string sessionKey: endpoint ? endpoint.sessionKey : ""
                         readonly property string endpointLabel: endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : "")
                         readonly property string endpointError: endpoint && endpoint.error ? endpoint.error : ""
+                        readonly property bool endpointOffline: endpoint && endpoint.offline
                         readonly property var nodes: endpoint && endpoint.nodes ? endpoint.nodes : []
 
                         Rectangle {
@@ -3174,6 +3194,14 @@ onError: function(seq, kind, node, message) {
                                     font.bold: true
                                     Layout.fillWidth: true
                                     elide: Text.ElideRight
+                                }
+
+                                PlasmaComponents.Label {
+                                    visible: endpointOffline
+                                    text: "Offline"
+                                    color: Kirigami.Theme.negativeTextColor
+                                    font.bold: true
+                                    font.pixelSize: 10
                                 }
 
                                 PlasmaComponents.Label {

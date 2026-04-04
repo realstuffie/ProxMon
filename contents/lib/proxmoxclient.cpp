@@ -8,6 +8,10 @@
 ProxmoxClient::ProxmoxClient(QObject *parent)
     : QObject(parent) {}
 
+ProxmoxClient::~ProxmoxClient() {
+    cancelAll();
+}
+
 void ProxmoxClient::cancelAll() {
     // Abort any outstanding requests to avoid late reply storms and wasted work.
     //
@@ -266,9 +270,6 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
     QNetworkReply *r = m_nam.get(req);
 
     m_inFlight.insert(r);
-    QObject::connect(r, &QObject::destroyed, this, [this, r]() {
-        m_inFlight.remove(r);
-    });
 
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -311,9 +312,6 @@ void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind
     QNetworkReply *r = m_nam.post(req, QByteArray());
 
     m_inFlight.insert(r);
-    QObject::connect(r, &QObject::destroyed, this, [this, r]() {
-        m_inFlight.remove(r);
-    });
 
     if (m_ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
