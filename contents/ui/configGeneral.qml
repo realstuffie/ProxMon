@@ -140,7 +140,10 @@ KCM.SimpleKCM {
     function ensureMultiHostsLen(n) {
         var arr = parseMultiHosts()
         while (arr.length < n) {
-            arr.push({ name: "", host: "", port: 8006, tokenId: "" })
+            arr.push({ name: "", host: "", port: 8006, tokenId: "", enabled: true })
+        }
+        for (var i = 0; i < arr.length; i++) {
+            if (arr[i].enabled === undefined) arr[i].enabled = true
         }
         return arr.slice(0, n)
     }
@@ -307,9 +310,26 @@ KCM.SimpleKCM {
                     property int idx: index
                     property var entry: (ensureMultiHostsLen(5)[idx])
 
-                    header: Kirigami.Heading {
-                        text: "Endpoint " + (idx + 1)
-                        level: 4
+                    header: RowLayout {
+                        width: parent ? parent.width : implicitWidth
+                        spacing: 12
+
+                        Kirigami.Heading {
+                            text: "Endpoint " + (idx + 1)
+                            level: 4
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        QQC2.Switch {
+                            text: checked ? "Enabled" : "Disabled"
+                            checked: entry.enabled !== false
+                            onToggled: {
+                                var arr = ensureMultiHostsLen(5)
+                                arr[idx].enabled = checked
+                                saveMultiHosts(arr)
+                            }
+                        }
                     }
 
                     contentItem: GridLayout {

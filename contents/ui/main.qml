@@ -141,6 +141,7 @@ PlasmoidItem {
                 if (!Array.isArray(arr)) return false
                 for (var i = 0; i < arr.length; i++) {
                     var e = arr[i] || {}
+                    if (e.enabled === false) continue
                     var h = (e.host || "").trim()
                     var t = (e.tokenId || "").trim()
                     if (h !== "" && t !== "") return true
@@ -1510,7 +1511,11 @@ onError: function(seq, kind, node, message) {
         try {
             var arr = JSON.parse(multiHostsJson || "[]")
             if (!Array.isArray(arr)) return []
-            return arr.slice(0, 5)
+            arr = arr.slice(0, 5)
+            for (var i = 0; i < arr.length; i++) {
+                if (arr[i] && arr[i].enabled === undefined) arr[i].enabled = true
+            }
+            return arr
         } catch (e) {
             return []
         }
@@ -1521,6 +1526,7 @@ onError: function(seq, kind, node, message) {
         var q = []
         for (var i = 0; i < raw.length; i++) {
             var e = raw[i] || {}
+            if (e.enabled === false) continue
             var host = (e.host || "").trim()
             var tokenId = (e.tokenId || "").trim()
             if (!host || !tokenId) continue

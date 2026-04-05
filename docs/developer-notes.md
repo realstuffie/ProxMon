@@ -219,6 +219,12 @@ Recommended pattern:
 
 ### Notification rate limiting
 
+---
+
+## Future TODOs
+
+- Consider an optional adaptive multi-host `/nodes` soft-fail/soft-timeout mode in the future. Keep it scoped to the initial `/nodes` request only, not child VM/LXC requests. If revisited, account for first-run behavior, per-host history/baselines, refresh-sequence safety, and avoiding false offline classification on slower public internet links.
+
 To reduce notification spam during flapping or frequent refresh/retry cycles:
 
 - Enable/disable in **Behavior tab → Rate Limiting**
