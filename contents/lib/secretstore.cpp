@@ -7,6 +7,33 @@
 
 using namespace QKeychain;
 
+namespace {
+
+QStringList parseKWalletListOutput(const QString &out) {
+    QStringList raw;
+
+    const QRegularExpression quotedRe(QStringLiteral("\"([^\"]+)\""));
+    QRegularExpressionMatchIterator it = quotedRe.globalMatch(out);
+    while (it.hasNext()) {
+        const QString s = it.next().captured(1);
+        if (!s.isEmpty()) raw.push_back(s);
+    }
+
+    if (raw.isEmpty()) {
+        const QStringList tokens = out.split(QRegularExpression(QStringLiteral("[\\r\\n\\t ]+")), Qt::SkipEmptyParts);
+        for (const QString &t : tokens) {
+            QString cleaned = t;
+            cleaned.remove(QRegularExpression(QStringLiteral("^[\\(\\),]+|[\\(\\),]+$")));
+            cleaned.remove('"');
+            if (!cleaned.isEmpty()) raw.push_back(cleaned);
+        }
+    }
+
+    return raw;
+}
+
+} // namespace
+
 SecretStore::SecretStore(QObject *parent)
     : QObject(parent) {}
 
@@ -71,6 +98,19 @@ void SecretStore::deleteSecret() {
     job->start();
 }
 
+void SecretStore::emitFilteredKWalletKeys(const QStringList &raw) {
+    QStringList filtered;
+    for (const QString &k : raw) {
+        if (k.startsWith(QStringLiteral("apiTokenSecret:")) && !filtered.contains(k)) filtered.push_back(k);
+    }
+
+    if (filtered.isEmpty()) {
+        emit keyListError(QStringLiteral("Failed to read KWallet entry list"));
+    }
+
+    emit keysReady(filtered);
+}
+
 void SecretStore::listKWalletKeys() {
     QDBusInterface kwallet(
         "org.kde.kwalletd6",
@@ -118,52 +158,53 @@ void SecretStore::listKWalletKeys() {
 
     // Fallback: QProcess qdbus
     if (raw.isEmpty()) {
-        // qDebug() << "[ProxMon] DBus entryList empty, trying QProcess fallback";
-        QProcess proc;
-        proc.start(QStringLiteral("qdbus"), QStringList{
+        if (m_kwalletListProcess) {
+            m_kwalletListProcess->deleteLater();
+            m_kwalletListProcess = nullptr;
+        }
+
+        auto *proc = new QProcess(this);
+        m_kwalletListProcess = proc;
+
+        const QStringList args{
             QStringLiteral("org.kde.kwalletd6"),
             QStringLiteral("/modules/kwalletd6"),
             QStringLiteral("org.kde.KWallet.entryList"),
             QString::number(handle.value()),
             QStringLiteral("ProxMon"),
             QStringLiteral("proxmox-monitor")
-        });
+        };
 
-        if (proc.waitForStarted(1500) && proc.waitForFinished(3000)) {
-            const QString out = QString::fromUtf8(proc.readAllStandardOutput());
-            // qDebug() << "[ProxMon] QProcess output:" << out;
+        connect(proc,
+                QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
+                this,
+                [this, proc](int, QProcess::ExitStatus) {
+                    if (m_kwalletListProcess != proc) {
+                        proc->deleteLater();
+                        return;
+                    }
+                    m_kwalletListProcess = nullptr;
+                    emitFilteredKWalletKeys(parseKWalletListOutput(QString::fromUtf8(proc->readAllStandardOutput())));
+                    proc->deleteLater();
+                });
 
-            const QRegularExpression quotedRe(QStringLiteral("\"([^\"]+)\""));
-            QRegularExpressionMatchIterator it = quotedRe.globalMatch(out);
-            while (it.hasNext()) {
-                const QString s = it.next().captured(1);
-                if (!s.isEmpty()) raw.push_back(s);
-            }
+        connect(proc,
+                &QProcess::errorOccurred,
+                this,
+                [this, proc](QProcess::ProcessError) {
+                    if (m_kwalletListProcess != proc) {
+                        proc->deleteLater();
+                        return;
+                    }
+                    m_kwalletListProcess = nullptr;
+                    emit keyListError(QStringLiteral("Failed to read KWallet entry list"));
+                    emit keysReady({});
+                    proc->deleteLater();
+                });
 
-            if (raw.isEmpty()) {
-                const QStringList tokens = out.split(QRegularExpression(QStringLiteral("[\\r\\n\\t ]+")), Qt::SkipEmptyParts);
-                for (const QString &t : tokens) {
-                    QString cleaned = t;
-                    cleaned.remove(QRegularExpression(QStringLiteral("^[\\(\\),]+|[\\(\\),]+$")));
-                    cleaned.remove('"');
-                    if (!cleaned.isEmpty()) raw.push_back(cleaned);
-                }
-            }
-        } else {
-            // qDebug() << "[ProxMon] QProcess failed to start or finish";
-        }
+        proc->start(QStringLiteral("qdbus"), args);
+        return;
     }
 
-    QStringList filtered;
-    for (const QString &k : raw) {
-        if (k.startsWith(QStringLiteral("apiTokenSecret:")) && !filtered.contains(k)) filtered.push_back(k);
-    }
-
-    // qDebug() << "[ProxMon] filtered keys:" << filtered;
-
-    if (filtered.isEmpty()) {
-        emit keyListError(QStringLiteral("Failed to read KWallet entry list"));
-    }
-
-    emit keysReady(filtered);
+    emitFilteredKWalletKeys(raw);
 }

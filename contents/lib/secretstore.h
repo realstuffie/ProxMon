@@ -3,6 +3,10 @@
 #include <QString>
 #include <QStringList>
 
+QT_BEGIN_NAMESPACE
+class QProcess;
+QT_END_NAMESPACE
+
 class SecretStore : public QObject {
     Q_OBJECT
     Q_PROPERTY(QString service READ service WRITE setService NOTIFY serviceChanged)
@@ -35,6 +39,9 @@ signals:
     void keyListError(const QString &message);
 
 private:
+    void emitFilteredKWalletKeys(const QStringList &raw);
+
     QString m_service = QStringLiteral("ProxMon");
     QString m_key = QStringLiteral("apiTokenSecret");
+    QProcess *m_kwalletListProcess = nullptr;
 };
