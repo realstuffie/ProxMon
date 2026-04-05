@@ -2415,10 +2415,10 @@ onError: function(seq, kind, node, message) {
                         isActionBusy: root.isActionBusy
                         armedActionKey: root.armedActionKey
                         armedTimerRunning: armedTimer.running
-                        getRunningVmsForNode: root.getRunningVmsForNode
-                        getTotalVmsForNode: root.getTotalVmsForNode
-                        getRunningLxcForNode: root.getRunningLxcForNode
-                        getTotalLxcForNode: root.getTotalLxcForNode
+                        getRunningVmsText: root.getRunningVmsForNode
+                        getTotalVmsText: root.getTotalVmsForNode
+                        getRunningLxcText: root.getRunningLxcForNode
+                        getTotalLxcText: root.getTotalLxcForNode
                         onToggleCollapsed: function(nodeName) { root.toggleNodeCollapsed(nodeName) }
                         onAction: function(kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunAction(kind, nodeName, vmid, displayName, action)
