@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
+import "components"
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.kcmutils as KCM
@@ -20,10 +21,10 @@ KCM.SimpleKCM {
     id: root
 
     // Connection properties (aliased to UI controls)
-    property alias cfg_proxmoxHost: hostField.text
-    property alias cfg_proxmoxPort: portField.value
-    property alias cfg_apiTokenId: tokenIdField.text
-    property alias cfg_apiTokenSecret: tokenSecretField.text
+    property alias cfg_proxmoxHost: singleHostSection.hostText
+    property alias cfg_proxmoxPort: singleHostSection.portValue
+    property alias cfg_apiTokenId: singleHostSection.tokenIdText
+    property alias cfg_apiTokenSecret: singleHostSection.tokenSecretText
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
     property alias cfg_enableNotifications: enableNotificationsCheck.checked
@@ -34,9 +35,9 @@ KCM.SimpleKCM {
     property string cfg_multiHostSecretsJson: "{}"
 
     // Auto-retry (handled in main.qml)
-    property alias cfg_autoRetry: autoRetryCheck.checked
-    property alias cfg_retryStartSeconds: retryStartSpin.value
-    property alias cfg_retryMaxSeconds: retryMaxSpin.value
+    property alias cfg_autoRetry: retrySection.autoRetryChecked
+    property alias cfg_retryStartSeconds: retrySection.retryStartValue
+    property alias cfg_retryMaxSeconds: retrySection.retryMaxValue
 
     // Default values for Plasma
     property string cfg_proxmoxHostDefault: ""
@@ -83,10 +84,10 @@ KCM.SimpleKCM {
             if (data["exit code"] === 0 && data["stdout"]) {
                 try {
                     var s = JSON.parse(data["stdout"])
-                    if (s.host) hostField.text = s.host
-                    if (s.port) portField.value = s.port
-                    if (s.tokenId) tokenIdField.text = s.tokenId
-                    if (s.tokenSecret) tokenSecretField.text = s.tokenSecret
+                    if (s.host) singleHostSection.hostText = s.host
+                    if (s.port) singleHostSection.portValue = s.port
+                    if (s.tokenId) singleHostSection.tokenIdText = s.tokenId
+                    if (s.tokenSecret) singleHostSection.tokenSecretText = s.tokenSecret
                     if (s.refreshInterval) refreshField.value = s.refreshInterval
                     if (s.ignoreSsl !== undefined) ignoreSslCheck.checked = s.ignoreSsl
                     if (s.enableNotifications !== undefined) enableNotificationsCheck.checked = s.enableNotifications
@@ -204,250 +205,27 @@ KCM.SimpleKCM {
             }
         }
 
-        GridLayout {
-            id: singleHostGrid
-            columns: 2
-            columnSpacing: 15
-            rowSpacing: 12
+        ConfigGeneralSingleHostSection {
+            id: singleHostSection
             Layout.fillWidth: true
             visible: (root.cfg_connectionMode || "single") === "single"
-
-            QQC2.Label {
-                text: "Host:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            onStashSecret: function(secret) {
+                cfg_apiTokenSecret = secret
             }
-            QQC2.TextField {
-                id: hostField
-                Layout.fillWidth: true
-                placeholderText: "192.168.1.100 or proxmox.local"
+            onForgetSecret: function() {
+                cfg_apiTokenSecret = ""
             }
-
-            QQC2.Label {
-                text: "Port:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            QQC2.SpinBox {
-                id: portField
-                from: 1
-                to: 65535
-                value: 8006
-                editable: true
-            }
-
-            QQC2.Label {
-                text: "API Token ID:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            QQC2.TextField {
-                id: tokenIdField
-                Layout.fillWidth: true
-                placeholderText: "user@realm!tokenname"
-            }
-
-            QQC2.Label {
-                text: "API Token Secret:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                spacing: 8
-
-                QQC2.TextField {
-                    id: tokenSecretField
-                    Layout.fillWidth: true
-                    echoMode: TextInput.Password
-                    placeholderText: "Stored in keyring after Apply"
-                }
-
-                QQC2.Button {
-                    text: "Update Keyring"
-                    icon.name: "dialog-password"
-                    enabled: tokenSecretField.text && tokenSecretField.text.trim() !== ""
-                    onClicked: {
-                        // KCM cannot access keyring directly. Stash secret into config; runtime migrates to keyring.
-                        cfg_apiTokenSecret = tokenSecretField.text
-                    }
-
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Stores the secret temporarily; the widget will move it into the keyring on next load."
-                }
-
-                QQC2.Button {
-                    text: "Forget"
-                    icon.name: "edit-clear"
-                    onClicked: {
-                        tokenSecretField.text = ""
-                        cfg_apiTokenSecret = ""
-                    }
-
-                    QQC2.ToolTip.visible: hovered
-                    QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
-                }
-            }
-
         }
 
-        // Multi-host configuration
-        ColumnLayout {
+        ConfigGeneralMultiHostSection {
             Layout.fillWidth: true
             visible: (root.cfg_connectionMode || "single") === "multiHost"
-            spacing: 12
-
-            QQC2.Label {
-                text: "Configure up to 5 Proxmox endpoints. Secrets are stored in the system keyring after Apply."
-                font.pixelSize: 11
-                opacity: 0.7
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
-            }
-
-            Repeater {
-                model: 5
-
-                delegate: Kirigami.Card {
-                    Layout.fillWidth: true
-
-                    property int idx: index
-                    property var entry: (ensureMultiHostsLen(5)[idx])
-
-                    header: RowLayout {
-                        width: parent ? parent.width : implicitWidth
-                        spacing: 12
-
-                        Kirigami.Heading {
-                            text: "Endpoint " + (idx + 1)
-                            level: 4
-                        }
-
-                        Item { Layout.fillWidth: true }
-
-                        QQC2.Switch {
-                            text: checked ? "Enabled" : "Disabled"
-                            checked: entry.enabled !== false
-                            onToggled: {
-                                var arr = ensureMultiHostsLen(5)
-                                arr[idx].enabled = checked
-                                saveMultiHosts(arr)
-                            }
-                        }
-                    }
-
-                    contentItem: GridLayout {
-                        columns: 2
-                        columnSpacing: 15
-                        rowSpacing: 12
-                        width: parent ? parent.width : implicitWidth
-
-                        QQC2.Label {
-                            text: "Label:"
-                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                        }
-                        QQC2.TextField {
-                            Layout.fillWidth: true
-                            text: entry.name || ""
-                            placeholderText: "e.g. Home / Work"
-                            onTextChanged: {
-                                var arr = ensureMultiHostsLen(5)
-                                arr[idx].name = text
-                                saveMultiHosts(arr)
-                            }
-                        }
-
-                        QQC2.Label {
-                            text: "Host:"
-                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                        }
-                        QQC2.TextField {
-                            Layout.fillWidth: true
-                            text: entry.host || ""
-                            placeholderText: "192.168.1.100 or proxmox.local"
-                            onTextChanged: {
-                                var arr = ensureMultiHostsLen(5)
-                                arr[idx].host = text
-                                saveMultiHosts(arr)
-                            }
-                        }
-
-                        QQC2.Label {
-                            text: "Port:"
-                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                        }
-                        QQC2.SpinBox {
-                            from: 1
-                            to: 65535
-                            value: entry.port || 8006
-                            editable: true
-                            onValueModified: {
-                                var arr = ensureMultiHostsLen(5)
-                                arr[idx].port = value
-                                saveMultiHosts(arr)
-                            }
-                        }
-
-                        QQC2.Label {
-                            text: "API Token ID:"
-                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                        }
-                        QQC2.TextField {
-                            Layout.fillWidth: true
-                            text: entry.tokenId || ""
-                            placeholderText: "user@realm!tokenname"
-                            onTextChanged: {
-                                var arr = ensureMultiHostsLen(5)
-                                arr[idx].tokenId = text
-                                saveMultiHosts(arr)
-                            }
-                        }
-
-                        QQC2.Label {
-                            text: "API Token Secret:"
-                            Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-
-                            QQC2.TextField {
-                                id: mhSecretField
-                                Layout.fillWidth: true
-                                echoMode: TextInput.Password
-                                placeholderText: "Stored in keyring after Apply"
-                            }
-
-                            QQC2.Button {
-                                text: "Update Keyring"
-                                icon.name: "dialog-password"
-                                enabled: mhSecretField.text && mhSecretField.text.trim() !== ""
-                                onClicked: {
-                                    var arr = ensureMultiHostsLen(5)
-                                    var key = multiHostSecretKey(arr[idx])
-                                    if (!key) return
-
-                                    // KCM cannot access keyring directly. Stash secrets temporarily in config;
-                                    // the plasmoid runtime migrates them into the system keyring on next load.
-                                    var map = {}
-                                    try { map = JSON.parse(root.cfg_multiHostSecretsJson || "{}") } catch (e) { map = {} }
-                                    map[key] = mhSecretField.text
-                                    root.cfg_multiHostSecretsJson = JSON.stringify(map)
-
-                                    // Reduce risk of the secret lingering on screen / being re-saved accidentally.
-                                    mhSecretField.text = ""
-                                }
-                            }
-
-                            QQC2.Button {
-                                text: "Forget"
-                                icon.name: "edit-clear"
-                                onClicked: {
-                                    mhSecretField.text = ""
-                                }
-
-                                QQC2.ToolTip.visible: hovered
-                                QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
-                            }
-                        }
-                    }
-                }
+            ensureMultiHostsLen: root.ensureMultiHostsLen
+            saveMultiHosts: root.saveMultiHosts
+            multiHostSecretKey: root.multiHostSecretKey
+            cfg_multiHostSecretsJson: root.cfg_multiHostSecretsJson
+            onUpdateSecretsJson: function(value) {
+                root.cfg_multiHostSecretsJson = value
             }
         }
 
@@ -546,134 +324,38 @@ KCM.SimpleKCM {
             opacity: 0.3
         }
 
-        // Auto-retry Section
-        Kirigami.Heading {
-            text: "Auto-Retry"
-            level: 2
+        ConfigGeneralRetrySection {
+            id: retrySection
+            autoRetryChecked: true
         }
 
-        QQC2.CheckBox {
-            id: autoRetryCheck
-            text: "Automatically retry on connection errors"
-            checked: true
-        }
-
-        GridLayout {
-            columns: 2
-            columnSpacing: 15
-            rowSpacing: 12
-            Layout.fillWidth: true
-            enabled: autoRetryCheck.checked
-            opacity: enabled ? 1.0 : 0.6
-
-            QQC2.Label {
-                text: "Start delay:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            RowLayout {
-                spacing: 8
-                QQC2.SpinBox {
-                    id: retryStartSpin
-                    from: 1
-                    to: 300
-                    value: 5
-                    editable: true
-                }
-                QQC2.Label {
-                    text: "seconds"
-                    opacity: 0.7
-                }
-            }
-
-            QQC2.Label {
-                text: "Max delay:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            RowLayout {
-                spacing: 8
-                QQC2.SpinBox {
-                    id: retryMaxSpin
-                    from: 5
-                    to: 3600
-                    value: 300
-                    editable: true
-                }
-                QQC2.Label {
-                    text: "seconds"
-                    opacity: 0.7
-                }
+        ConfigGeneralDefaultsSection {
+            saveExec: root.saveExec
+            loadExec: root.loadExec
+            escapeForShell: root.escapeForShell
+            singleHostSection: singleHostSection
+            refreshField: refreshField
+            ignoreSslCheck: ignoreSslCheck
+            enableNotificationsCheck: enableNotificationsCheck
+            saveStatusText: saveStatus.text
+            saveStatusColor: saveStatus.color
+            loadStatusText: loadStatus.text
+            loadStatusColor: loadStatus.color
+            onStashSecret: function(secret) {
+                cfg_apiTokenSecret = secret
             }
         }
 
-        // Default Settings Section
-        Kirigami.Heading {
-            text: "Default Settings"
-            level: 2
+        QtObject {
+            id: saveStatus
+            property string text: ""
+            property color color: Kirigami.Theme.textColor
         }
 
-        QQC2.Label {
-            text: "Save current settings as defaults for new widget instances"
-            font.pixelSize: 11
-            opacity: 0.7
-            wrapMode: Text.WordWrap
-            Layout.fillWidth: true
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 10
-
-            QQC2.Button {
-                text: "Save as Default"
-                icon.name: "document-save"
-                onClicked: {
-                    var settings = {
-                        host: hostField.text,
-                        port: portField.value,
-                        tokenId: tokenIdField.text,
-                        // Intentionally do not store secrets in plaintext defaults
-                        tokenSecret: "",
-                        refreshInterval: refreshField.value,
-                        ignoreSsl: ignoreSslCheck.checked,
-                        enableNotifications: enableNotificationsCheck.checked
-                    }
-                    var json = JSON.stringify(settings)
-                    var safeJson = escapeForShell(json)
-
-                    // Use printf (more predictable than echo) and avoid newlines
-                    safeJson = safeJson.replace(/[\r\n]+/g, " ")
-
-                    // Persist non-secret defaults to file
-                    saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && printf '%s' '" + safeJson + "' > ~/.config/proxmox-plasmoid/settings.json")
-
-                    // Store secret in config temporarily; plasmoid runtime will migrate to keyring and clear it.
-                    // This keeps the KCM dependency-free while still letting users enter/update the secret.
-                    if (tokenSecretField.text && tokenSecretField.text.trim() !== "") {
-                        cfg_apiTokenSecret = tokenSecretField.text
-                    }
-                }
-            }
-
-            QQC2.Label {
-                id: saveStatus
-                text: ""
-            }
-
-            Item { Layout.fillWidth: true }
-
-            QQC2.Button {
-                text: "Load Default"
-                icon.name: "document-open"
-                onClicked: {
-                    loadExec.connectSource("cat ~/.config/proxmox-plasmoid/settings.json 2>/dev/null")
-                    // Secret is not loaded via the KCM anymore.
-                }
-            }
-
-            QQC2.Label {
-                id: loadStatus
-                text: ""
-            }
+        QtObject {
+            id: loadStatus
+            property string text: ""
+            property color color: Kirigami.Theme.textColor
         }
 
         // Separator
