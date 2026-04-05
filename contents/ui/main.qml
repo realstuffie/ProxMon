@@ -70,6 +70,8 @@ PlasmoidItem {
     property int secretsTotal: 0
     property bool multiSecretHadError: false
     property bool pendingResolvedRefresh: false
+    property var pendingSingleSecretWrite: null
+    property var pendingMultiSecretWrite: null
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
@@ -1841,13 +1843,12 @@ onError: function(seq, kind, node, message) {
                 logDebug("singleSecretStore: Updating secret from settings into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
                 var canonicalKey2 = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
                 singleSecretStore.key = canonicalKey2
+                pendingSingleSecretWrite = {
+                    secret: pendingSecret,
+                    clearConfig: true
+                }
                 logDebug("singleSecretStore: writeSecret(single-pending) key=" + singleSecretStore.key)
                 singleSecretStore.writeSecret(pendingSecret)
-                resolvedApiTokenSecret = pendingSecret
-                Plasmoid.configuration.apiTokenSecret = ""
-                secretState = "ready"
-                refreshResolvingSecrets = false
-                refreshAfterSecretReady()
                 return
             }
 
@@ -1871,13 +1872,12 @@ onError: function(seq, kind, node, message) {
             if (Plasmoid.configuration.apiTokenSecret && Plasmoid.configuration.apiTokenSecret.length > 0) {
                 logDebug("singleSecretStore: Migrating legacy plaintext secret into keyring host=" + proxmoxHost + " tokenId=" + apiTokenId)
                 singleSecretStore.key = keyFor(proxmoxHost, proxmoxPort, apiTokenId)
+                pendingSingleSecretWrite = {
+                    secret: Plasmoid.configuration.apiTokenSecret,
+                    clearConfig: true
+                }
                 logDebug("singleSecretStore: writeSecret(single-legacy) key=" + singleSecretStore.key)
                 singleSecretStore.writeSecret(Plasmoid.configuration.apiTokenSecret)
-                resolvedApiTokenSecret = Plasmoid.configuration.apiTokenSecret
-                Plasmoid.configuration.apiTokenSecret = ""
-                secretState = "ready"
-                refreshResolvingSecrets = false
-                refreshAfterSecretReady()
                 return
             }
 
@@ -1887,7 +1887,26 @@ onError: function(seq, kind, node, message) {
         }
 
         onWriteFinished: function(ok, error) {
-            if (!ok) logDebug("singleSecretStore: write failed: " + error)
+            if (!pendingSingleSecretWrite) {
+                if (!ok) logDebug("singleSecretStore: write failed: " + error)
+                return
+            }
+
+            var pending = pendingSingleSecretWrite
+            pendingSingleSecretWrite = null
+
+            if (!ok) {
+                refreshResolvingSecrets = false
+                secretState = "error"
+                logDebug("singleSecretStore: write failed: " + error)
+                return
+            }
+
+            resolvedApiTokenSecret = pending.secret
+            if (pending.clearConfig) Plasmoid.configuration.apiTokenSecret = ""
+            secretState = "ready"
+            refreshResolvingSecrets = false
+            refreshAfterSecretReady()
         }
 
         onError: function(message) {
@@ -1947,24 +1966,13 @@ onError: function(seq, kind, node, message) {
             var stashed = map[sessionKey]
             if (sessionKey && stashed && String(stashed).length > 0) {
                 logDebug("multiSecretStore: Updating multi-host secret from settings into keyring: sessionKey=" + sessionKey + " item.host=" + item.host + " item.tokenId=" + item.tokenId)
+                pendingMultiSecretWrite = {
+                    sessionKey: sessionKey,
+                    secret: String(stashed),
+                    item: item
+                }
                 logDebug("multiSecretStore: writeSecret(multi-stash) key=" + multiSecretStore.key)
                 multiSecretStore.writeSecret(String(stashed))
-                delete map[sessionKey]
-                writeSecretsMap(map)
-
-                tempEndpoints.push({
-                    sessionKey: sessionKey,
-                    label: item.label,
-                    host: item.host,
-                    port: item.port,
-                    tokenId: item.tokenId,
-                    secret: String(stashed),
-                    ignoreSsl: ignoreSsl
-                })
-                secretsResolved += 1
-                secretQueueIndex += 1
-                activeMultiSecretRequest = null
-                readNextMultiSecret()
                 return
             }
 
@@ -1992,7 +2000,41 @@ onError: function(seq, kind, node, message) {
         }
 
         onWriteFinished: function(ok, error) {
-            if (!ok) logDebug("multiSecretStore: write failed: " + error)
+            if (!pendingMultiSecretWrite) {
+                if (!ok) logDebug("multiSecretStore: write failed: " + error)
+                return
+            }
+
+            var pending = pendingMultiSecretWrite
+            pendingMultiSecretWrite = null
+
+            if (!ok) {
+                multiSecretHadError = true
+                secretsResolved += 1
+                secretQueueIndex += 1
+                activeMultiSecretRequest = null
+                logDebug("multiSecretStore: write failed: " + error)
+                readNextMultiSecret()
+                return
+            }
+
+            var map = parseSecretsMap()
+            delete map[pending.sessionKey]
+            writeSecretsMap(map)
+
+            tempEndpoints.push({
+                sessionKey: pending.sessionKey,
+                label: pending.item.label,
+                host: pending.item.host,
+                port: pending.item.port,
+                tokenId: pending.item.tokenId,
+                secret: pending.secret,
+                ignoreSsl: ignoreSsl
+            })
+            secretsResolved += 1
+            secretQueueIndex += 1
+            activeMultiSecretRequest = null
+            readNextMultiSecret()
         }
 
         onError: function(message) {
