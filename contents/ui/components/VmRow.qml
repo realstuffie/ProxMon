@@ -16,6 +16,8 @@ Rectangle {
     property int uiRadiusS: 4
     property real uiSurfaceRunningOpacity: 0.12
     property real uiSurfaceAltOpacity: 0.10
+    property color uiRunningColor: Kirigami.Theme.positiveTextColor
+    property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property int scrollbarReserve: 0
     property var anonymizeVmId: null
     property var anonymizeVmName: null
@@ -26,8 +28,8 @@ Rectangle {
     radius: uiRadiusS
 
     color: vmModel && vmModel.status === "running"
-        ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, uiSurfaceRunningOpacity)
-        : Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, uiSurfaceAltOpacity)
+        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, uiSurfaceRunningOpacity)
+        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, uiSurfaceAltOpacity)
 
     RowLayout {
         anchors.fill: parent
@@ -39,7 +41,7 @@ Rectangle {
             implicitWidth: 8
             implicitHeight: 8
             radius: 4
-            color: root.vmModel && root.vmModel.status === "running" ? Kirigami.Theme.positiveTextColor : Kirigami.Theme.disabledTextColor
+            color: root.vmModel && root.vmModel.status === "running" ? root.uiRunningColor : root.uiStoppedColor
         }
 
         PlasmaComponents.Label {

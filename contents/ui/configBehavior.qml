@@ -91,6 +91,23 @@ KCM.SimpleKCM {
     property alias cfg_lowLatency: lowLatencyCheck.checked
     property bool cfg_lowLatencyDefault: false
 
+    QtObject {
+        id: appearanceRunningColorValue
+        property string value: ""
+    }
+    property alias cfg_appearanceRunningColor: appearanceRunningColorValue.value
+    property string cfg_appearanceRunningColorDefault: ""
+
+    QtObject {
+        id: appearanceStoppedColorValue
+        property string value: ""
+    }
+    property alias cfg_appearanceStoppedColor: appearanceStoppedColorValue.value
+    property string cfg_appearanceStoppedColorDefault: ""
+
+    property alias cfg_appearanceCardTintOpacity: cardTintOpacitySpin.value
+    property int cfg_appearanceCardTintOpacityDefault: 10
+
     ColumnLayout {
         anchors.left: parent.left
         anchors.right: parent.right
@@ -220,6 +237,130 @@ KCM.SimpleKCM {
         }
 
         // Separator
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            Layout.bottomMargin: 10
+            implicitHeight: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.3
+        }
+
+        // ==================== APPEARANCE SECTION ====================
+        Kirigami.Heading {
+            text: "Appearance"
+            level: 2
+        }
+
+        GridLayout {
+            columns: 2
+            columnSpacing: 15
+            rowSpacing: 12
+            Layout.fillWidth: true
+
+            QQC2.Label {
+                text: "Running color:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+
+            QQC2.ComboBox {
+                id: runningColorCombo
+                Layout.fillWidth: true
+                textRole: "text"
+                model: ListModel {
+                    id: runningColorModel
+                    ListElement { text: "Default theme"; value: "" }
+                    ListElement { text: "Green"; value: "#4caf50" }
+                    ListElement { text: "Blue"; value: "#4f8cff" }
+                    ListElement { text: "Orange"; value: "#ff9800" }
+                    ListElement { text: "Purple"; value: "#9c27b0" }
+                }
+
+                Component.onCompleted: {
+                    for (var i = 0; i < runningColorModel.count; i++) {
+                        if (runningColorModel.get(i).value === root.cfg_appearanceRunningColor) {
+                            currentIndex = i
+                            break
+                        }
+                    }
+                    if (currentIndex < 0) currentIndex = 0
+                    appearanceRunningColorValue.value = runningColorModel.get(currentIndex).value
+                }
+
+                onActivated: {
+                    if (currentIndex >= 0 && currentIndex < runningColorModel.count) {
+                        appearanceRunningColorValue.value = runningColorModel.get(currentIndex).value
+                    }
+                }
+            }
+
+            QQC2.Label {
+                text: "Stopped/offline color:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+
+            QQC2.ComboBox {
+                id: stoppedColorCombo
+                Layout.fillWidth: true
+                textRole: "text"
+                model: ListModel {
+                    id: stoppedColorModel
+                    ListElement { text: "Default theme"; value: "" }
+                    ListElement { text: "Gray"; value: "#9e9e9e" }
+                    ListElement { text: "Red"; value: "#ef5350" }
+                    ListElement { text: "Brown"; value: "#8d6e63" }
+                    ListElement { text: "Blue Gray"; value: "#78909c" }
+                }
+
+                Component.onCompleted: {
+                    for (var i = 0; i < stoppedColorModel.count; i++) {
+                        if (stoppedColorModel.get(i).value === root.cfg_appearanceStoppedColor) {
+                            currentIndex = i
+                            break
+                        }
+                    }
+                    if (currentIndex < 0) currentIndex = 0
+                    appearanceStoppedColorValue.value = stoppedColorModel.get(currentIndex).value
+                }
+
+                onActivated: {
+                    if (currentIndex >= 0 && currentIndex < stoppedColorModel.count) {
+                        appearanceStoppedColorValue.value = stoppedColorModel.get(currentIndex).value
+                    }
+                }
+            }
+
+            QQC2.Label {
+                text: "Card tint opacity:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+
+            RowLayout {
+                spacing: 8
+
+                QQC2.SpinBox {
+                    id: cardTintOpacitySpin
+                    from: 0
+                    to: 40
+                    value: 10
+                    editable: true
+                }
+
+                QQC2.Label {
+                    text: "%"
+                    opacity: 0.7
+                }
+            }
+        }
+
+        QQC2.Label {
+            text: "Adjust running/stopped state colors and the node/row card tint strength."
+            font.pixelSize: 11
+            opacity: 0.6
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+        }
+
         Rectangle {
             Layout.fillWidth: true
             Layout.topMargin: 10

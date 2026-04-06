@@ -240,8 +240,11 @@ PlasmoidItem {
     readonly property int uiRadiusM: 6
     readonly property int uiRadiusL: 8
     readonly property real uiBorderOpacity: 0.22
-    readonly property real uiSurfaceAltOpacity: 0.10
-    readonly property real uiSurfaceRunningOpacity: 0.12
+    readonly property color uiRunningColor: Plasmoid.configuration.appearanceRunningColor || Kirigami.Theme.positiveTextColor
+    readonly property color uiStoppedColor: Plasmoid.configuration.appearanceStoppedColor || Kirigami.Theme.disabledTextColor
+    readonly property real uiCardTintOpacity: Math.max(0, Math.min((Plasmoid.configuration.appearanceCardTintOpacity !== undefined ? Plasmoid.configuration.appearanceCardTintOpacity : 10) / 100, 0.40))
+    readonly property real uiSurfaceAltOpacity: uiCardTintOpacity
+    readonly property real uiSurfaceRunningOpacity: Math.min(uiCardTintOpacity + 0.02, 0.40)
     readonly property real uiMutedTextOpacity: 0.68
     readonly property int uiRowHeight: 30
 
@@ -2522,6 +2525,8 @@ onError: function(seq, kind, node, message) {
                         uiBorderOpacity: root.uiBorderOpacity
                         uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
                         uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
+                        uiRunningColor: root.uiRunningColor
+                        uiStoppedColor: root.uiStoppedColor
                         uiRowHeight: root.uiRowHeight
                         scrollbarReserve: scrollView.__scrollbarReserve
                         safeCpuPercent: root.safeCpuPercent
@@ -2555,6 +2560,8 @@ onError: function(seq, kind, node, message) {
                         uiRadiusL: root.uiRadiusL
                         uiBorderOpacity: root.uiBorderOpacity
                         uiMutedTextOpacity: root.uiMutedTextOpacity
+                        uiRunningColor: root.uiRunningColor
+                        uiStoppedColor: root.uiStoppedColor
                         scrollbarReserve: scrollView.__scrollbarReserve
                         safeCpuPercent: root.safeCpuPercent
                         anonymizeNodeName: root.anonymizeNodeName

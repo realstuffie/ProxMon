@@ -15,6 +15,8 @@ ColumnLayout {
     property int uiRadiusL: 8
     property real uiBorderOpacity: 0.22
     property real uiMutedTextOpacity: 0.68
+    property color uiRunningColor: Kirigami.Theme.positiveTextColor
+    property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property int scrollbarReserve: 0
     property var safeCpuPercent: null
     property var anonymizeNodeName: null
@@ -117,6 +119,8 @@ ColumnLayout {
             getTotalVmsForNodeMulti: root.getTotalVmsForNodeMulti
             getRunningLxcForNodeMulti: root.getRunningLxcForNodeMulti
             getTotalLxcForNodeMulti: root.getTotalLxcForNodeMulti
+            uiRunningColor: root.uiRunningColor
+            uiStoppedColor: root.uiStoppedColor
             isActionBusy: root.isActionBusy
             armedActionKey: root.armedActionKey
             armedTimerRunning: root.armedTimerRunning

@@ -15,6 +15,8 @@ ColumnLayout {
     property bool isCollapsed: false
     property int uiRadiusL: 8
     property real uiBorderOpacity: 0.22
+    property color uiRunningColor: Kirigami.Theme.positiveTextColor
+    property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property int scrollbarReserve: 0
     property var safeCpuPercent: null
     property var anonymizeNodeName: null
@@ -84,8 +86,8 @@ ColumnLayout {
                     implicitHeight: 16
                     radius: root.uiRadiusL
                     color: root.nodeModel && root.nodeModel.status === "online"
-                        ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.82)
-                        : Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.82)
+                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
+                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
 
                     PlasmaComponents.Label {
                         anchors.centerIn: parent
@@ -203,6 +205,8 @@ ColumnLayout {
                     uiRadiusS: 4
                     uiSurfaceRunningOpacity: 0.15
                     uiSurfaceAltOpacity: 0.10
+                    uiRunningColor: root.uiRunningColor
+                    uiStoppedColor: root.uiStoppedColor
                     scrollbarReserve: 0
                     anonymizeVmId: root.anonymizeVmId
                     anonymizeVmName: root.anonymizeVmName
@@ -254,6 +258,8 @@ ColumnLayout {
                     uiRadiusS: 4
                     uiSurfaceRunningOpacity: 0.15
                     uiSurfaceAltOpacity: 0.10
+                    uiRunningColor: root.uiRunningColor
+                    uiStoppedColor: root.uiStoppedColor
                     scrollbarReserve: 0
                     anonymizeVmId: root.anonymizeVmId
                     anonymizeLxcName: root.anonymizeLxcName

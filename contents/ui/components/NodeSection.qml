@@ -17,6 +17,8 @@ ColumnLayout {
     property real uiBorderOpacity: 0.22
     property real uiSurfaceAltOpacity: 0.10
     property real uiSurfaceRunningOpacity: 0.12
+    property color uiRunningColor: Kirigami.Theme.positiveTextColor
+    property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property int uiRowHeight: 30
     property int scrollbarReserve: 0
     property var safeCpuPercent: null
@@ -87,8 +89,8 @@ ColumnLayout {
                     implicitHeight: 16
                     radius: root.uiRadiusL
                     color: root.nodeModel.status === "online"
-                        ? Qt.rgba(Kirigami.Theme.positiveTextColor.r, Kirigami.Theme.positiveTextColor.g, Kirigami.Theme.positiveTextColor.b, 0.82)
-                        : Qt.rgba(Kirigami.Theme.negativeTextColor.r, Kirigami.Theme.negativeTextColor.g, Kirigami.Theme.negativeTextColor.b, 0.82)
+                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
+                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
 
                     PlasmaComponents.Label {
                         anchors.centerIn: parent
@@ -204,6 +206,8 @@ ColumnLayout {
                     uiRadiusS: root.uiRadiusS
                     uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
                     uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
+                    uiRunningColor: root.uiRunningColor
+                    uiStoppedColor: root.uiStoppedColor
                     scrollbarReserve: root.scrollbarReserve
                     anonymizeVmId: root.anonymizeVmId
                     anonymizeVmName: root.anonymizeVmName
@@ -251,6 +255,8 @@ ColumnLayout {
                     uiRadiusS: root.uiRadiusS
                     uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
                     uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
+                    uiRunningColor: root.uiRunningColor
+                    uiStoppedColor: root.uiStoppedColor
                     scrollbarReserve: root.scrollbarReserve
                     anonymizeVmId: root.anonymizeVmId
                     anonymizeLxcName: root.anonymizeLxcName
