@@ -43,7 +43,6 @@ KCM.SimpleKCM {
     property string cfg_compactModeDefault: "cpu"
     property bool cfg_lowLatency: false
     property bool cfg_lowLatencyDefault: false
-    property bool cfg_notifyEnableNotificationsMirror: true
     property string cfg_notifyMode: "all"
     property string cfg_notifyModeDefault: "all"
     property string cfg_notifyFilter: ""

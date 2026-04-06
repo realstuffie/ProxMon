@@ -2053,7 +2053,12 @@ onError: function(seq, kind, node, message) {
                     )
                 } else {
                     setActionBusy(pendingAction.nodeName, pendingAction.kind, pendingAction.vmid, false, pendingAction.sessionKey)
-                    errorMessage = "Action failed: endpoint credentials unavailable"
+                    handleActionErrorState(pendingAction.sessionKey,
+                                           pendingAction.kind,
+                                           pendingAction.nodeName,
+                                           pendingAction.vmid,
+                                           pendingAction.action,
+                                           "endpoint credentials unavailable")
                 }
                 return
             }
@@ -2141,8 +2146,12 @@ onError: function(seq, kind, node, message) {
             if (pendingMultiActionRequest && multiSecretStore.key === pendingMultiActionRequest.sessionKey) {
                 var pendingAction = pendingMultiActionRequest
                 pendingMultiActionRequest = null
-                setActionBusy(pendingAction.nodeName, pendingAction.kind, pendingAction.vmid, false, pendingAction.sessionKey)
-                errorMessage = "Action failed: " + message
+                handleActionErrorState(pendingAction.sessionKey,
+                                       pendingAction.kind,
+                                       pendingAction.nodeName,
+                                       pendingAction.vmid,
+                                       pendingAction.action,
+                                       message)
                 logDebug("multiSecretStore(action): " + message)
                 return
             }
