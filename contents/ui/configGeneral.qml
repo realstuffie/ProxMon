@@ -43,6 +43,12 @@ KCM.SimpleKCM {
     property string cfg_compactModeDefault: "cpu"
     property bool cfg_lowLatency: false
     property bool cfg_lowLatencyDefault: false
+    property string cfg_appearanceRunningColor: ""
+    property string cfg_appearanceRunningColorDefault: ""
+    property string cfg_appearanceStoppedColor: ""
+    property string cfg_appearanceStoppedColorDefault: ""
+    property int cfg_appearanceCardTintOpacity: 10
+    property int cfg_appearanceCardTintOpacityDefault: 10
     property string cfg_notifyMode: "all"
     property string cfg_notifyModeDefault: "all"
     property string cfg_notifyFilter: ""

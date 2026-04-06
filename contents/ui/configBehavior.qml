@@ -91,21 +91,11 @@ KCM.SimpleKCM {
     property alias cfg_lowLatency: lowLatencyCheck.checked
     property bool cfg_lowLatencyDefault: false
 
-    QtObject {
-        id: appearanceRunningColorValue
-        property string value: ""
-    }
-    property alias cfg_appearanceRunningColor: appearanceRunningColorValue.value
+    property string cfg_appearanceRunningColor: ""
     property string cfg_appearanceRunningColorDefault: ""
-
-    QtObject {
-        id: appearanceStoppedColorValue
-        property string value: ""
-    }
-    property alias cfg_appearanceStoppedColor: appearanceStoppedColorValue.value
+    property string cfg_appearanceStoppedColor: ""
     property string cfg_appearanceStoppedColorDefault: ""
-
-    property alias cfg_appearanceCardTintOpacity: cardTintOpacitySpin.value
+    property int cfg_appearanceCardTintOpacity: 10
     property int cfg_appearanceCardTintOpacityDefault: 10
 
     ColumnLayout {
@@ -284,12 +274,11 @@ KCM.SimpleKCM {
                         }
                     }
                     if (currentIndex < 0) currentIndex = 0
-                    appearanceRunningColorValue.value = runningColorModel.get(currentIndex).value
                 }
 
                 onActivated: {
                     if (currentIndex >= 0 && currentIndex < runningColorModel.count) {
-                        appearanceRunningColorValue.value = runningColorModel.get(currentIndex).value
+                        root.cfg_appearanceRunningColor = runningColorModel.get(currentIndex).value
                     }
                 }
             }
@@ -320,12 +309,11 @@ KCM.SimpleKCM {
                         }
                     }
                     if (currentIndex < 0) currentIndex = 0
-                    appearanceStoppedColorValue.value = stoppedColorModel.get(currentIndex).value
                 }
 
                 onActivated: {
                     if (currentIndex >= 0 && currentIndex < stoppedColorModel.count) {
-                        appearanceStoppedColorValue.value = stoppedColorModel.get(currentIndex).value
+                        root.cfg_appearanceStoppedColor = stoppedColorModel.get(currentIndex).value
                     }
                 }
             }
@@ -342,8 +330,9 @@ KCM.SimpleKCM {
                     id: cardTintOpacitySpin
                     from: 0
                     to: 40
-                    value: 10
+                    value: root.cfg_appearanceCardTintOpacity
                     editable: true
+                    onValueChanged: root.cfg_appearanceCardTintOpacity = value
                 }
 
                 QQC2.Label {
@@ -351,10 +340,11 @@ KCM.SimpleKCM {
                     opacity: 0.7
                 }
             }
+
         }
 
         QQC2.Label {
-            text: "Adjust running/stopped state colors and the node/row card tint strength."
+            text: "Adjust running/stopped state colors and node/row card tint strength."
             font.pixelSize: 11
             opacity: 0.6
             Layout.fillWidth: true

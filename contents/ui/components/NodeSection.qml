@@ -17,6 +17,7 @@ ColumnLayout {
     property real uiBorderOpacity: 0.22
     property real uiSurfaceAltOpacity: 0.10
     property real uiSurfaceRunningOpacity: 0.12
+    property real uiNodeCardOpacity: 0.98
     property color uiRunningColor: Kirigami.Theme.positiveTextColor
     property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property int uiRowHeight: 30

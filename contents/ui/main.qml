@@ -6,6 +6,7 @@ import org.kde.plasma.plasmoid
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
+import org.kde.plasma.core as PlasmaCore
 import "components"
 import "../lib/proxmox" as ProxMon
 
@@ -243,8 +244,9 @@ PlasmoidItem {
     readonly property color uiRunningColor: Plasmoid.configuration.appearanceRunningColor || Kirigami.Theme.positiveTextColor
     readonly property color uiStoppedColor: Plasmoid.configuration.appearanceStoppedColor || Kirigami.Theme.disabledTextColor
     readonly property real uiCardTintOpacity: Math.max(0, Math.min((Plasmoid.configuration.appearanceCardTintOpacity !== undefined ? Plasmoid.configuration.appearanceCardTintOpacity : 10) / 100, 0.40))
-    readonly property real uiSurfaceAltOpacity: uiCardTintOpacity
-    readonly property real uiSurfaceRunningOpacity: Math.min(uiCardTintOpacity + 0.02, 0.40)
+    readonly property real uiSurfaceAltOpacity: uiCardTintOpacity > 0 ? uiCardTintOpacity : 0.10
+    readonly property real uiSurfaceRunningOpacity: uiCardTintOpacity > 0 ? Math.min(uiCardTintOpacity + 0.02, 0.40) : 0.12
+    readonly property real uiNodeCardOpacity: 0.98
     readonly property real uiMutedTextOpacity: 0.68
     readonly property int uiRowHeight: 30
 
@@ -2340,6 +2342,8 @@ onError: function(seq, kind, node, message) {
         Layout.maximumHeight: 600
         spacing: 2
 
+        opacity: root.uiWindowOpacity
+
         // Header
         RowLayout {
             Layout.fillWidth: true
@@ -2525,6 +2529,7 @@ onError: function(seq, kind, node, message) {
                         uiBorderOpacity: root.uiBorderOpacity
                         uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
                         uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
+                        uiNodeCardOpacity: root.uiNodeCardOpacity
                         uiRunningColor: root.uiRunningColor
                         uiStoppedColor: root.uiStoppedColor
                         uiRowHeight: root.uiRowHeight
@@ -2560,6 +2565,7 @@ onError: function(seq, kind, node, message) {
                         uiRadiusL: root.uiRadiusL
                         uiBorderOpacity: root.uiBorderOpacity
                         uiMutedTextOpacity: root.uiMutedTextOpacity
+                        uiNodeCardOpacity: root.uiNodeCardOpacity
                         uiRunningColor: root.uiRunningColor
                         uiStoppedColor: root.uiStoppedColor
                         scrollbarReserve: scrollView.__scrollbarReserve
