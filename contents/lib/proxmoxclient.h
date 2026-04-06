@@ -72,6 +72,17 @@ public:
 
     // VM/CT actions: kind: "qemu" | "lxc"; action: "start" | "shutdown" | "reboot"
     Q_INVOKABLE void requestAction(const QString &kind, const QString &node, int vmid, const QString &action, int seq);
+    Q_INVOKABLE void requestActionFor(const QString &sessionKey,
+                                      const QString &host,
+                                      int port,
+                                      const QString &tokenId,
+                                      const QString &tokenSecret,
+                                      bool ignoreSslErrors,
+                                      const QString &kind,
+                                      const QString &node,
+                                      int vmid,
+                                      const QString &action,
+                                      int seq);
 
     // Abort any in-flight network requests (useful when refreshing or timing out).
     Q_INVOKABLE void cancelAll();
@@ -105,6 +116,20 @@ signals:
                      int vmid,
                      const QString &action,
                      const QString &message);
+    void actionReplyFor(int seq,
+                        const QString &sessionKey,
+                        const QString &actionKind,
+                        const QString &node,
+                        int vmid,
+                        const QString &action,
+                        const QVariant &data);
+    void actionErrorFor(int seq,
+                        const QString &sessionKey,
+                        const QString &actionKind,
+                        const QString &node,
+                        int vmid,
+                        const QString &action,
+                        const QString &message);
 
 private:
     void request(const QString &path, int seq, const QString &kind, const QString &node);
@@ -125,6 +150,18 @@ private:
               const QString &node,
               int vmid,
               const QString &action);
+    void postFor(const QString &sessionKey,
+                 const QString &host,
+                 int port,
+                 const QString &tokenId,
+                 const QString &tokenSecret,
+                 bool ignoreSslErrors,
+                 const QString &path,
+                 int seq,
+                 const QString &actionKind,
+                 const QString &node,
+                 int vmid,
+                 const QString &action);
 
     QNetworkAccessManager m_nam;
     QString m_host;

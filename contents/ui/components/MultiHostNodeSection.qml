@@ -25,7 +25,12 @@ ColumnLayout {
     property var getTotalVmsForNodeMulti: null
     property var getRunningLxcForNodeMulti: null
     property var getTotalLxcForNodeMulti: null
+    property var isActionBusy: null
+    property string armedActionKey: ""
+    property bool armedTimerRunning: false
+    property string armedActionSessionKey: ""
     property var onToggleCollapsed: null
+    property var onAction: null
 
     Layout.fillWidth: true
     Layout.alignment: Qt.AlignTop
@@ -189,9 +194,11 @@ ColumnLayout {
                     vmIndex: index
                     vmModel: modelData
                     nodeName: root.nodeName
-                    busy: false
-                    armedActionKey: ""
-                    armedTimerRunning: false
+                    busy: root.isActionBusy(root.nodeName, "qemu", modelData.vmid, root.sessionKey)
+                    armedActionKey: root.armedActionSessionKey === root.sessionKey
+                        ? root.armedActionKey.replace(root.sessionKey + "::", "")
+                        : ""
+                    armedTimerRunning: root.armedTimerRunning
                     uiRowHeight: 28
                     uiRadiusS: 4
                     uiSurfaceRunningOpacity: 0.15
@@ -199,7 +206,9 @@ ColumnLayout {
                     scrollbarReserve: 0
                     anonymizeVmId: root.anonymizeVmId
                     anonymizeVmName: root.anonymizeVmName
-                    onAction: null
+                    onAction: function(kind, nodeName, vmid, displayName, action) {
+                        if (typeof root.onAction === "function") root.onAction(root.sessionKey, kind, nodeName, vmid, displayName, action)
+                    }
                 }
             }
         }
@@ -236,9 +245,11 @@ ColumnLayout {
                     ctIndex: index
                     ctModel: modelData
                     nodeName: root.nodeName
-                    busy: false
-                    armedActionKey: ""
-                    armedTimerRunning: false
+                    busy: root.isActionBusy(root.nodeName, "lxc", modelData.vmid, root.sessionKey)
+                    armedActionKey: root.armedActionSessionKey === root.sessionKey
+                        ? root.armedActionKey.replace(root.sessionKey + "::", "")
+                        : ""
+                    armedTimerRunning: root.armedTimerRunning
                     uiRowHeight: 28
                     uiRadiusS: 4
                     uiSurfaceRunningOpacity: 0.15
@@ -246,7 +257,9 @@ ColumnLayout {
                     scrollbarReserve: 0
                     anonymizeVmId: root.anonymizeVmId
                     anonymizeLxcName: root.anonymizeLxcName
-                    onAction: null
+                    onAction: function(kind, nodeName, vmid, displayName, action) {
+                        if (typeof root.onAction === "function") root.onAction(root.sessionKey, kind, nodeName, vmid, displayName, action)
+                    }
                 }
             }
         }

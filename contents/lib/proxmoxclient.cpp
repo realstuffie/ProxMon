@@ -125,6 +125,40 @@ void ProxmoxClient::requestAction(const QString &kind, const QString &node, int 
          action);
 }
 
+void ProxmoxClient::requestActionFor(const QString &sessionKey,
+                                     const QString &host,
+                                     int port,
+                                     const QString &tokenId,
+                                     const QString &tokenSecret,
+                                     bool ignoreSslErrors,
+                                     const QString &kind,
+                                     const QString &node,
+                                     int vmid,
+                                     const QString &action,
+                                     int seq) {
+    if (kind != QStringLiteral("qemu") && kind != QStringLiteral("lxc")) {
+        emit actionErrorFor(seq, sessionKey, kind, node, vmid, action, QStringLiteral("Invalid kind"));
+        return;
+    }
+    if (action != QStringLiteral("start") && action != QStringLiteral("shutdown") && action != QStringLiteral("reboot")) {
+        emit actionErrorFor(seq, sessionKey, kind, node, vmid, action, QStringLiteral("Invalid action"));
+        return;
+    }
+
+    postFor(sessionKey,
+            host,
+            port,
+            tokenId,
+            tokenSecret,
+            ignoreSslErrors,
+            QStringLiteral("/nodes/%1/%2/%3/status/%4").arg(node).arg(kind).arg(vmid).arg(action),
+            seq,
+            kind,
+            node,
+            vmid,
+            action);
+}
+
 namespace {
 
 QNetworkRequest buildRequest(const QString &host, int port, const QString &path, const QString &tokenId, const QString &tokenSecret, int transferTimeoutMs = 10000) {
@@ -301,26 +335,53 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
 }
 
 void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind, const QString &node, int vmid, const QString &action) {
-    if (m_host.isEmpty() || m_tokenId.isEmpty() || m_tokenSecret.isEmpty()) {
-        emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("Not configured"));
+    postFor(QString(),
+            m_host,
+            m_port,
+            m_tokenId,
+            m_tokenSecret,
+            m_ignoreSslErrors,
+            path,
+            seq,
+            actionKind,
+            node,
+            vmid,
+            action);
+}
+
+void ProxmoxClient::postFor(const QString &sessionKey,
+                            const QString &host,
+                            int port,
+                            const QString &tokenId,
+                            const QString &tokenSecret,
+                            bool ignoreSslErrors,
+                            const QString &path,
+                            int seq,
+                            const QString &actionKind,
+                            const QString &node,
+                            int vmid,
+                            const QString &action) {
+    if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
+        if (sessionKey.isEmpty()) {
+            emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("Not configured"));
+        } else {
+            emit actionErrorFor(seq, sessionKey, actionKind, node, vmid, action, QStringLiteral("Not configured"));
+        }
         return;
     }
 
-    QNetworkRequest req = buildRequest(m_host, m_port, path, m_tokenId, m_tokenSecret, m_lowLatency ? 5000 : 10000);
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, m_lowLatency ? 5000 : 10000);
 
-    // Proxmox accepts an empty body for these actions.
     QNetworkReply *r = m_nam.post(req, QByteArray());
-
     m_inFlight.insert(r);
 
-    if (m_ignoreSslErrors) {
+    if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
             r->ignoreSslErrors();
         });
     }
 
-    QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, actionKind, node, vmid, action]() {
-        // Remove early so cancelAll() never sees a finished reply.
+    QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, sessionKey, actionKind, node, vmid, action]() {
         m_inFlight.remove(r);
 
         const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
@@ -328,13 +389,16 @@ void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind
         const QByteArray body = r->readAll();
 
         auto fail = [&](const QString &msg) {
-            emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+            const QString full = QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus);
+            if (sessionKey.isEmpty()) {
+                emit actionError(seq, actionKind, node, vmid, action, full);
+            } else {
+                emit actionErrorFor(seq, sessionKey, actionKind, node, vmid, action, full);
+            }
             r->deleteLater();
         };
 
-        // Qt network error (DNS, TLS, connection refused, etc)
         if (r->error() != QNetworkReply::NoError) {
-            // Silent cancels (expected when refresh restarts or watchdog fires)
             if (r->error() == QNetworkReply::OperationCanceledError) {
                 r->deleteLater();
                 return;
@@ -367,14 +431,13 @@ void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind
             return;
         }
 
-        // Actions can return {"data":"<UPID>"} (task id) or {"data":null}.
-        // Keep old behavior: if JSON parse fails but HTTP is OK, emit actionReply with empty QVariant.
         QJsonParseError pe;
         const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
-        if (pe.error == QJsonParseError::NoError && !doc.isNull()) {
-            emit actionReply(seq, actionKind, node, vmid, action, doc.toVariant());
+        const QVariant data = (pe.error == QJsonParseError::NoError && !doc.isNull()) ? doc.toVariant() : QVariant();
+        if (sessionKey.isEmpty()) {
+            emit actionReply(seq, actionKind, node, vmid, action, data);
         } else {
-            emit actionReply(seq, actionKind, node, vmid, action, QVariant());
+            emit actionReplyFor(seq, sessionKey, actionKind, node, vmid, action, data);
         }
 
         r->deleteLater();

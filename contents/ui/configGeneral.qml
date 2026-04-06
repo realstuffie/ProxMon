@@ -34,6 +34,33 @@ KCM.SimpleKCM {
     property string cfg_multiHostsJson: "[]"
     property string cfg_multiHostSecretsJson: "{}"
 
+    // Behavior-tab cfg_* keys are also injected into every KCM page by Plasma.
+    // Declare inert placeholders here so configGeneral.qml accepts the initial
+    // property set instead of warning about missing properties.
+    property string cfg_defaultSorting: "status"
+    property string cfg_defaultSortingDefault: "status"
+    property string cfg_compactMode: "cpu"
+    property string cfg_compactModeDefault: "cpu"
+    property bool cfg_lowLatency: false
+    property bool cfg_lowLatencyDefault: false
+    property bool cfg_notifyEnableNotificationsMirror: true
+    property string cfg_notifyMode: "all"
+    property string cfg_notifyModeDefault: "all"
+    property string cfg_notifyFilter: ""
+    property string cfg_notifyFilterDefault: ""
+    property bool cfg_notifyOnStart: true
+    property bool cfg_notifyOnStartDefault: true
+    property bool cfg_notifyOnStop: true
+    property bool cfg_notifyOnStopDefault: true
+    property bool cfg_notifyOnNodeChange: true
+    property bool cfg_notifyOnNodeChangeDefault: true
+    property bool cfg_notifyRateLimitEnabled: true
+    property bool cfg_notifyRateLimitEnabledDefault: true
+    property int cfg_notifyRateLimitSeconds: 120
+    property int cfg_notifyRateLimitSecondsDefault: 120
+    property bool cfg_redactNotifyIdentities: true
+    property bool cfg_redactNotifyIdentitiesDefault: true
+
     // Auto-retry (handled in main.qml)
     property alias cfg_autoRetry: retrySection.autoRetryChecked
     property alias cfg_retryStartSeconds: retrySection.retryStartValue
@@ -329,6 +356,18 @@ KCM.SimpleKCM {
             autoRetryChecked: true
         }
 
+        QtObject {
+            id: saveStatus
+            property string text: ""
+            property color color: Kirigami.Theme.textColor
+        }
+
+        QtObject {
+            id: loadStatus
+            property string text: ""
+            property color color: Kirigami.Theme.textColor
+        }
+
         ConfigGeneralDefaultsSection {
             saveExec: root.saveExec
             loadExec: root.loadExec
@@ -344,18 +383,6 @@ KCM.SimpleKCM {
             onStashSecret: function(secret) {
                 cfg_apiTokenSecret = secret
             }
-        }
-
-        QtObject {
-            id: saveStatus
-            property string text: ""
-            property color color: Kirigami.Theme.textColor
-        }
-
-        QtObject {
-            id: loadStatus
-            property string text: ""
-            property color color: Kirigami.Theme.textColor
         }
 
         // Separator

@@ -7,6 +7,34 @@ import org.kde.kcmutils as KCM
 KCM.SimpleKCM {
     id: root
 
+    // Connection-tab cfg_* keys are also injected into every KCM page by Plasma.
+    // Declare inert placeholders here so configBehavior.qml accepts the initial
+    // property set instead of warning about missing properties.
+    property string cfg_proxmoxHost: ""
+    property string cfg_proxmoxHostDefault: ""
+    property int cfg_proxmoxPort: 8006
+    property int cfg_proxmoxPortDefault: 8006
+    property string cfg_apiTokenId: ""
+    property string cfg_apiTokenIdDefault: ""
+    property string cfg_apiTokenSecret: ""
+    property string cfg_apiTokenSecretDefault: ""
+    property int cfg_refreshInterval: 30
+    property int cfg_refreshIntervalDefault: 30
+    property bool cfg_ignoreSsl: true
+    property bool cfg_ignoreSslDefault: true
+    property string cfg_connectionMode: "single"
+    property string cfg_connectionModeDefault: "single"
+    property string cfg_multiHostsJson: "[]"
+    property string cfg_multiHostsJsonDefault: "[]"
+    property string cfg_multiHostSecretsJson: "{}"
+    property string cfg_multiHostSecretsJsonDefault: "{}"
+    property bool cfg_autoRetry: true
+    property bool cfg_autoRetryDefault: true
+    property int cfg_retryStartSeconds: 5
+    property int cfg_retryStartSecondsDefault: 5
+    property int cfg_retryMaxSeconds: 300
+    property int cfg_retryMaxSecondsDefault: 300
+
     // Bind cfg_* keys to the actual controls (KDE Plasma config convention).
     // This ensures Apply/Cancel works and values persist via Plasmoid.configuration.
     //

@@ -28,7 +28,12 @@ ColumnLayout {
     property var getTotalVmsForNodeMulti: null
     property var getRunningLxcForNodeMulti: null
     property var getTotalLxcForNodeMulti: null
+    property var isActionBusy: null
+    property string armedActionKey: ""
+    property bool armedTimerRunning: false
+    property string armedActionSessionKey: ""
     property var onToggleCollapsed: null
+    property var onAction: null
 
     Layout.fillWidth: true
     spacing: 8
@@ -112,7 +117,12 @@ ColumnLayout {
             getTotalVmsForNodeMulti: root.getTotalVmsForNodeMulti
             getRunningLxcForNodeMulti: root.getRunningLxcForNodeMulti
             getTotalLxcForNodeMulti: root.getTotalLxcForNodeMulti
+            isActionBusy: root.isActionBusy
+            armedActionKey: root.armedActionKey
+            armedTimerRunning: root.armedTimerRunning
+            armedActionSessionKey: root.armedActionSessionKey
             onToggleCollapsed: root.onToggleCollapsed
+            onAction: root.onAction
         }
     }
 }

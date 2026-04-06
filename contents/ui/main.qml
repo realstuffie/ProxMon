@@ -368,11 +368,7 @@ onError: function(seq, kind, node, message) {
 
         onActionReply: function(seq, actionKind, node, vmid, action, data) {
             logDebug("onActionReply: " + actionKind + " " + node + " " + vmid + " " + action)
-            // any action completion clears busy state
-            var key = node + ":" + actionKind + ":" + vmid
-            var newBusy = Object.assign({}, actionBusy)
-            delete newBusy[key]
-            actionBusy = newBusy
+            setActionBusy(node, actionKind, vmid, false)
 
             var upid = ""
             try {
@@ -407,16 +403,10 @@ onError: function(seq, kind, node, message) {
             fetchData()
         }
 
-        onActionError: function(seq, actionKind, node, vmid, action, message) {
-            logDebug("onActionError: " + actionKind + " " + node + " " + vmid + " " + action + " - " + (message || ""))
-            var key = node + ":" + actionKind + ":" + vmid
-            var newBusy = Object.assign({}, actionBusy)
-            delete newBusy[key]
-            actionBusy = newBusy
-
+        function handleActionErrorState(sessionKey, actionKind, node, vmid, action, message) {
+            setActionBusy(node, actionKind, vmid, false, sessionKey)
             errorMessage = message || "Action failed"
 
-            // Detect common permission failures and show a one-time actionable hint.
             var m = (message || "").toLowerCase()
             if (!actionPermHintShown && (m.indexOf("http 401") !== -1 || m.indexOf("http 403") !== -1 || m.indexOf("authentication failed") !== -1 || m.indexOf("permission") !== -1 || m.indexOf("forbidden") !== -1)) {
                 actionPermHintShown = true
@@ -429,12 +419,52 @@ onError: function(seq, kind, node, message) {
                 )
             }
 
+            var prefix = sessionKey ? (sessionKey + "::") : ""
             sendNotification(
                 (actionKind === "qemu" ? "VM" : "Container") + " action failed",
                 (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + ": " + (message || ""),
                 "dialog-error",
-                "action:" + actionKind + ":" + node + ":" + vmid + ":" + action + ":err"
+                "action:" + prefix + actionKind + ":" + node + ":" + vmid + ":" + action + ":err"
             )
+        }
+
+        onActionReplyFor: function(seq, sessionKey, actionKind, node, vmid, action, data) {
+            logDebug("onActionReplyFor: " + sessionKey + " " + actionKind + " " + node + " " + vmid + " " + action)
+            setActionBusy(node, actionKind, vmid, false, sessionKey)
+
+            var upid = ""
+            try {
+                if (data && data.data && typeof data.data === "string") {
+                    upid = data.data
+                }
+            } catch (e) { upid = "" }
+
+            function sanitizeUpid(u) {
+                u = String(u || "")
+                u = u.replace(/:([^:@]+)@/g, ":REDACTED@")
+                u = u.replace(/!([^:]*):/g, "!REDACTED:")
+                return u
+            }
+
+            var upidSafe = sanitizeUpid(upid)
+            var prefix = sessionKey ? (sessionKey + "::") : ""
+            sendNotification(
+                (actionKind === "qemu" ? "VM" : "Container") + " action",
+                (actionKind === "qemu" ? "VM" : "CT") + " " + vmid + " " + action + " OK" + (upidSafe ? (" (task " + upidSafe + ")") : ""),
+                "dialog-information",
+                "action:" + prefix + actionKind + ":" + node + ":" + vmid + ":" + action + ":ok"
+            )
+            fetchData()
+        }
+
+        onActionError: function(seq, actionKind, node, vmid, action, message) {
+            logDebug("onActionError: " + actionKind + " " + node + " " + vmid + " " + action + " - " + (message || ""))
+            handleActionErrorState("", actionKind, node, vmid, action, message)
+        }
+
+        onActionErrorFor: function(seq, sessionKey, actionKind, node, vmid, action, message) {
+            logDebug("onActionErrorFor: " + sessionKey + " " + actionKind + " " + node + " " + vmid + " " + action + " - " + (message || ""))
+            handleActionErrorState(sessionKey, actionKind, node, vmid, action, message)
         }
     }
 
@@ -1030,16 +1060,17 @@ onError: function(seq, kind, node, message) {
         return getLxcForNodeMulti(sessionKey, nodeName).length
     }
 
-    function actionKey(nodeName, kind, vmid) {
+    function actionKey(nodeName, kind, vmid, sessionKey) {
+        if (sessionKey) return sessionKey + "::" + nodeName + ":" + kind + ":" + vmid
         return nodeName + ":" + kind + ":" + vmid
     }
 
-    function isActionBusy(nodeName, kind, vmid) {
-        return actionBusy[actionKey(nodeName, kind, vmid)] === true
+    function isActionBusy(nodeName, kind, vmid, sessionKey) {
+        return actionBusy[actionKey(nodeName, kind, vmid, sessionKey)] === true
     }
 
-    function setActionBusy(nodeName, kind, vmid, busy) {
-        var key = actionKey(nodeName, kind, vmid)
+    function setActionBusy(nodeName, kind, vmid, busy, sessionKey) {
+        var key = actionKey(nodeName, kind, vmid, sessionKey)
         var newBusy = Object.assign({}, actionBusy)
         if (busy) {
             newBusy[key] = true
@@ -1047,6 +1078,14 @@ onError: function(seq, kind, node, message) {
             delete newBusy[key]
         }
         actionBusy = newBusy
+    }
+
+    function endpointForSession(sessionKey) {
+        if (!sessionKey || !endpoints) return null
+        for (var i = 0; i < endpoints.length; i++) {
+            if (endpoints[i] && endpoints[i].sessionKey === sessionKey) return endpoints[i]
+        }
+        return null
     }
 
     function confirmAndRunAction(kind, nodeName, vmid, displayName, action) {
@@ -1058,7 +1097,6 @@ onError: function(seq, kind, node, message) {
 
         var key = kind + ":" + nodeName + ":" + vmid + ":" + action
         if (armedActionKey === key && armedTimer.running) {
-            // confirmed
             armedActionKey = ""
             armedTimer.stop()
             setActionBusy(nodeName, kind, vmid, true)
@@ -1066,7 +1104,43 @@ onError: function(seq, kind, node, message) {
             return
         }
 
-        // arm
+        armedActionKey = key
+        armedLabel = "Click again to confirm " + action + " (" + kind + " " + vmid + ")"
+        armedTimer.restart()
+    }
+
+    function confirmAndRunActionForSession(sessionKey, kind, nodeName, vmid, displayName, action) {
+        logDebug("confirmAndRunActionForSession: " + sessionKey + " " + kind + " " + nodeName + " " + vmid + " " + action)
+
+        var endpoint = endpointForSession(sessionKey)
+        if (!endpoint) {
+            errorMessage = "Action failed: endpoint not found"
+            return
+        }
+
+        var key = sessionKey + "::" + kind + ":" + nodeName + ":" + vmid + ":" + action
+        if (armedActionKey === key && armedTimer.running) {
+            armedActionKey = ""
+            armedTimer.stop()
+            setActionBusy(nodeName, kind, vmid, true, sessionKey)
+            actionSeq = actionSeq + 1
+            pendingMultiActionRequest = {
+                sessionKey: sessionKey,
+                host: endpoint.host,
+                port: endpoint.port,
+                tokenId: endpoint.tokenId,
+                ignoreSsl: endpoint.ignoreSsl,
+                kind: kind,
+                nodeName: nodeName,
+                vmid: vmid,
+                action: action,
+                seq: actionSeq
+            }
+            multiSecretStore.key = sessionKey
+            multiSecretStore.readSecret()
+            return
+        }
+
         armedActionKey = key
         armedLabel = "Click again to confirm " + action + " (" + kind + " " + vmid + ")"
         armedTimer.restart()
@@ -1508,6 +1582,7 @@ onError: function(seq, kind, node, message) {
     property var secretQueue: []
     property int secretQueueIndex: 0
     property var activeMultiSecretRequest: null
+    property var pendingMultiActionRequest: null
     property var tempEndpoints: []
 
     function parseMultiHosts() {
@@ -1663,6 +1738,9 @@ onError: function(seq, kind, node, message) {
                 label: ep.label,
                 host: ep.host,
                 port: ep.port,
+                tokenId: ep.tokenId,
+                secret: ep.secret,
+                ignoreSsl: ep.ignoreSsl,
                 error: bucket.error || "",
                 offline: !!bucket.offline,
                 nodes: bucket.nodes || [],
@@ -1788,10 +1866,6 @@ onError: function(seq, kind, node, message) {
         if (displayedEndpoints.length > 0) errorMessage = ""
         lastUpdate = Qt.formatDateTime(new Date(), "hh:mm:ss")
         resetRetryState()
-
-        for (var ci = 0; ci < endpoints.length; ci++) {
-            if (endpoints[ci]) endpoints[ci].secret = ""
-        }
 
         isRefreshing = false
         loading = false
@@ -1959,6 +2033,31 @@ onError: function(seq, kind, node, message) {
         key: ""
 
         onSecretReady: function(secret) {
+            if (pendingMultiActionRequest && multiSecretStore.key === pendingMultiActionRequest.sessionKey) {
+                var pendingAction = pendingMultiActionRequest
+                pendingMultiActionRequest = null
+
+                if (secret && secret.length > 0) {
+                    api.requestActionFor(
+                        pendingAction.sessionKey,
+                        pendingAction.host,
+                        pendingAction.port,
+                        pendingAction.tokenId,
+                        secret,
+                        pendingAction.ignoreSsl,
+                        pendingAction.kind,
+                        pendingAction.nodeName,
+                        pendingAction.vmid,
+                        pendingAction.action,
+                        pendingAction.seq
+                    )
+                } else {
+                    setActionBusy(pendingAction.nodeName, pendingAction.kind, pendingAction.vmid, false, pendingAction.sessionKey)
+                    errorMessage = "Action failed: endpoint credentials unavailable"
+                }
+                return
+            }
+
             if (!activeMultiSecretRequest) return
 
             var item = activeMultiSecretRequest.item
@@ -2039,6 +2138,15 @@ onError: function(seq, kind, node, message) {
         }
 
         onError: function(message) {
+            if (pendingMultiActionRequest && multiSecretStore.key === pendingMultiActionRequest.sessionKey) {
+                var pendingAction = pendingMultiActionRequest
+                pendingMultiActionRequest = null
+                setActionBusy(pendingAction.nodeName, pendingAction.kind, pendingAction.vmid, false, pendingAction.sessionKey)
+                errorMessage = "Action failed: " + message
+                logDebug("multiSecretStore(action): " + message)
+                return
+            }
+
             if (!activeMultiSecretRequest) return
             multiSecretHadError = true
             secretsResolved += 1
@@ -2415,10 +2523,10 @@ onError: function(seq, kind, node, message) {
                         isActionBusy: root.isActionBusy
                         armedActionKey: root.armedActionKey
                         armedTimerRunning: armedTimer.running
-                        getRunningVmsText: root.getRunningVmsForNode
-                        getTotalVmsText: root.getTotalVmsForNode
-                        getRunningLxcText: root.getRunningLxcForNode
-                        getTotalLxcText: root.getTotalLxcForNode
+                        getRunningVmsForNode: root.getRunningVmsForNode
+                        getTotalVmsForNode: root.getTotalVmsForNode
+                        getRunningLxcForNode: root.getRunningLxcForNode
+                        getTotalLxcForNode: root.getTotalLxcForNode
                         onToggleCollapsed: function(nodeName) { root.toggleNodeCollapsed(nodeName) }
                         onAction: function(kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunAction(kind, nodeName, vmid, displayName, action)
@@ -2451,8 +2559,15 @@ onError: function(seq, kind, node, message) {
                         getTotalVmsForNodeMulti: root.getTotalVmsForNodeMulti
                         getRunningLxcForNodeMulti: root.getRunningLxcForNodeMulti
                         getTotalLxcForNodeMulti: root.getTotalLxcForNodeMulti
+                        isActionBusy: root.isActionBusy
+                        armedActionKey: root.armedActionKey
+                        armedTimerRunning: armedTimer.running
+                        armedActionSessionKey: root.armedActionKey.indexOf("::") !== -1 ? root.armedActionKey.split("::")[0] : ""
                         onToggleCollapsed: function(nodeName, sessionKey) {
                             root.toggleNodeCollapsed(nodeName, sessionKey)
+                        }
+                        onAction: function(sessionKey, kind, nodeName, vmid, displayName, action) {
+                            root.confirmAndRunActionForSession(sessionKey, kind, nodeName, vmid, displayName, action)
                         }
                     }
                 }
