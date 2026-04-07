@@ -111,15 +111,17 @@ KCM.SimpleKCM {
         else root.cfg_appearanceStoppedColor = color
     }
 
+    function previewColor(value, fallback) {
+        var normalized = normalizeHexColor(value)
+        if (normalized === "") return fallback
+        if (normalized) return normalized
+        return fallback
+    }
+
     ColumnLayout {
         anchors.left: parent.left
         anchors.right: parent.right
         spacing: 15
-
-        Kirigami.Heading {
-            text: "Appearance"
-            level: 2
-        }
 
         GridLayout {
             columns: 2
@@ -136,13 +138,28 @@ KCM.SimpleKCM {
                 Layout.fillWidth: true
                 spacing: 6
 
-                QQC2.TextField {
-                    id: runningHexField
+                RowLayout {
                     Layout.fillWidth: true
-                    placeholderText: "Theme default or #RRGGBB"
-                    text: root.cfg_appearanceRunningColor
-                    onEditingFinished: {
-                        if (!root.setColorFromHex("running", text)) text = root.cfg_appearanceRunningColor
+                    spacing: 8
+
+                    QQC2.TextField {
+                        id: runningHexField
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 280
+                        placeholderText: "Theme default or #RRGGBB"
+                        text: root.cfg_appearanceRunningColor
+                        onEditingFinished: {
+                            if (!root.setColorFromHex("running", text)) text = root.cfg_appearanceRunningColor
+                        }
+                    }
+
+                    Rectangle {
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        radius: 6
+                        border.width: 1
+                        border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.35)
+                        color: root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor)
                     }
                 }
 
@@ -211,13 +228,28 @@ KCM.SimpleKCM {
                 Layout.fillWidth: true
                 spacing: 6
 
-                QQC2.TextField {
-                    id: stoppedHexField
+                RowLayout {
                     Layout.fillWidth: true
-                    placeholderText: "Theme default or #RRGGBB"
-                    text: root.cfg_appearanceStoppedColor
-                    onEditingFinished: {
-                        if (!root.setColorFromHex("stopped", text)) text = root.cfg_appearanceStoppedColor
+                    spacing: 8
+
+                    QQC2.TextField {
+                        id: stoppedHexField
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 280
+                        placeholderText: "Theme default or #RRGGBB"
+                        text: root.cfg_appearanceStoppedColor
+                        onEditingFinished: {
+                            if (!root.setColorFromHex("stopped", text)) text = root.cfg_appearanceStoppedColor
+                        }
+                    }
+
+                    Rectangle {
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        radius: 6
+                        border.width: 1
+                        border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.35)
+                        color: root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor)
                     }
                 }
 
@@ -311,6 +343,58 @@ KCM.SimpleKCM {
                     opacity: 0.6
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
+                }
+            }
+
+            QQC2.Label {
+                text: "Preview:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignTop
+            }
+
+            Rectangle {
+                implicitWidth: 220
+                implicitHeight: 96
+                radius: 10
+                border.width: 1
+                border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.35)
+                color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, root.cfg_appearanceWindowOpacity / 100)
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 8
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 24
+                        radius: 6
+                        color: Qt.rgba(root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).r,
+                                       root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).g,
+                                       root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).b,
+                                       root.cfg_appearanceCardTintOpacity / 100)
+
+                        QQC2.Label {
+                            anchors.centerIn: parent
+                            text: "Running"
+                            font.pixelSize: 10
+                        }
+                    }
+
+                    Rectangle {
+                        Layout.fillWidth: true
+                        implicitHeight: 24
+                        radius: 6
+                        color: Qt.rgba(root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).r,
+                                       root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).g,
+                                       root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).b,
+                                       root.cfg_appearanceCardTintOpacity / 100)
+
+                        QQC2.Label {
+                            anchors.centerIn: parent
+                            text: "Stopped"
+                            font.pixelSize: 10
+                        }
+                    }
                 }
             }
 

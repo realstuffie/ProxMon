@@ -3,7 +3,7 @@ import org.kde.plasma.configuration
 
 ConfigModel {
     ConfigCategory {
-        name: "Connection"
+        name: "Connection Settings"
         icon: "preferences-system-network"
         source: "../ui/configGeneral.qml"
     }

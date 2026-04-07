@@ -203,14 +203,9 @@ KCM.SimpleKCM {
         anchors.right: parent.right
         spacing: 15
 
-        // Connection Settings Section
-        Kirigami.Heading {
-            text: "Connection Settings"
-            level: 2
-        }
-
         RowLayout {
             Layout.fillWidth: true
+            Layout.topMargin: 6
             spacing: 10
 
             QQC2.Label {
