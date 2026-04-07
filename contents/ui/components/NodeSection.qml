@@ -43,6 +43,7 @@ ColumnLayout {
 
     Rectangle {
         Layout.fillWidth: true
+        Layout.alignment: Qt.AlignTop
         Layout.leftMargin: 12
         Layout.rightMargin: root.scrollbarReserve
         Layout.preferredHeight: 70
