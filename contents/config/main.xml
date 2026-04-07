@@ -101,5 +101,8 @@
         <entry name="appearanceCardTintOpacity" type="Int">
             <default>10</default>
         </entry>
+        <entry name="appearanceWindowOpacity" type="Int">
+            <default>100</default>
+        </entry>
     </group>
 </kcfg>

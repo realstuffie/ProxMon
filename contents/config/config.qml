@@ -4,7 +4,7 @@ import org.kde.plasma.configuration
 ConfigModel {
     ConfigCategory {
         name: "Connection"
-        icon: "network-server"
+        icon: "preferences-system-network"
         source: "../ui/configGeneral.qml"
     }
     
@@ -12,5 +12,11 @@ ConfigModel {
         name: "Behavior"
         icon: "configure"
         source: "../ui/configBehavior.qml"
+    }
+
+    ConfigCategory {
+        name: "Appearance"
+        icon: "preferences-desktop-color"
+        source: "../ui/configAppearance.qml"
     }
 }

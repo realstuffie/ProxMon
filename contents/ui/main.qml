@@ -244,6 +244,7 @@ PlasmoidItem {
     readonly property color uiRunningColor: Plasmoid.configuration.appearanceRunningColor || Kirigami.Theme.positiveTextColor
     readonly property color uiStoppedColor: Plasmoid.configuration.appearanceStoppedColor || Kirigami.Theme.disabledTextColor
     readonly property real uiCardTintOpacity: Math.max(0, Math.min((Plasmoid.configuration.appearanceCardTintOpacity !== undefined ? Plasmoid.configuration.appearanceCardTintOpacity : 10) / 100, 0.40))
+    readonly property real uiWindowOpacity: Math.max(0.60, Math.min((Plasmoid.configuration.appearanceWindowOpacity !== undefined ? Plasmoid.configuration.appearanceWindowOpacity : 100) / 100, 1.0))
     readonly property real uiSurfaceAltOpacity: uiCardTintOpacity > 0 ? uiCardTintOpacity : 0.10
     readonly property real uiSurfaceRunningOpacity: uiCardTintOpacity > 0 ? Math.min(uiCardTintOpacity + 0.02, 0.40) : 0.12
     readonly property real uiNodeCardOpacity: 0.98
@@ -2341,8 +2342,6 @@ onError: function(seq, kind, node, message) {
         Layout.minimumHeight: 200
         Layout.maximumHeight: 600
 
-        opacity: root.uiWindowOpacity
-
         readonly property int headerHeight: 36
         readonly property int footerHeight: 24
         readonly property int horizontalMargin: 10
@@ -2564,6 +2563,7 @@ onError: function(seq, kind, node, message) {
                         uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
                         uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
                         uiNodeCardOpacity: root.uiNodeCardOpacity
+                        uiWindowOpacity: root.uiWindowOpacity
                         uiRunningColor: root.uiRunningColor
                         uiStoppedColor: root.uiStoppedColor
                         uiRowHeight: root.uiRowHeight
@@ -2600,6 +2600,7 @@ onError: function(seq, kind, node, message) {
                         uiBorderOpacity: root.uiBorderOpacity
                         uiMutedTextOpacity: root.uiMutedTextOpacity
                         uiNodeCardOpacity: root.uiNodeCardOpacity
+                        uiWindowOpacity: root.uiWindowOpacity
                         uiRunningColor: root.uiRunningColor
                         uiStoppedColor: root.uiStoppedColor
                         scrollbarReserve: scrollView.__scrollbarReserve

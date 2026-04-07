@@ -91,3 +91,4 @@ yarn-error.log*
 .pnpm-debug.log*
 *.tar.gz
 *.bak
+.firecrawl/

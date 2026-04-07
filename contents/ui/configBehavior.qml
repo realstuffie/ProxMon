@@ -97,6 +97,8 @@ KCM.SimpleKCM {
     property string cfg_appearanceStoppedColorDefault: ""
     property int cfg_appearanceCardTintOpacity: 10
     property int cfg_appearanceCardTintOpacityDefault: 10
+    property int cfg_appearanceWindowOpacity: 100
+    property int cfg_appearanceWindowOpacityDefault: 100
 
     ColumnLayout {
         anchors.left: parent.left
@@ -227,130 +229,6 @@ KCM.SimpleKCM {
         }
 
         // Separator
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.topMargin: 10
-            Layout.bottomMargin: 10
-            implicitHeight: 1
-            color: Kirigami.Theme.disabledTextColor
-            opacity: 0.3
-        }
-
-        // ==================== APPEARANCE SECTION ====================
-        Kirigami.Heading {
-            text: "Appearance"
-            level: 2
-        }
-
-        GridLayout {
-            columns: 2
-            columnSpacing: 15
-            rowSpacing: 12
-            Layout.fillWidth: true
-
-            QQC2.Label {
-                text: "Running color:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-
-            QQC2.ComboBox {
-                id: runningColorCombo
-                Layout.fillWidth: true
-                textRole: "text"
-                model: ListModel {
-                    id: runningColorModel
-                    ListElement { text: "Default theme"; value: "" }
-                    ListElement { text: "Green"; value: "#4caf50" }
-                    ListElement { text: "Blue"; value: "#4f8cff" }
-                    ListElement { text: "Orange"; value: "#ff9800" }
-                    ListElement { text: "Purple"; value: "#9c27b0" }
-                }
-
-                Component.onCompleted: {
-                    for (var i = 0; i < runningColorModel.count; i++) {
-                        if (runningColorModel.get(i).value === root.cfg_appearanceRunningColor) {
-                            currentIndex = i
-                            break
-                        }
-                    }
-                    if (currentIndex < 0) currentIndex = 0
-                }
-
-                onActivated: {
-                    if (currentIndex >= 0 && currentIndex < runningColorModel.count) {
-                        root.cfg_appearanceRunningColor = runningColorModel.get(currentIndex).value
-                    }
-                }
-            }
-
-            QQC2.Label {
-                text: "Stopped/offline color:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-
-            QQC2.ComboBox {
-                id: stoppedColorCombo
-                Layout.fillWidth: true
-                textRole: "text"
-                model: ListModel {
-                    id: stoppedColorModel
-                    ListElement { text: "Default theme"; value: "" }
-                    ListElement { text: "Gray"; value: "#9e9e9e" }
-                    ListElement { text: "Red"; value: "#ef5350" }
-                    ListElement { text: "Brown"; value: "#8d6e63" }
-                    ListElement { text: "Blue Gray"; value: "#78909c" }
-                }
-
-                Component.onCompleted: {
-                    for (var i = 0; i < stoppedColorModel.count; i++) {
-                        if (stoppedColorModel.get(i).value === root.cfg_appearanceStoppedColor) {
-                            currentIndex = i
-                            break
-                        }
-                    }
-                    if (currentIndex < 0) currentIndex = 0
-                }
-
-                onActivated: {
-                    if (currentIndex >= 0 && currentIndex < stoppedColorModel.count) {
-                        root.cfg_appearanceStoppedColor = stoppedColorModel.get(currentIndex).value
-                    }
-                }
-            }
-
-            QQC2.Label {
-                text: "Card tint opacity:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-
-            RowLayout {
-                spacing: 8
-
-                QQC2.SpinBox {
-                    id: cardTintOpacitySpin
-                    from: 0
-                    to: 40
-                    value: root.cfg_appearanceCardTintOpacity
-                    editable: true
-                    onValueChanged: root.cfg_appearanceCardTintOpacity = value
-                }
-
-                QQC2.Label {
-                    text: "%"
-                    opacity: 0.7
-                }
-            }
-
-        }
-
-        QQC2.Label {
-            text: "Adjust running/stopped state colors and node/row card tint strength."
-            font.pixelSize: 11
-            opacity: 0.6
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-        }
-
         Rectangle {
             Layout.fillWidth: true
             Layout.topMargin: 10

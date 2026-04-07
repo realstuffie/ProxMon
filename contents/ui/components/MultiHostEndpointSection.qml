@@ -16,6 +16,7 @@ ColumnLayout {
     property real uiBorderOpacity: 0.22
     property real uiMutedTextOpacity: 0.68
     property real uiNodeCardOpacity: 0.98
+    property real uiWindowOpacity: 1.0
     property color uiRunningColor: Kirigami.Theme.positiveTextColor
     property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property int scrollbarReserve: 0
@@ -47,7 +48,7 @@ ColumnLayout {
         Layout.rightMargin: root.scrollbarReserve
         Layout.preferredHeight: 34
         radius: root.uiRadiusL
-        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.10)
+        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.10 * root.uiWindowOpacity)
         border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, root.uiBorderOpacity)
         border.width: 1
 
@@ -122,6 +123,7 @@ ColumnLayout {
             getRunningLxcForNodeMulti: root.getRunningLxcForNodeMulti
             getTotalLxcForNodeMulti: root.getTotalLxcForNodeMulti
             uiNodeCardOpacity: root.uiNodeCardOpacity
+            uiWindowOpacity: root.uiWindowOpacity
             uiRunningColor: root.uiRunningColor
             uiStoppedColor: root.uiStoppedColor
             isActionBusy: root.isActionBusy

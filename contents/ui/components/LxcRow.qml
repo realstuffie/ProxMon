@@ -18,6 +18,7 @@ Rectangle {
     property real uiSurfaceAltOpacity: 0.10
     property color uiRunningColor: Kirigami.Theme.positiveTextColor
     property color uiStoppedColor: Kirigami.Theme.disabledTextColor
+    property real uiWindowOpacity: 1.0
     property int scrollbarReserve: 0
     property var anonymizeVmId: null
     property var anonymizeLxcName: null
@@ -28,8 +29,8 @@ Rectangle {
     radius: uiRadiusS
 
     color: ctModel && ctModel.status === "running"
-        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, uiSurfaceRunningOpacity)
-        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, uiSurfaceAltOpacity)
+        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, uiSurfaceRunningOpacity * root.uiWindowOpacity)
+        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, uiSurfaceAltOpacity * root.uiWindowOpacity)
 
     RowLayout {
         anchors.fill: parent

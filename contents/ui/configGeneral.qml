@@ -49,6 +49,8 @@ KCM.SimpleKCM {
     property string cfg_appearanceStoppedColorDefault: ""
     property int cfg_appearanceCardTintOpacity: 10
     property int cfg_appearanceCardTintOpacityDefault: 10
+    property int cfg_appearanceWindowOpacity: 100
+    property int cfg_appearanceWindowOpacityDefault: 100
     property string cfg_notifyMode: "all"
     property string cfg_notifyModeDefault: "all"
     property string cfg_notifyFilter: ""
