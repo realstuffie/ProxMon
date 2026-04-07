@@ -2333,25 +2333,34 @@ onError: function(seq, kind, node, message) {
 
     // ==================== FULL REPRESENTATION ====================
 
-    fullRepresentation: ColumnLayout {
+    fullRepresentation: Item {
         id: fullRep
         Layout.preferredWidth: 380
         Layout.preferredHeight: Math.min(calculatedHeight, 500)
         Layout.minimumWidth: 350
         Layout.minimumHeight: 200
         Layout.maximumHeight: 600
-        spacing: 2
 
         opacity: root.uiWindowOpacity
 
+        readonly property int headerHeight: 36
+        readonly property int footerHeight: 24
+        readonly property int horizontalMargin: 10
+        readonly property int scrollSideMargin: 6
+        readonly property int topMargin: 8
+        readonly property int sectionSpacing: 4
+        readonly property int bottomMargin: 8
+
         // Header
         RowLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
-            Layout.topMargin: 8
-            Layout.bottomMargin: 4
-            Layout.preferredHeight: 36
+            id: headerRow
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: fullRep.horizontalMargin
+            anchors.rightMargin: fullRep.horizontalMargin
+            anchors.topMargin: fullRep.topMargin
+            height: fullRep.headerHeight
 
             PlasmaComponents.Label {
                 text: configured
@@ -2413,8 +2422,12 @@ onError: function(seq, kind, node, message) {
 
         // Not configured / credential loading message
         ColumnLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+            anchors.top: statusBanner.bottom
+            anchors.bottom: footerRow.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: fullRep.horizontalMargin
+            anchors.rightMargin: fullRep.horizontalMargin
             visible: !configured
             spacing: 8
 
@@ -2463,8 +2476,12 @@ onError: function(seq, kind, node, message) {
 
         // Loading indicator (only on initial load)
         Item {
-            Layout.fillWidth: true
-            Layout.preferredHeight: loading ? 50 : 0
+            anchors.top: statusBanner.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: fullRep.horizontalMargin
+            anchors.rightMargin: fullRep.horizontalMargin
+            height: loading ? 50 : 0
             visible: loading
 
             PlasmaComponents.BusyIndicator {
@@ -2474,6 +2491,13 @@ onError: function(seq, kind, node, message) {
         }
 
         StatusBanner {
+            id: statusBanner
+            anchors.top: headerRow.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: fullRep.horizontalMargin
+            anchors.rightMargin: fullRep.horizontalMargin
+            anchors.topMargin: fullRep.sectionSpacing
             configured: root.configured
             hasCoreConfig: root.hasCoreConfig
             secretState: root.secretState
@@ -2489,27 +2513,37 @@ onError: function(seq, kind, node, message) {
         }
 
         // Scrollable Main Content
-        QQC2.ScrollView {
-            id: scrollView
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.leftMargin: 6
-            Layout.rightMargin: 6
+        Item {
+            anchors.top: statusBanner.bottom
+            anchors.bottom: footerRow.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.topMargin: fullRep.sectionSpacing
+            anchors.bottomMargin: fullRep.sectionSpacing
+            anchors.leftMargin: fullRep.scrollSideMargin
+            anchors.rightMargin: fullRep.scrollSideMargin
             visible: configured && !loading && errorMessage === ""
-            clip: true
 
-            QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
-            QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
+            QQC2.ScrollView {
+                id: scrollView
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                clip: true
 
-            // Reserve width for overlay scrollbar so right-side actions aren't covered.
-            // Keep this small; we also reserve it inside each row.
-            readonly property int __scrollbarGap: 2
-            readonly property int __scrollbarReserve: 14 + __scrollbarGap
+                QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
+                QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
 
-            ColumnLayout {
-                id: mainContentColumn
-                width: scrollView.availableWidth
-                spacing: 8
+                // Reserve width for overlay scrollbar so right-side actions aren't covered.
+                // Keep this small; we also reserve it inside each row.
+                readonly property int __scrollbarGap: 2
+                readonly property int __scrollbarReserve: 14 + __scrollbarGap
+
+                ColumnLayout {
+                    id: mainContentColumn
+                    width: scrollView.availableWidth
+                    spacing: 8
 
                 Repeater {
                     visible: connectionMode === "single"
@@ -2609,20 +2643,20 @@ onError: function(seq, kind, node, message) {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 4
                 }
+                }
             }
         }
 
         // Footer (keep it pinned to the bottom of the panel; prevent "floating" during ScrollView relayout)
         RowLayout {
-            Layout.fillWidth: true
-            Layout.leftMargin: 10
-            Layout.rightMargin: 10
-            Layout.topMargin: 4
-            Layout.bottomMargin: 8
-            Layout.preferredHeight: 24
-            Layout.minimumHeight: 24
-            Layout.maximumHeight: 24
-            Layout.alignment: Qt.AlignBottom
+            id: footerRow
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: fullRep.horizontalMargin
+            anchors.rightMargin: fullRep.horizontalMargin
+            anchors.bottomMargin: fullRep.bottomMargin
+            height: fullRep.footerHeight
             visible: root.configured
 
             MouseArea {

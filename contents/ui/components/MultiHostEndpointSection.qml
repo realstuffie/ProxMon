@@ -39,6 +39,7 @@ ColumnLayout {
     property var onAction: null
 
     Layout.fillWidth: true
+    Layout.alignment: Qt.AlignTop
     spacing: 8
 
     Rectangle {
