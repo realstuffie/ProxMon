@@ -705,9 +705,54 @@ onError: function(seq, kind, node, message) {
         return String(sessionKey) + "::" + String(nodeName || "") + "_lxc_" + vmid
     }
 
+    function pushGroupedNotificationEntry(entries, kindLabel, item) {
+        entries.push({
+            kind: kindLabel,
+            vmid: String(item.vmid),
+            name: String(item.name || item.vmid)
+        })
+    }
+
+    function formatGroupedNotificationSection(entries, kindLabel, verb) {
+        var matching = entries.filter(function(entry) {
+            return entry.kind === kindLabel
+        })
+        if (matching.length === 0) return ""
+
+        var ids = matching.map(function(entry) { return entry.vmid }).join(", ")
+        var names = matching.map(function(entry) { return entry.name }).join(", ")
+        return kindLabel + "s: " + ids + "  " + names
+    }
+
+    function sendGroupedNotification(entries, iconName, rateLimitKey, verb) {
+        if (!entries || entries.length === 0) return
+
+        var sections = []
+        var vmSection = formatGroupedNotificationSection(entries, "VM", verb)
+        var ctSection = formatGroupedNotificationSection(entries, "LXC", verb)
+        if (vmSection) sections.push(vmSection)
+        if (ctSection) sections.push(ctSection)
+
+        if (sections.length === 0) return
+
+        var kinds = entries.map(function(entry) { return entry.kind })
+        var hasVm = kinds.indexOf("VM") !== -1
+        var hasCt = kinds.indexOf("CT") !== -1
+        var title = hasVm && !hasCt
+            ? (verb === "started" ? "VMs Started" : "VMs Stopped")
+            : hasCt && !hasVm
+                ? (verb === "started" ? "LXCs Started" : "LXCs Stopped")
+                : (verb === "started" ? "Workloads Started" : "Workloads Stopped")
+
+        sendNotification(title, sections.join("; "), iconName, rateLimitKey)
+    }
+
     // Check for state changes and send notifications
     function checkStateChanges() {
         if (connectionMode === "multiHost") {
+            var multiStartedEntries = []
+            var multiStoppedEntries = []
+
             // No displayed endpoint buckets means there is nothing stable to compare yet.
             if (!displayedEndpoints || displayedEndpoints.length === 0) return
 
@@ -789,19 +834,9 @@ onError: function(seq, kind, node, message) {
                 if (prevVmStateMulti !== undefined && prevVmStateMulti !== vmItemMulti.status) {
                     if (shouldNotify(vmItemMulti.name, vmItemMulti.vmid)) {
                         if (notifyOnStop && prevVmStateMulti === "running" && vmItemMulti.status !== "running") {
-                            sendNotification(
-                                "VM Stopped",
-                                vmItemMulti.name + " (" + vmItemMulti.vmid + ") on " + vmItemMulti.node + " is now " + vmItemMulti.status,
-                                "dialog-warning",
-                                "vm:" + vmItemMulti.sessionKey + ":" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":stopped"
-                            )
+                            pushGroupedNotificationEntry(multiStoppedEntries, "VM", vmItemMulti)
                         } else if (notifyOnStart && prevVmStateMulti !== "running" && vmItemMulti.status === "running") {
-                            sendNotification(
-                                "VM Started",
-                                vmItemMulti.name + " (" + vmItemMulti.vmid + ") on " + vmItemMulti.node + " is now running",
-                                "dialog-information",
-                                "vm:" + vmItemMulti.sessionKey + ":" + vmItemMulti.node + ":" + vmItemMulti.vmid + ":running"
-                            )
+                            pushGroupedNotificationEntry(multiStartedEntries, "VM", vmItemMulti)
                         }
                     }
                 }
@@ -820,27 +855,22 @@ onError: function(seq, kind, node, message) {
                 if (prevLxcStateMulti !== undefined && prevLxcStateMulti !== lxcItemMulti.status) {
                     if (shouldNotify(lxcItemMulti.name, lxcItemMulti.vmid)) {
                         if (notifyOnStop && prevLxcStateMulti === "running" && lxcItemMulti.status !== "running") {
-                            sendNotification(
-                                "Container Stopped",
-                                lxcItemMulti.name + " (" + lxcItemMulti.vmid + ") on " + lxcItemMulti.node + " is now " + lxcItemMulti.status,
-                                "dialog-warning",
-                                "lxc:" + lxcItemMulti.sessionKey + ":" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":stopped"
-                            )
+                            pushGroupedNotificationEntry(multiStoppedEntries, "CT", lxcItemMulti)
                         } else if (notifyOnStart && prevLxcStateMulti !== "running" && lxcItemMulti.status === "running") {
-                            sendNotification(
-                                "Container Started",
-                                lxcItemMulti.name + " (" + lxcItemMulti.vmid + ") on " + lxcItemMulti.node + " is now running",
-                                "dialog-information",
-                                "lxc:" + lxcItemMulti.sessionKey + ":" + lxcItemMulti.node + ":" + lxcItemMulti.vmid + ":running"
-                            )
+                            pushGroupedNotificationEntry(multiStartedEntries, "CT", lxcItemMulti)
                         }
                     }
                 }
                 previousLxcStates[lxcStateKeyMulti] = lxcItemMulti.status
             }
 
+            sendGroupedNotification(multiStartedEntries, "dialog-information", "grouped:multi:running", "started")
+            sendGroupedNotification(multiStoppedEntries, "dialog-warning", "grouped:multi:stopped", "stopped")
             return
         }
+
+        var startedEntries = []
+        var stoppedEntries = []
 
         if (!initialLoadComplete) {
             // Record initial node states
@@ -908,19 +938,9 @@ onError: function(seq, kind, node, message) {
                 // Check if this VM should trigger notifications
                 if (shouldNotify(vmItem.name, vmItem.vmid)) {
                     if (notifyOnStop && prevVmState === "running" && vmItem.status !== "running") {
-                        sendNotification(
-                            "VM Stopped",
-                            vmItem.name + " (" + vmItem.vmid + ") on " + vmItem.node + " is now " + vmItem.status,
-                            "dialog-warning",
-                            "vm:" + vmItem.node + ":" + vmItem.vmid + ":stopped"
-                        )
+                        pushGroupedNotificationEntry(stoppedEntries, "VM", vmItem)
                     } else if (notifyOnStart && prevVmState !== "running" && vmItem.status === "running") {
-                        sendNotification(
-                            "VM Started",
-                            vmItem.name + " (" + vmItem.vmid + ") on " + vmItem.node + " is now running",
-                            "dialog-information",
-                            "vm:" + vmItem.node + ":" + vmItem.vmid + ":running"
-                        )
+                        pushGroupedNotificationEntry(startedEntries, "VM", vmItem)
                     }
                 }
             }
@@ -939,25 +959,17 @@ onError: function(seq, kind, node, message) {
                 // Check if this LXC should trigger notifications
                 if (shouldNotify(lxcItem.name, lxcItem.vmid)) {
                     if (notifyOnStop && prevLxcState === "running" && lxcItem.status !== "running") {
-                        sendNotification(
-                            "Container Stopped",
-                            lxcItem.name + " (" + lxcItem.vmid + ") on " + lxcItem.node + " is now " + lxcItem.status,
-                            "dialog-warning",
-                            "lxc:" + lxcItem.node + ":" + lxcItem.vmid + ":stopped"
-                        )
+                        pushGroupedNotificationEntry(stoppedEntries, "CT", lxcItem)
                     } else if (notifyOnStart && prevLxcState !== "running" && lxcItem.status === "running") {
-                        sendNotification(
-                            "Container Started",
-                            lxcItem.name + " (" + lxcItem.vmid + ") on " + lxcItem.node + " is now running",
-                            "dialog-information",
-                            "lxc:" + lxcItem.node + ":" + lxcItem.vmid + ":running"
-                        )
+                        pushGroupedNotificationEntry(startedEntries, "CT", lxcItem)
                     }
                 }
             }
             previousLxcStates[lxcStateKey] = lxcItem.status
         }
 
+        sendGroupedNotification(startedEntries, "dialog-information", "grouped:single:running", "started")
+        sendGroupedNotification(stoppedEntries, "dialog-warning", "grouped:single:stopped", "stopped")
     }
 
     // ==================== NODE DATA FUNCTIONS ====================
@@ -1401,6 +1413,16 @@ onError: function(seq, kind, node, message) {
         retryStatusText = ""
         armedActionKey = ""
         armedLabel = ""
+
+        if (reason === "connectionMode" || reason === "multiHostsJson"
+                || reason === "proxmoxHost" || reason === "proxmoxPort"
+                || reason === "apiTokenId" || reason === "apiTokenSecret") {
+            previousVmStates = ({})
+            previousLxcStates = ({})
+            previousNodeStates = ({})
+            initialLoadComplete = false
+        }
+
         // If secrets need re-resolving (e.g. token changed), resolveSecretIfNeeded() handlers will do it.
         // Only refresh if we are configured.
         if (!configured) return

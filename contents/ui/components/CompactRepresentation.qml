@@ -24,7 +24,7 @@ Item {
     property var safeCpuPercent: null
     property var onToggleExpanded: null
 
-    implicitWidth: compactLayout.implicitWidth + 4 + 8
+    implicitWidth: compactLayout.implicitWidth
     implicitHeight: compactLayout.implicitHeight
 
     function averageCpuText() {
@@ -68,7 +68,7 @@ Item {
     RowLayout {
         id: compactLayout
         anchors.centerIn: parent
-        anchors.horizontalCenterOffset: -2
+        anchors.horizontalCenterOffset: 0
         spacing: 4
 
         Kirigami.Icon {
@@ -137,7 +137,8 @@ Item {
                         var total = compactRoot.displayedVmData.length + compactRoot.displayedLxcData.length
                         return running + "/" + total
                     case "lastUpdate":
-                        return compactRoot.lastUpdate ? compactRoot.lastUpdate : "-"
+                        if (!compactRoot.lastUpdate) return "-"
+                        return compactRoot.lastUpdate.replace(/^(\d\d:\d\d):\d\d(.*)$/, "$1$2")
                     case "error":
                         if (compactRoot.errorMessage) return "!"
                         break
@@ -150,7 +151,7 @@ Item {
                 return averageCpuText()
             }
             font.pixelSize: 13
-            rightPadding: 6
+            rightPadding: 20
         }
     }
 
