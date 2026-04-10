@@ -14,7 +14,6 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString tokenId READ tokenId WRITE setTokenId NOTIFY tokenIdChanged)
     Q_PROPERTY(QString apiTokenSecret READ apiTokenSecret WRITE setApiTokenSecret NOTIFY apiTokenSecretChanged)
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
-    Q_PROPERTY(QString multiHostSecretsJson READ multiHostSecretsJson WRITE setMultiHostSecretsJson NOTIFY multiHostSecretsJsonChanged)
     Q_PROPERTY(bool ignoreSsl READ ignoreSsl WRITE setIgnoreSsl NOTIFY ignoreSslChanged)
     Q_PROPERTY(QString secretState READ secretState NOTIFY secretStateChanged)
     Q_PROPERTY(bool refreshResolvingSecrets READ refreshResolvingSecrets NOTIFY refreshResolvingSecretsChanged)
@@ -61,9 +60,6 @@ public:
 
     QString multiHostsJson() const { return m_multiHostsJson; }
     void setMultiHostsJson(const QString &value);
-
-    QString multiHostSecretsJson() const { return m_multiHostSecretsJson; }
-    void setMultiHostSecretsJson(const QString &value);
 
     bool ignoreSsl() const { return m_ignoreSsl; }
     void setIgnoreSsl(bool value);
@@ -113,7 +109,6 @@ signals:
     void tokenIdChanged();
     void apiTokenSecretChanged();
     void multiHostsJsonChanged();
-    void multiHostSecretsJsonChanged();
     void ignoreSslChanged();
     void secretStateChanged();
     void refreshResolvingSecretsChanged();
@@ -141,8 +136,6 @@ signals:
     void runningLXCChanged();
     void restoreSingleConfigRequested(const QString &host, int port, const QString &tokenId);
     void restoreMultiHostConfigRequested(const QString &multiHostsJson);
-    void apiTokenSecretClearRequested();
-    void multiHostSecretsJsonChangedExternally(const QString &multiHostSecretsJson);
     void keyListError(const QString &message);
     void actionReply(const QString &sessionKey,
                      const QString &actionKind,
@@ -169,8 +162,6 @@ private:
     void readNextMultiSecret();
     QVariantList parseMultiHosts() const;
     QVariantList buildSecretQueue() const;
-    QVariantMap parseSecretsMap() const;
-    void writeSecretsMap(const QVariantMap &map);
     void setLoading(bool value);
     void setIsRefreshing(bool value);
     void setErrorMessage(const QString &value);
@@ -231,7 +222,6 @@ private:
     QString m_tokenId;
     QString m_apiTokenSecret;
     QString m_multiHostsJson = QStringLiteral("[]");
-    QString m_multiHostSecretsJson = QStringLiteral("{}");
     bool m_ignoreSsl = true;
     QString m_secretState = QStringLiteral("idle");
     bool m_refreshResolvingSecrets = false;
@@ -245,8 +235,6 @@ private:
     QVariantList m_tempEndpoints;
     QVariantList m_secretKeyCandidates;
     int m_secretKeyCandidateIndex = 0;
-    QVariantMap m_pendingSingleSecretWrite;
-    QVariantMap m_pendingMultiSecretWrite;
     bool m_autoRetry = true;
     int m_retryStartMs = 5000;
     int m_retryMaxMs = 300000;

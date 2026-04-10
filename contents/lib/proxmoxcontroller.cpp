@@ -44,17 +44,6 @@ ProxmoxController::ProxmoxController(QObject *parent)
     });
 
     connect(m_singleSecretStore, &SecretStore::secretReady, this, [this](const QString &secret) {
-        const QString pendingSecret = m_apiTokenSecret;
-        if (!pendingSecret.isEmpty()) {
-            m_singleSecretStore->setKey(keyFor(m_host, m_port, m_tokenId));
-            m_pendingSingleSecretWrite = {
-                {QStringLiteral("secret"), pendingSecret},
-                {QStringLiteral("clearConfig"), true},
-            };
-            m_singleSecretStore->writeSecret(pendingSecret);
-            return;
-        }
-
         if (!secret.isEmpty()) {
             m_api->setHost(m_host);
             m_api->setPort(m_port);
@@ -73,45 +62,8 @@ ProxmoxController::ProxmoxController(QObject *parent)
             return;
         }
 
-        if (!m_apiTokenSecret.isEmpty()) {
-            m_singleSecretStore->setKey(keyFor(m_host, m_port, m_tokenId));
-            m_pendingSingleSecretWrite = {
-                {QStringLiteral("secret"), m_apiTokenSecret},
-                {QStringLiteral("clearConfig"), true},
-            };
-            m_singleSecretStore->writeSecret(m_apiTokenSecret);
-            return;
-        }
-
         setRefreshResolvingSecrets(false);
         setSecretState(QStringLiteral("missing"));
-    });
-
-    connect(m_singleSecretStore, &SecretStore::writeFinished, this, [this](bool ok, const QString &) {
-        if (m_pendingSingleSecretWrite.isEmpty()) {
-            return;
-        }
-
-        const QVariantMap pending = m_pendingSingleSecretWrite;
-        m_pendingSingleSecretWrite.clear();
-
-        if (!ok) {
-            setRefreshResolvingSecrets(false);
-            setSecretState(QStringLiteral("error"));
-            return;
-        }
-
-        const QString secret = pending.value(QStringLiteral("secret")).toString();
-        m_api->setHost(m_host);
-        m_api->setPort(m_port);
-        m_api->setTokenId(m_tokenId);
-        m_api->setTokenSecret(secret);
-        m_api->setIgnoreSslErrors(m_ignoreSsl);
-        if (pending.value(QStringLiteral("clearConfig")).toBool()) {
-            emit apiTokenSecretClearRequested();
-        }
-        setSecretState(QStringLiteral("ready"));
-        setRefreshResolvingSecrets(false);
     });
 
     connect(m_singleSecretStore, &SecretStore::error, this, [this](const QString &) {
@@ -161,18 +113,6 @@ ProxmoxController::ProxmoxController(QObject *parent)
 
         const QVariantMap item = m_activeMultiSecretRequest.value(QStringLiteral("item")).toMap();
         const QString sessionKey = m_activeMultiSecretRequest.value(QStringLiteral("sessionKey")).toString();
-        QVariantMap newItem = item;
-        const QVariantMap map = parseSecretsMap();
-        const QString stashed = map.value(sessionKey).toString();
-        if (!sessionKey.isEmpty() && !stashed.isEmpty()) {
-            m_pendingMultiSecretWrite = {
-                {QStringLiteral("sessionKey"), sessionKey},
-                {QStringLiteral("secret"), stashed},
-                {QStringLiteral("item"), item},
-            };
-            m_multiSecretStore->writeSecret(stashed);
-            return;
-        }
 
         if (!secret.isEmpty()) {
             QVariantMap endpoint;
@@ -184,43 +124,6 @@ ProxmoxController::ProxmoxController(QObject *parent)
             endpoint.insert(QStringLiteral("ignoreSsl"), m_ignoreSsl);
             m_tempEndpoints.push_back(endpoint);
         }
-
-        setSecretsResolved(m_secretsResolved + 1);
-        m_secretQueueIndex += 1;
-        m_activeMultiSecretRequest.clear();
-        readNextMultiSecret();
-    });
-
-    connect(m_multiSecretStore, &SecretStore::writeFinished, this, [this](bool ok, const QString &) {
-        if (m_pendingMultiSecretWrite.isEmpty()) {
-            return;
-        }
-
-        const QVariantMap pending = m_pendingMultiSecretWrite;
-        m_pendingMultiSecretWrite.clear();
-
-        if (!ok) {
-            setMultiSecretHadError(true);
-            setSecretsResolved(m_secretsResolved + 1);
-            m_secretQueueIndex += 1;
-            m_activeMultiSecretRequest.clear();
-            readNextMultiSecret();
-            return;
-        }
-
-        QVariantMap map = parseSecretsMap();
-        map.remove(pending.value(QStringLiteral("sessionKey")).toString());
-        writeSecretsMap(map);
-
-        const QVariantMap item = pending.value(QStringLiteral("item")).toMap();
-        QVariantMap endpoint;
-        endpoint.insert(QStringLiteral("sessionKey"), pending.value(QStringLiteral("sessionKey")));
-        endpoint.insert(QStringLiteral("label"), item.value(QStringLiteral("label")));
-        endpoint.insert(QStringLiteral("host"), item.value(QStringLiteral("host")));
-        endpoint.insert(QStringLiteral("port"), item.value(QStringLiteral("port")));
-        endpoint.insert(QStringLiteral("tokenId"), item.value(QStringLiteral("tokenId")));
-        endpoint.insert(QStringLiteral("ignoreSsl"), m_ignoreSsl);
-        m_tempEndpoints.push_back(endpoint);
 
         setSecretsResolved(m_secretsResolved + 1);
         m_secretQueueIndex += 1;
@@ -277,12 +180,6 @@ void ProxmoxController::setMultiHostsJson(const QString &value) {
     if (m_multiHostsJson == value) return;
     m_multiHostsJson = value;
     emit multiHostsJsonChanged();
-}
-
-void ProxmoxController::setMultiHostSecretsJson(const QString &value) {
-    if (m_multiHostSecretsJson == value) return;
-    m_multiHostSecretsJson = value;
-    emit multiHostSecretsJsonChanged();
 }
 
 void ProxmoxController::setIgnoreSsl(bool value) {
@@ -673,8 +570,6 @@ void ProxmoxController::resetTransientStateForModeChange() {
     m_tempEndpoints.clear();
     m_secretKeyCandidates.clear();
     m_secretKeyCandidateIndex = 0;
-    m_pendingSingleSecretWrite.clear();
-    m_pendingMultiSecretWrite.clear();
     m_pendingNodeRequests = 0;
     m_tempVmData.clear();
     m_tempLxcData.clear();
@@ -1256,18 +1151,6 @@ QVariantList ProxmoxController::buildSecretQueue() const {
         queue.push_back(item);
     }
     return queue;
-}
-
-QVariantMap ProxmoxController::parseSecretsMap() const {
-    const QJsonDocument doc = QJsonDocument::fromJson(m_multiHostSecretsJson.toUtf8());
-    if (!doc.isObject()) {
-        return {};
-    }
-    return doc.object().toVariantMap();
-}
-
-void ProxmoxController::writeSecretsMap(const QVariantMap &map) {
-    emit multiHostSecretsJsonChangedExternally(QString::fromUtf8(QJsonDocument(QJsonObject::fromVariantMap(map)).toJson(QJsonDocument::Compact)));
 }
 
 QString ProxmoxController::normalizedHost(const QString &host) const {
