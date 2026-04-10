@@ -48,7 +48,6 @@ PlasmoidItem {
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
     // apiTokenSecret stays bound to Plasmoid.configuration so onApiTokenSecretChanged
     // keeps firing whenever the user saves a new secret via the KCM.
-    // secret (read from the keyring or migrated from config) lives in controller.resolvedApiTokenSecret.
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
     // Multi-host config (KCM stores these)
     property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
@@ -186,8 +185,8 @@ PlasmoidItem {
             if (controller.secretState === "ready" && controller.endpoints && controller.endpoints.length > 0) return true
             return controller.refreshResolvingSecrets && displayedEndpoints && displayedEndpoints.length > 0
         }
-        if (hasCoreConfig && controller.secretState === "ready" && controller.resolvedApiTokenSecret !== "") return true
-        return hasCoreConfig && controller.refreshResolvingSecrets && controller.resolvedApiTokenSecret !== ""
+        if (hasCoreConfig && controller.secretState === "ready") return true
+        return hasCoreConfig && controller.refreshResolvingSecrets
     }
     property bool defaultsLoaded: false
     property bool devMode: true
@@ -294,7 +293,7 @@ PlasmoidItem {
         host: proxmoxHost
         port: proxmoxPort
         tokenId: apiTokenId
-        tokenSecret: controller.resolvedApiTokenSecret
+        tokenSecret: ""
         ignoreSslErrors: ignoreSsl
         lowLatency: Plasmoid.configuration.lowLatency !== false
 
@@ -1118,6 +1117,20 @@ PlasmoidItem {
     }
 
 
+    Timer {
+        id: secretResolveDebounce
+        interval: 150
+        repeat: false
+        onTriggered: {
+            logDebug("secretResolveDebounce: resolving secrets after config change")
+            resolveSecretIfNeeded()
+        }
+    }
+
+    function triggerSecretResolveFromConfigChange() {
+        secretResolveDebounce.restart()
+    }
+
     // Debounce refresh when config changes (avoids hammering API while user is typing).
     Timer {
         id: configRefreshDebounce
@@ -1148,8 +1161,9 @@ PlasmoidItem {
         }
 
         // If secrets need re-resolving (e.g. token changed), resolveSecretIfNeeded() handlers will do it.
-        // Only refresh if we are configured.
-        if (!configured) return
+        // On mode/config swaps we may temporarily be unconfigured until the target config lands, so keep
+        // the pending refresh armed and let secret/config handlers trigger the eventual fetch.
+        if (!configured && !controllerPendingResolvedRefresh) return
         configRefreshDebounce.restart()
     }
 
@@ -1359,15 +1373,15 @@ PlasmoidItem {
     }
 
     onProxmoxHostChanged: {
-        if (connectionMode === "single") resolveSecretIfNeeded()
+        if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("proxmoxHost")
     }
     onProxmoxPortChanged: {
-        if (connectionMode === "single") resolveSecretIfNeeded()
+        if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("proxmoxPort")
     }
     onApiTokenIdChanged: {
-        if (connectionMode === "single") resolveSecretIfNeeded()
+        if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("apiTokenId")
     }
 
@@ -1375,17 +1389,17 @@ PlasmoidItem {
     // Plasmoid.configuration.apiTokenSecret but may not change apiTokenId/host/port.
     // React to it so the widget transitions out of "Not Configured" immediately.
     onApiTokenSecretChanged: {
-        if (connectionMode === "single") resolveSecretIfNeeded()
+        if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("apiTokenSecret")
     }
     onMultiHostsJsonChanged: {
         controllerPendingResolvedRefresh = true
-        if (connectionMode === "multiHost") resolveSecretIfNeeded()
+        if (connectionMode === "multiHost") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("multiHostsJson")
     }
     onConnectionModeChanged: {
         controllerPendingResolvedRefresh = true
-        resolveSecretIfNeeded()
+        triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("connectionMode")
     }
 

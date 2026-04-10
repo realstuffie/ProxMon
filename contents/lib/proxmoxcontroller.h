@@ -18,7 +18,6 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(bool ignoreSsl READ ignoreSsl WRITE setIgnoreSsl NOTIFY ignoreSslChanged)
     Q_PROPERTY(QString secretState READ secretState NOTIFY secretStateChanged)
     Q_PROPERTY(bool refreshResolvingSecrets READ refreshResolvingSecrets NOTIFY refreshResolvingSecretsChanged)
-    Q_PROPERTY(QString resolvedApiTokenSecret READ resolvedApiTokenSecret NOTIFY resolvedApiTokenSecretChanged)
     Q_PROPERTY(QVariantList endpoints READ endpoints NOTIFY endpointsChanged)
     Q_PROPERTY(int secretsResolved READ secretsResolved NOTIFY secretsResolvedChanged)
     Q_PROPERTY(int secretsTotal READ secretsTotal NOTIFY secretsTotalChanged)
@@ -71,7 +70,6 @@ public:
 
     QString secretState() const { return m_secretState; }
     bool refreshResolvingSecrets() const { return m_refreshResolvingSecrets; }
-    QString resolvedApiTokenSecret() const { return m_resolvedApiTokenSecret; }
     QVariantList endpoints() const { return m_endpoints; }
     int secretsResolved() const { return m_secretsResolved; }
     int secretsTotal() const { return m_secretsTotal; }
@@ -119,7 +117,6 @@ signals:
     void ignoreSslChanged();
     void secretStateChanged();
     void refreshResolvingSecretsChanged();
-    void resolvedApiTokenSecretChanged();
     void endpointsChanged();
     void secretsResolvedChanged();
     void secretsTotalChanged();
@@ -163,7 +160,6 @@ signals:
 private:
     void setSecretState(const QString &value);
     void setRefreshResolvingSecrets(bool value);
-    void setResolvedApiTokenSecret(const QString &value);
     void setEndpoints(const QVariantList &value);
     void setSecretsResolved(int value);
     void setSecretsTotal(int value);
@@ -190,7 +186,30 @@ private:
     void setDisplayedNodeList(const QVariantList &value);
     void resetRetryState();
     void scheduleRetry(const QString &reason);
+    void resetTransientStateForModeChange();
     void resetMultiTempData();
+    void dispatchSingleFetchWithSecret(const QString &secret);
+    bool dispatchSingleActionWithSecret(const QString &kind,
+                                        const QString &node,
+                                        int vmid,
+                                        const QString &action,
+                                        const QString &secret);
+    void dispatchMultiNodesWithSecret(const QString &sessionKey,
+                                      const QVariantMap &endpoint,
+                                      const QString &secret);
+    void dispatchMultiNodeChildrenWithSecret(const QString &sessionKey,
+                                             const QVariantMap &endpoint,
+                                             const QVariantList &nodeNames,
+                                             const QString &secret);
+    bool dispatchMultiActionWithSecret(const QString &sessionKey,
+                                       const QVariantMap &endpoint,
+                                       const QString &kind,
+                                       const QString &node,
+                                       int vmid,
+                                       const QString &action,
+                                       const QString &secret);
+    void readSingleSecretFor(const QVariantMap &request);
+    void readMultiSecretFor(const QVariantMap &request);
     QVariantMap ensureEndpointBucket(const QString &sessionKey);
     QVariantList bucketsToArray(const QVariantMap &map) const;
     void handleSingleReply(int seq, const QString &kind, const QString &node, const QVariant &data);
@@ -216,7 +235,6 @@ private:
     bool m_ignoreSsl = true;
     QString m_secretState = QStringLiteral("idle");
     bool m_refreshResolvingSecrets = false;
-    QString m_resolvedApiTokenSecret;
     QVariantList m_endpoints;
     int m_secretsResolved = 0;
     int m_secretsTotal = 0;
