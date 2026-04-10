@@ -471,6 +471,7 @@ PlasmoidItem {
         }
 
         if (rateLimitKey && shouldRateLimitNotify(rateLimitKey)) {
+            logDebug("Notification rate-limited: " + rateLimitKey)
             return
         }
 
@@ -547,7 +548,8 @@ PlasmoidItem {
 
         var ids = matching.map(function(entry) { return entry.vmid }).join(", ")
         var names = matching.map(function(entry) { return entry.name }).join(", ")
-        return kindLabel + "s: " + ids + "  " + names
+        var label = kindLabel === "CT" ? "LXCs" : (kindLabel + "s")
+        return label + ": " + ids + "  " + names
     }
 
     function sendGroupedNotification(entries, iconName, rateLimitKey, verb) {
@@ -555,7 +557,7 @@ PlasmoidItem {
 
         var sections = []
         var vmSection = formatGroupedNotificationSection(entries, "VM", verb)
-        var ctSection = formatGroupedNotificationSection(entries, "LXC", verb)
+        var ctSection = formatGroupedNotificationSection(entries, "CT", verb)
         if (vmSection) sections.push(vmSection)
         if (ctSection) sections.push(ctSection)
 
@@ -690,8 +692,15 @@ PlasmoidItem {
                 previousLxcStates[lxcStateKeyMulti] = lxcItemMulti.status
             }
 
-            sendGroupedNotification(multiStartedEntries, "dialog-information", "grouped:multi:running", "started")
-            sendGroupedNotification(multiStoppedEntries, "dialog-warning", "grouped:multi:stopped", "stopped")
+            logDebug("checkStateChanges(multi): started=" + multiStartedEntries.length + " stopped=" + multiStoppedEntries.length)
+            sendGroupedNotification(multiStartedEntries,
+                                    "dialog-information",
+                                    "grouped:multi:running:" + multiStartedEntries.map(function(entry) { return entry.kind + ":" + entry.vmid }).sort().join(","),
+                                    "started")
+            sendGroupedNotification(multiStoppedEntries,
+                                    "dialog-warning",
+                                    "grouped:multi:stopped:" + multiStoppedEntries.map(function(entry) { return entry.kind + ":" + entry.vmid }).sort().join(","),
+                                    "stopped")
             return
         }
 
@@ -794,8 +803,14 @@ PlasmoidItem {
             previousLxcStates[lxcStateKey] = lxcItem.status
         }
 
-        sendGroupedNotification(startedEntries, "dialog-information", "grouped:single:running", "started")
-        sendGroupedNotification(stoppedEntries, "dialog-warning", "grouped:single:stopped", "stopped")
+        sendGroupedNotification(startedEntries,
+                                "dialog-information",
+                                "grouped:single:running:" + startedEntries.map(function(entry) { return entry.kind + ":" + entry.vmid }).sort().join(","),
+                                "started")
+        sendGroupedNotification(stoppedEntries,
+                                "dialog-warning",
+                                "grouped:single:stopped:" + stoppedEntries.map(function(entry) { return entry.kind + ":" + entry.vmid }).sort().join(","),
+                                "stopped")
     }
 
     // ==================== NODE DATA FUNCTIONS ====================
@@ -1366,6 +1381,14 @@ PlasmoidItem {
         if (pendingNodeRequests > 0) return
         refreshWatchdog.stop()
         checkStateChanges()
+    }
+
+    Connections {
+        target: controller
+        function onDisplayedEndpointsChanged() {
+            if (connectionMode !== "multiHost") return
+            checkStateChanges()
+        }
     }
 
     function resolveSecretIfNeeded() {
