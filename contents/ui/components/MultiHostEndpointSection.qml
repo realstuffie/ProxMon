@@ -10,7 +10,7 @@ ColumnLayout {
     property string sessionKey: endpoint ? endpoint.sessionKey : ""
     property string endpointLabel: endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : "")
     property string endpointError: endpoint && endpoint.error ? endpoint.error : ""
-    property bool endpointOffline: endpoint && endpoint.offline
+    property bool endpointOffline: endpoint ? !!endpoint.offline : false
     property var nodes: endpoint && endpoint.nodes ? endpoint.nodes : []
     property int uiRadiusL: 8
     property real uiBorderOpacity: 0.22
@@ -98,7 +98,10 @@ ColumnLayout {
     }
 
     Repeater {
-        model: root.nodes
+        model: {
+            console.log("[MultiHostEndpointSection] endpoint=", root.endpointLabel, "nodes=", root.nodes ? root.nodes.length : -1)
+            return root.nodes
+        }
 
         delegate: MultiHostNodeSection {
             required property int index
