@@ -17,6 +17,7 @@ ColumnLayout {
     property real uiMutedTextOpacity: 0.68
     property real uiNodeCardOpacity: 0.98
     property real uiWindowOpacity: 1.0
+    property color uiNodeColor: Kirigami.Theme.backgroundColor
     property real uiSurfaceAltOpacity: 0.10
     property real uiSurfaceRunningOpacity: 0.12
     property color uiRunningColor: Kirigami.Theme.positiveTextColor
@@ -126,6 +127,7 @@ ColumnLayout {
             getTotalLxcForNodeMulti: root.getTotalLxcForNodeMulti
             uiNodeCardOpacity: root.uiNodeCardOpacity
             uiWindowOpacity: root.uiWindowOpacity
+            uiNodeColor: root.uiNodeColor
             uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
             uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
             uiRunningColor: root.uiRunningColor

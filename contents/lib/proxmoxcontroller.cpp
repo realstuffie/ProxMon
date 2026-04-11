@@ -51,6 +51,8 @@ ProxmoxController::ProxmoxController(QObject *parent)
             m_api->setTokenId(m_tokenId);
             m_api->setTokenSecret(secret);
             m_api->setIgnoreSslErrors(m_ignoreSsl);
+            m_api->setTrustedCertPem(m_trustedCertPem);
+            m_api->setTrustedCertPath(m_trustedCertPath);
             setSecretState(QStringLiteral("ready"));
             setRefreshResolvingSecrets(false);
             return;
@@ -175,6 +177,20 @@ void ProxmoxController::setApiTokenSecret(const QString &value) {
     if (m_apiTokenSecret == value) return;
     m_apiTokenSecret = value;
     emit apiTokenSecretChanged();
+}
+
+void ProxmoxController::setTrustedCertPem(const QString &value) {
+    if (m_trustedCertPem == value) return;
+    m_trustedCertPem = value;
+    m_api->setTrustedCertPem(value);
+    emit trustedCertPemChanged();
+}
+
+void ProxmoxController::setTrustedCertPath(const QString &value) {
+    if (m_trustedCertPath == value) return;
+    m_trustedCertPath = value;
+    m_api->setTrustedCertPath(value);
+    emit trustedCertPathChanged();
 }
 
 void ProxmoxController::setMultiHostsJson(const QString &value) {
@@ -636,6 +652,12 @@ void ProxmoxController::dispatchSingleFetchWithSecret(const QString &secret) {
         return;
     }
 
+    appendDebugLog(QStringLiteral("[ProxmoxController] single fetch dispatch host=%1 port=%2 ignoreSsl=%3 trustedPem=%4 trustedPath=%5")
+        .arg(m_host,
+             QString::number(m_port),
+             m_ignoreSsl ? QStringLiteral("true") : QStringLiteral("false"),
+             m_trustedCertPem.trimmed().isEmpty() ? QStringLiteral("false") : QStringLiteral("true"),
+             m_trustedCertPath.trimmed().isEmpty() ? QStringLiteral("false") : QStringLiteral("true")));
     m_api->requestNodesFor(QString(),
                            m_host,
                            m_port,
@@ -1006,6 +1028,7 @@ void ProxmoxController::handleSingleReply(int seq, const QString &kind, const QS
 void ProxmoxController::handleSingleError(int seq, const QString &kind, const QString &node, const QString &message) {
     if (seq != m_refreshSeq || m_connectionMode != QStringLiteral("single")) return;
     Q_UNUSED(node)
+    appendDebugLog(QStringLiteral("[ProxmoxController] single error kind=%1 message=%2").arg(kind, message));
 
     if (kind == QStringLiteral("nodes")) {
         setErrorMessage(message.isEmpty() ? QStringLiteral("Connection failed") : message);
@@ -1099,6 +1122,8 @@ void ProxmoxController::handleMultiError(int seq, const QString &sessionKey, con
     if (seq != m_refreshSeq || m_connectionMode != QStringLiteral("multiHost")) return;
     Q_UNUSED(node)
     setErrorMessage(message.isEmpty() ? QStringLiteral("Connection failed") : message);
+    appendDebugLog(QStringLiteral("[ProxmoxController] multi error session=%1 kind=%2 message=%3")
+        .arg(sessionKey, kind, m_errorMessage));
 
     QVariantMap bucket = ensureEndpointBucket(sessionKey);
     if (kind == QStringLiteral("nodes")) {

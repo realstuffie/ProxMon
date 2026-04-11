@@ -49,6 +49,8 @@ PlasmoidItem {
     // apiTokenSecret stays bound to Plasmoid.configuration so onApiTokenSecretChanged
     // keeps firing whenever the user saves a new secret via the KCM.
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
+    property string trustedCertPem: Plasmoid.configuration.trustedCertPem || ""
+    property string trustedCertPath: Plasmoid.configuration.trustedCertPath || ""
     // Multi-host config (KCM stores these)
     property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
     // Plaintext stash from KCM; runtime migrates to keyring and clears it.
@@ -60,6 +62,8 @@ PlasmoidItem {
         port: root.proxmoxPort
         tokenId: root.apiTokenId
         apiTokenSecret: root.apiTokenSecret
+        trustedCertPem: root.trustedCertPem
+        trustedCertPath: root.trustedCertPath
         multiHostsJson: root.multiHostsJson
         debugEnabled: root.devMode
         ignoreSsl: root.ignoreSsl
@@ -84,7 +88,7 @@ PlasmoidItem {
     }
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
-    property bool ignoreSsl: Plasmoid.configuration.ignoreSsl !== false
+    property bool ignoreSsl: Plasmoid.configuration.ignoreSsl === true
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
 
     // Auto-retry/backoff
@@ -251,6 +255,7 @@ PlasmoidItem {
     readonly property real uiBorderOpacity: 0.22
     readonly property color uiRunningColor: Plasmoid.configuration.appearanceRunningColor || Kirigami.Theme.positiveTextColor
     readonly property color uiStoppedColor: Plasmoid.configuration.appearanceStoppedColor || Kirigami.Theme.disabledTextColor
+    readonly property color uiNodeColor: Plasmoid.configuration.appearanceNodeColor || Kirigami.Theme.backgroundColor
     readonly property real uiCardTintOpacity: Math.max(0, Math.min((Plasmoid.configuration.appearanceCardTintOpacity !== undefined ? Plasmoid.configuration.appearanceCardTintOpacity : 10) / 100, 0.40))
     readonly property real uiWindowOpacity: Math.max(0.60, Math.min((Plasmoid.configuration.appearanceWindowOpacity !== undefined ? Plasmoid.configuration.appearanceWindowOpacity : 100) / 100, 1.0))
     readonly property real uiSurfaceAltOpacity: uiCardTintOpacity > 0 ? uiCardTintOpacity : 0.10
@@ -343,6 +348,8 @@ PlasmoidItem {
             nodeCount: displayedNodeList.length,
             vmCount: displayedVmData.length,
             lxcCount: displayedLxcData.length,
+            trustedCertPemSet: !!((trustedCertPem || "").trim()),
+            trustedCertPathSet: !!((trustedCertPath || "").trim()),
             qmlLog: debugLog.map(function(line) { return redactSecretsForDebug(line) }),
             controllerLog: controller ? controller.debugLog : []
         }
@@ -1239,6 +1246,8 @@ PlasmoidItem {
         if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("apiTokenSecret")
     }
+    onTrustedCertPemChanged: triggerRefreshFromConfigChange("trustedCertPem")
+    onTrustedCertPathChanged: triggerRefreshFromConfigChange("trustedCertPath")
     onMultiHostsJsonChanged: {
         controllerPendingResolvedRefresh = true
         if (connectionMode === "multiHost") triggerSecretResolveFromConfigChange()
@@ -1584,6 +1593,7 @@ PlasmoidItem {
                         uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
                         uiNodeCardOpacity: root.uiNodeCardOpacity
                         uiWindowOpacity: root.uiWindowOpacity
+                        uiNodeColor: root.uiNodeColor
                         uiRunningColor: root.uiRunningColor
                         uiStoppedColor: root.uiStoppedColor
                         uiRowHeight: root.uiRowHeight
@@ -1626,6 +1636,7 @@ PlasmoidItem {
                         uiMutedTextOpacity: root.uiMutedTextOpacity
                         uiNodeCardOpacity: root.uiNodeCardOpacity
                         uiWindowOpacity: root.uiWindowOpacity
+                        uiNodeColor: root.uiNodeColor
                         uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
                         uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
                         uiRunningColor: root.uiRunningColor

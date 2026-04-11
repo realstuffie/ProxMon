@@ -13,6 +13,8 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(int port READ port WRITE setPort NOTIFY portChanged)
     Q_PROPERTY(QString tokenId READ tokenId WRITE setTokenId NOTIFY tokenIdChanged)
     Q_PROPERTY(QString apiTokenSecret READ apiTokenSecret WRITE setApiTokenSecret NOTIFY apiTokenSecretChanged)
+    Q_PROPERTY(QString trustedCertPem READ trustedCertPem WRITE setTrustedCertPem NOTIFY trustedCertPemChanged)
+    Q_PROPERTY(QString trustedCertPath READ trustedCertPath WRITE setTrustedCertPath NOTIFY trustedCertPathChanged)
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
     Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
     Q_PROPERTY(bool ignoreSsl READ ignoreSsl WRITE setIgnoreSsl NOTIFY ignoreSslChanged)
@@ -60,11 +62,17 @@ public:
     QString apiTokenSecret() const { return m_apiTokenSecret; }
     void setApiTokenSecret(const QString &value);
 
-    QString multiHostsJson() const { return m_multiHostsJson; }
-    void setMultiHostsJson(const QString &value);
-
     bool debugEnabled() const { return m_debugEnabled; }
     void setDebugEnabled(bool value);
+
+    QString trustedCertPem() const { return m_trustedCertPem; }
+    void setTrustedCertPem(const QString &value);
+
+    QString trustedCertPath() const { return m_trustedCertPath; }
+    void setTrustedCertPath(const QString &value);
+
+    QString multiHostsJson() const { return m_multiHostsJson; }
+    void setMultiHostsJson(const QString &value);
 
     bool ignoreSsl() const { return m_ignoreSsl; }
     void setIgnoreSsl(bool value);
@@ -115,6 +123,8 @@ signals:
     void portChanged();
     void tokenIdChanged();
     void apiTokenSecretChanged();
+    void trustedCertPemChanged();
+    void trustedCertPathChanged();
     void multiHostsJsonChanged();
     void debugEnabledChanged();
     void ignoreSslChanged();
@@ -231,6 +241,8 @@ private:
     int m_port = 8006;
     QString m_tokenId;
     QString m_apiTokenSecret;
+    QString m_trustedCertPem;
+    QString m_trustedCertPath;
     QString m_multiHostsJson = QStringLiteral("[]");
     bool m_debugEnabled = false;
     bool m_ignoreSsl = true;

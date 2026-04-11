@@ -25,6 +25,8 @@ KCM.SimpleKCM {
     property alias cfg_proxmoxPort: singleHostSection.portValue
     property alias cfg_apiTokenId: singleHostSection.tokenIdText
     property alias cfg_apiTokenSecret: singleHostSection.tokenSecretText
+    property string cfg_trustedCertPem: ""
+    property string cfg_trustedCertPath: ""
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
     property alias cfg_enableNotifications: enableNotificationsCheck.checked
@@ -67,6 +69,8 @@ KCM.SimpleKCM {
     property int cfg_notifyRateLimitSecondsDefault: 120
     property bool cfg_redactNotifyIdentities: true
     property bool cfg_redactNotifyIdentitiesDefault: true
+    property string cfg_appearanceNodeColor: ""
+    property string cfg_appearanceNodeColorDefault: ""
 
     // Auto-retry (handled in main.qml)
     property alias cfg_autoRetry: retrySection.autoRetryChecked
@@ -78,6 +82,8 @@ KCM.SimpleKCM {
     property int cfg_proxmoxPortDefault: 8006
     property string cfg_apiTokenIdDefault: ""
     property string cfg_apiTokenSecretDefault: ""
+    property string cfg_trustedCertPemDefault: ""
+    property string cfg_trustedCertPathDefault: ""
 
     property string cfg_connectionModeDefault: "single"
     property string cfg_multiHostsJsonDefault: "[]"
@@ -249,6 +255,8 @@ KCM.SimpleKCM {
         ConfigGeneralMultiHostSection {
             Layout.fillWidth: true
             visible: (root.cfg_connectionMode || "single") === "multiHost"
+            trustedCertPem: root.cfg_trustedCertPem
+            trustedCertPath: root.cfg_trustedCertPath
             ensureMultiHostsLen: root.ensureMultiHostsLen
             saveMultiHosts: root.saveMultiHosts
             multiHostSecretKey: root.multiHostSecretKey
@@ -291,6 +299,30 @@ KCM.SimpleKCM {
                 id: ignoreSslCheck
                 checked: true
                 text: "Ignore SSL certificate errors"
+            }
+
+            QQC2.Label {
+                text: "Trusted Cert PEM:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignTop
+            }
+            QQC2.TextArea {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 90
+                text: root.cfg_trustedCertPem
+                placeholderText: "Paste PEM certificate here. If set, this takes precedence over file path."
+                wrapMode: TextEdit.Wrap
+                onTextChanged: root.cfg_trustedCertPem = text
+            }
+
+            QQC2.Label {
+                text: "Trusted Cert File:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+            QQC2.TextField {
+                Layout.fillWidth: true
+                text: root.cfg_trustedCertPath
+                placeholderText: "/etc/pve/pve-root-ca.pem"
+                onTextChanged: root.cfg_trustedCertPath = text
             }
 
             QQC2.Label {

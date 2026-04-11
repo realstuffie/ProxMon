@@ -95,6 +95,8 @@ KCM.SimpleKCM {
     property string cfg_appearanceRunningColorDefault: ""
     property string cfg_appearanceStoppedColor: ""
     property string cfg_appearanceStoppedColorDefault: ""
+    property string cfg_appearanceNodeColor: ""
+    property string cfg_appearanceNodeColorDefault: ""
     property int cfg_appearanceCardTintOpacity: 10
     property int cfg_appearanceCardTintOpacityDefault: 10
     property int cfg_appearanceWindowOpacity: 100

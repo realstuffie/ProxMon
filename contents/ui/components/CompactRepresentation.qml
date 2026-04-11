@@ -81,6 +81,8 @@ Item {
 
             MouseArea {
                 id: iconMouseArea
+        
+        
                 anchors.fill: parent
                 hoverEnabled: true
                 onClicked: if (typeof compactRoot.onToggleExpanded === "function") compactRoot.onToggleExpanded()

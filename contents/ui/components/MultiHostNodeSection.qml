@@ -17,6 +17,7 @@ ColumnLayout {
     property real uiBorderOpacity: 0.22
     property real uiNodeCardOpacity: 0.98
     property real uiWindowOpacity: 1.0
+    property color uiNodeColor: Kirigami.Theme.backgroundColor
     property real uiSurfaceAltOpacity: 0.10
     property real uiSurfaceRunningOpacity: 0.12
     property color uiRunningColor: Kirigami.Theme.positiveTextColor
@@ -47,7 +48,7 @@ ColumnLayout {
         Layout.rightMargin: root.scrollbarReserve
         Layout.preferredHeight: 70
         radius: root.uiRadiusL
-        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, root.uiNodeCardOpacity * root.uiWindowOpacity)
+        color: Qt.rgba(root.uiNodeColor.r, root.uiNodeColor.g, root.uiNodeColor.b, root.uiNodeCardOpacity * root.uiWindowOpacity)
         border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, root.uiBorderOpacity)
         border.width: 1
 

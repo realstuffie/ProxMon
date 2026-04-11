@@ -9,6 +9,8 @@ ColumnLayout {
     property var ensureMultiHostsLen: null
     property var saveMultiHosts: null
     property var multiHostSecretKey: null
+    property string trustedCertPem: ""
+    property string trustedCertPath: ""
     property string cfg_multiHostSecretsJson: "{}"
     signal updateSecretsJson(string value)
 
@@ -16,7 +18,7 @@ ColumnLayout {
     spacing: 12
 
     QQC2.Label {
-        text: "Configure up to 5 Proxmox endpoints. Secrets are stored in the system keyring after Apply."
+        text: "Configure up to 5 Proxmox endpoints. Secrets are stored in the system keyring after Apply. Trusted cert PEM/file settings from the Connection tab are shared across all endpoints."
         font.pixelSize: 11
         opacity: 0.7
         wrapMode: Text.WordWrap
