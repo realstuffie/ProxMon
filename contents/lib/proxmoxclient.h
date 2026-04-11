@@ -162,6 +162,18 @@ private:
                  const QString &node,
                  int vmid,
                  const QString &action);
+    void pollTaskStatus(const QString &sessionKey,
+                        const QString &host,
+                        int port,
+                        const QString &tokenId,
+                        const QString &tokenSecret,
+                        bool ignoreSslErrors,
+                        const QString &upid,
+                        int seq,
+                        const QString &actionKind,
+                        const QString &node,
+                        int vmid,
+                        const QString &action);
 
     QNetworkAccessManager m_nam;
     QString m_host;

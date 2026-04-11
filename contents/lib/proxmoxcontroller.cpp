@@ -7,8 +7,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLoggingCategory>
 #include <QVariantList>
 #include <QtGlobal>
+
+Q_LOGGING_CATEGORY(proxmoxControllerLog, "proxmon.controller")
 
 ProxmoxController::ProxmoxController(QObject *parent)
     : QObject(parent)
@@ -182,6 +185,15 @@ void ProxmoxController::setMultiHostsJson(const QString &value) {
     emit multiHostsJsonChanged();
 }
 
+void ProxmoxController::setDebugEnabled(bool value) {
+    if (m_debugEnabled == value) return;
+    m_debugEnabled = value;
+    QLoggingCategory::setFilterRules(value
+        ? QStringLiteral("proxmon.controller.debug=true")
+        : QStringLiteral("proxmon.controller.debug=false"));
+    emit debugEnabledChanged();
+}
+
 void ProxmoxController::setIgnoreSsl(bool value) {
     if (m_ignoreSsl == value) return;
     m_ignoreSsl = value;
@@ -192,7 +204,7 @@ void ProxmoxController::resolveSecretsIfNeeded() {
     const bool hasCoreConfig = (m_connectionMode == QStringLiteral("multiHost"))
         ? !parseMultiHosts().isEmpty()
         : (!m_host.isEmpty() && !m_tokenId.isEmpty());
-    qDebug() << "[ProxmoxController] resolveSecretsIfNeeded mode=" << m_connectionMode
+    qCDebug(proxmoxControllerLog) << "[ProxmoxController] resolveSecretsIfNeeded mode=" << m_connectionMode
              << "hasCoreConfig=" << hasCoreConfig
              << "host=" << m_host
              << "tokenIdEmpty=" << m_tokenId.isEmpty();
@@ -245,7 +257,7 @@ void ProxmoxController::fetchData() {
     const bool hasCoreConfig = (m_connectionMode == QStringLiteral("multiHost"))
         ? !parseMultiHosts().isEmpty()
         : (!m_host.isEmpty() && !m_tokenId.isEmpty());
-    qDebug() << "[ProxmoxController] fetchData mode=" << m_connectionMode
+    qCDebug(proxmoxControllerLog) << "[ProxmoxController] fetchData mode=" << m_connectionMode
              << "hasCoreConfig=" << hasCoreConfig
              << "secretState=" << m_secretState
              << "endpoints=" << m_endpoints.size();
@@ -344,7 +356,7 @@ bool ProxmoxController::runAction(const QString &sessionKey,
 
 void ProxmoxController::setSecretState(const QString &value) {
     if (m_secretState == value) return;
-    qDebug() << "[ProxmoxController] secretState" << m_secretState << "->" << value;
+    qCDebug(proxmoxControllerLog) << "[ProxmoxController] secretState" << m_secretState << "->" << value;
     m_secretState = value;
     emit secretStateChanged();
 }
@@ -694,7 +706,7 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
         }
 
         if (kind == QStringLiteral("children")) {
-            qDebug() << "[ProxmoxController] multi child secret ready session=" << sessionKey
+            qCDebug(proxmoxControllerLog) << "[ProxmoxController] multi child secret ready session=" << sessionKey
                      << "nodes=" << request.value(QStringLiteral("nodeNames")).toList().size()
                      << "secretEmpty=" << secret.isEmpty();
             dispatchMultiNodeChildrenWithSecret(sessionKey,
@@ -734,7 +746,7 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
         }
 
         if (kind == QStringLiteral("children")) {
-            qDebug() << "[ProxmoxController] multi child secret error session=" << sessionKey
+            qCDebug(proxmoxControllerLog) << "[ProxmoxController] multi child secret error session=" << sessionKey
                      << "nodes=" << request.value(QStringLiteral("nodeNames")).toList().size();
             dispatchMultiNodeChildrenWithSecret(sessionKey,
                                                endpointBySession(sessionKey),
@@ -836,6 +848,11 @@ bool ProxmoxController::dispatchMultiActionWithSecret(const QString &sessionKey,
         return false;
     }
 
+    cancelRefresh();
+    resetMultiTempData();
+    setIsRefreshing(false);
+    setLoading(false);
+
     m_api->requestActionFor(sessionKey,
                             endpoint.value(QStringLiteral("host")).toString(),
                             endpoint.value(QStringLiteral("port"), 8006).toInt(),
@@ -908,7 +925,7 @@ void ProxmoxController::handleSingleReply(int seq, const QString &kind, const QS
     if (kind == QStringLiteral("nodes")) {
         QVariantMap payload = data.toMap();
         QVariantList nodes = payload.value(QStringLiteral("data")).toList();
-        qDebug() << "[ProxmoxController] single nodes reply count=" << nodes.size();
+        qCDebug(proxmoxControllerLog) << "[ProxmoxController] single nodes reply count=" << nodes.size();
         std::sort(nodes.begin(), nodes.end(), [](const QVariant &a, const QVariant &b) {
             return a.toMap().value(QStringLiteral("node")).toString().localeAwareCompare(b.toMap().value(QStringLiteral("node")).toString()) < 0;
         });
@@ -988,7 +1005,7 @@ void ProxmoxController::handleSingleError(int seq, const QString &kind, const QS
 
 void ProxmoxController::checkRequestsComplete() {
     if (m_pendingNodeRequests > 0) return;
-    qDebug() << "[ProxmoxController] checkRequestsComplete nodes=" << m_nodeList.size() << "vms=" << m_tempVmData.size() << "lxcs=" << m_tempLxcData.size();
+    qCDebug(proxmoxControllerLog) << "[ProxmoxController] checkRequestsComplete nodes=" << m_nodeList.size() << "vms=" << m_tempVmData.size() << "lxcs=" << m_tempLxcData.size();
     setDisplayedProxmoxData(m_proxmoxData);
     setDisplayedNodeList(m_nodeList);
     setDisplayedVmData(m_tempVmData);
@@ -1010,7 +1027,7 @@ void ProxmoxController::handleMultiReply(int seq, const QString &sessionKey, con
     if (kind == QStringLiteral("nodes")) {
         QVariantMap bucket = ensureEndpointBucket(sessionKey);
         QVariantList nodes = data.toMap().value(QStringLiteral("data")).toList();
-        qDebug() << "[ProxmoxController] multi nodes reply session=" << sessionKey << "count=" << nodes.size();
+        qCDebug(proxmoxControllerLog) << "[ProxmoxController] multi nodes reply session=" << sessionKey << "count=" << nodes.size();
         for (QVariant &nodeValue : nodes) {
             QVariantMap item = nodeValue.toMap();
             item.insert(QStringLiteral("sessionKey"), sessionKey);
@@ -1037,7 +1054,7 @@ void ProxmoxController::handleMultiReply(int seq, const QString &sessionKey, con
     }
 
     if (kind == QStringLiteral("qemu") || kind == QStringLiteral("lxc")) {
-        qDebug() << "[ProxmoxController] multi" << kind << "reply session=" << sessionKey << "node=" << node << "count=" << data.toMap().value(QStringLiteral("data")).toList().size();
+        qCDebug(proxmoxControllerLog) << "[ProxmoxController] multi" << kind << "reply session=" << sessionKey << "node=" << node << "count=" << data.toMap().value(QStringLiteral("data")).toList().size();
         QVariantMap bucket = ensureEndpointBucket(sessionKey);
         QVariantList items = (kind == QStringLiteral("qemu")) ? bucket.value(QStringLiteral("vms")).toList() : bucket.value(QStringLiteral("lxcs")).toList();
         for (const QVariant &itemValue : data.toMap().value(QStringLiteral("data")).toList()) {
@@ -1079,7 +1096,7 @@ void ProxmoxController::handleMultiError(int seq, const QString &sessionKey, con
 void ProxmoxController::checkMultiRequestsComplete() {
     if (m_pendingNodeRequests > 0) return;
     setDisplayedEndpoints(bucketsToArray(m_tempEndpointsData));
-    qDebug() << "[ProxmoxController] checkMultiRequestsComplete endpoints=" << m_displayedEndpoints.size();
+    qCDebug(proxmoxControllerLog) << "[ProxmoxController] checkMultiRequestsComplete endpoints=" << m_displayedEndpoints.size();
 
     QVariantList aggNodes;
     QVariantList aggVms;
@@ -1097,7 +1114,7 @@ void ProxmoxController::checkMultiRequestsComplete() {
         }
     }
 
-    qDebug() << "[ProxmoxController] multi aggregate nodes=" << aggNodes.size() << "vms=" << aggVms.size() << "lxcs=" << aggLxcs.size();
+    qCDebug(proxmoxControllerLog) << "[ProxmoxController] multi aggregate nodes=" << aggNodes.size() << "vms=" << aggVms.size() << "lxcs=" << aggLxcs.size();
     setDisplayedNodeList(aggNodes);
     setDisplayedVmData(aggVms);
     setDisplayedLxcData(aggLxcs);

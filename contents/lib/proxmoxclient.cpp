@@ -198,6 +198,40 @@ QString extractJsonMessage(const QByteArray &body) {
     return msg;
 }
 
+QString extractTaskUpid(const QVariant &data) {
+    const QVariantMap map = data.toMap();
+    const QVariant value = map.value(QStringLiteral("data"));
+    if (value.metaType().id() == QMetaType::QString) {
+        return value.toString().trimmed();
+    }
+    return {};
+}
+
+QString extractTaskExitMessage(const QVariant &data) {
+    const QVariantMap root = data.toMap();
+    const QVariantMap payload = root.value(QStringLiteral("data")).toMap();
+    QString exitStatus = payload.value(QStringLiteral("exitstatus")).toString().trimmed();
+    QString status = payload.value(QStringLiteral("status")).toString().trimmed();
+
+    if (exitStatus.compare(QStringLiteral("OK"), Qt::CaseInsensitive) == 0) {
+        return {};
+    }
+    if (!exitStatus.isEmpty()) {
+        return exitStatus;
+    }
+    if (status.compare(QStringLiteral("stopped"), Qt::CaseInsensitive) == 0) {
+        return QStringLiteral("Task stopped without success");
+    }
+    return {};
+}
+
+bool taskStillRunning(const QVariant &data) {
+    const QVariantMap root = data.toMap();
+    const QVariantMap payload = root.value(QStringLiteral("data")).toMap();
+    const QString status = payload.value(QStringLiteral("status")).toString().trimmed();
+    return status.compare(QStringLiteral("running"), Qt::CaseInsensitive) == 0;
+}
+
 } // namespace
 
 namespace {
@@ -381,7 +415,7 @@ void ProxmoxClient::postFor(const QString &sessionKey,
         });
     }
 
-    QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, sessionKey, actionKind, node, vmid, action]() {
+    QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, actionKind, node, vmid, action]() {
         m_inFlight.remove(r);
 
         const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
@@ -433,13 +467,119 @@ void ProxmoxClient::postFor(const QString &sessionKey,
 
         QJsonParseError pe;
         const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
-        const QVariant data = (pe.error == QJsonParseError::NoError && !doc.isNull()) ? doc.toVariant() : QVariant();
-        if (sessionKey.isEmpty()) {
-            emit actionReply(seq, actionKind, node, vmid, action, data);
-        } else {
-            emit actionReplyFor(seq, sessionKey, actionKind, node, vmid, action, data);
+        if (pe.error != QJsonParseError::NoError || doc.isNull()) {
+            fail(QStringLiteral("JSON parse error: %1").arg(pe.errorString()));
+            return;
+        }
+
+        const QVariant data = doc.toVariant();
+        const QString upid = extractTaskUpid(data);
+        if (upid.isEmpty()) {
+            if (sessionKey.isEmpty()) {
+                emit actionReply(seq, actionKind, node, vmid, action, data);
+            } else {
+                emit actionReplyFor(seq, sessionKey, actionKind, node, vmid, action, data);
+            }
+            r->deleteLater();
+            return;
         }
 
         r->deleteLater();
+        pollTaskStatus(sessionKey,
+                       host,
+                       port,
+                       tokenId,
+                       tokenSecret,
+                       ignoreSslErrors,
+                       upid,
+                       seq,
+                       actionKind,
+                       node,
+                       vmid,
+                       action);
+    });
+}
+
+void ProxmoxClient::pollTaskStatus(const QString &sessionKey,
+                                   const QString &host,
+                                   int port,
+                                   const QString &tokenId,
+                                   const QString &tokenSecret,
+                                   bool ignoreSslErrors,
+                                   const QString &upid,
+                                   int seq,
+                                   const QString &actionKind,
+                                   const QString &node,
+                                   int vmid,
+                                   const QString &action) {
+    if (upid.isEmpty()) {
+        if (sessionKey.isEmpty()) {
+            emit actionError(seq, actionKind, node, vmid, action, QStringLiteral("Missing task id"));
+        } else {
+            emit actionErrorFor(seq, sessionKey, actionKind, node, vmid, action, QStringLiteral("Missing task id"));
+        }
+        return;
+    }
+
+    const QString path = QStringLiteral("/nodes/%1/tasks/%2/status").arg(node, upid);
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, m_lowLatency ? 5000 : 10000);
+    QNetworkReply *r = m_nam.get(req);
+    m_inFlight.insert(r);
+
+    if (ignoreSslErrors) {
+        QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
+            r->ignoreSslErrors();
+        });
+    }
+
+    QObject::connect(r, &QNetworkReply::finished, this, [this, r, sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, upid, seq, actionKind, node, vmid, action]() {
+        m_inFlight.remove(r);
+
+        auto emitTaskError = [&](const QString &msg) {
+            if (sessionKey.isEmpty()) {
+                emit actionError(seq, actionKind, node, vmid, action, msg);
+            } else {
+                emit actionErrorFor(seq, sessionKey, actionKind, node, vmid, action, msg);
+            }
+        };
+        auto emitTaskReply = [&](const QVariant &data) {
+            if (sessionKey.isEmpty()) {
+                emit actionReply(seq, actionKind, node, vmid, action, data);
+            } else {
+                emit actionReplyFor(seq, sessionKey, actionKind, node, vmid, action, data);
+            }
+        };
+
+        handleFinishedReply(r,
+                            seq,
+                            QStringLiteral("task-status"),
+                            node,
+                            sessionKey,
+                            emitTaskError,
+                            [&, this](const QVariant &data) {
+                                if (taskStillRunning(data)) {
+                                    pollTaskStatus(sessionKey,
+                                                   host,
+                                                   port,
+                                                   tokenId,
+                                                   tokenSecret,
+                                                   ignoreSslErrors,
+                                                   upid,
+                                                   seq,
+                                                   actionKind,
+                                                   node,
+                                                   vmid,
+                                                   action);
+                                    return;
+                                }
+
+                                const QString exitMessage = extractTaskExitMessage(data);
+                                if (!exitMessage.isEmpty()) {
+                                    emitTaskError(exitMessage);
+                                    return;
+                                }
+
+                                emitTaskReply(data);
+                            });
     });
 }

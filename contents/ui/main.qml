@@ -52,7 +52,6 @@ PlasmoidItem {
     // Multi-host config (KCM stores these)
     property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
     // Plaintext stash from KCM; runtime migrates to keyring and clears it.
-    property string multiHostSecretsJson: Plasmoid.configuration.multiHostSecretsJson || "{}"
 
     ProxMon.ProxmoxController {
         id: controller
@@ -62,18 +61,11 @@ PlasmoidItem {
         tokenId: root.apiTokenId
         apiTokenSecret: root.apiTokenSecret
         multiHostsJson: root.multiHostsJson
-        multiHostSecretsJson: root.multiHostSecretsJson
+        debugEnabled: root.devMode
         ignoreSsl: root.ignoreSsl
         autoRetry: root.autoRetry
         retryStartMs: root.retryStartMs
         retryMaxMs: root.retryMaxMs
-        onApiTokenSecretClearRequested: {
-            Plasmoid.configuration.apiTokenSecret = ""
-        }
-        onMultiHostSecretsJsonChangedExternally: function(value) {
-            Plasmoid.configuration.multiHostSecretsJson = value
-            root.multiHostSecretsJson = value
-        }
         onRestoreSingleConfigRequested: function(host, port, tokenId) {
             Plasmoid.configuration.connectionMode = "single"
             Plasmoid.configuration.proxmoxHost = host
@@ -138,11 +130,11 @@ PlasmoidItem {
     }
 
     onDisplayedEndpointsModelChanged: {
-        console.log("[ProxMon UI] mode=", connectionMode,
-                    "configured=", configured,
-                    "loading=", loading,
-                    "error=", errorMessage,
-                    "endpointsModel=", displayedEndpointsModel ? displayedEndpointsModel.length : -1)
+        logDebug("[ProxMon UI] mode=" + connectionMode
+                 + " configured=" + configured
+                 + " loading=" + loading
+                 + " error=" + errorMessage
+                 + " endpointsModel=" + (displayedEndpointsModel ? displayedEndpointsModel.length : -1))
     }
     property var displayedNodeList: controller.displayedNodeList
     property bool loading: controller ? controller.loading : false
@@ -189,7 +181,7 @@ PlasmoidItem {
         return hasCoreConfig && controller.refreshResolvingSecrets
     }
     property bool defaultsLoaded: false
-    property bool devMode: true
+    property bool devMode: false
     property int footerClickCount: 0
 
     // Per-item action busy map: key "node:kind:vmid" => true
@@ -1190,6 +1182,7 @@ PlasmoidItem {
     }
 
     function fetchData() {
+        errorMessage = ""
         controller.fetchData()
     }
 
@@ -1388,6 +1381,14 @@ PlasmoidItem {
         function onDisplayedEndpointsChanged() {
             if (connectionMode !== "multiHost") return
             checkStateChanges()
+        }
+        function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
+            setActionBusy(node, actionKind, vmid, false, sessionKey)
+        }
+        function onActionError(sessionKey, actionKind, node, vmid, action, message) {
+            setActionBusy(node, actionKind, vmid, false, sessionKey)
+            errorMessage = message || ("Action failed: " + action)
+            configRefreshDebounce.restart()
         }
     }
 
@@ -1789,9 +1790,9 @@ PlasmoidItem {
                     model: displayedEndpointsModel
 
                     Component.onCompleted: {
-                        console.log("[ProxMon UI] multi repeater visible=", visible,
-                                    "mode=", connectionMode,
-                                    "modelLen=", displayedEndpointsModel ? displayedEndpointsModel.length : -1)
+                        logDebug("[ProxMon UI] multi repeater visible=" + visible
+                                 + " mode=" + connectionMode
+                                 + " modelLen=" + (displayedEndpointsModel ? displayedEndpointsModel.length : -1))
                     }
 
                     delegate: MultiHostEndpointSection {

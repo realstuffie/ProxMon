@@ -14,6 +14,7 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString tokenId READ tokenId WRITE setTokenId NOTIFY tokenIdChanged)
     Q_PROPERTY(QString apiTokenSecret READ apiTokenSecret WRITE setApiTokenSecret NOTIFY apiTokenSecretChanged)
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
+    Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
     Q_PROPERTY(bool ignoreSsl READ ignoreSsl WRITE setIgnoreSsl NOTIFY ignoreSslChanged)
     Q_PROPERTY(QString secretState READ secretState NOTIFY secretStateChanged)
     Q_PROPERTY(bool refreshResolvingSecrets READ refreshResolvingSecrets NOTIFY refreshResolvingSecretsChanged)
@@ -60,6 +61,9 @@ public:
 
     QString multiHostsJson() const { return m_multiHostsJson; }
     void setMultiHostsJson(const QString &value);
+
+    bool debugEnabled() const { return m_debugEnabled; }
+    void setDebugEnabled(bool value);
 
     bool ignoreSsl() const { return m_ignoreSsl; }
     void setIgnoreSsl(bool value);
@@ -109,6 +113,7 @@ signals:
     void tokenIdChanged();
     void apiTokenSecretChanged();
     void multiHostsJsonChanged();
+    void debugEnabledChanged();
     void ignoreSslChanged();
     void secretStateChanged();
     void refreshResolvingSecretsChanged();
@@ -222,6 +227,7 @@ private:
     QString m_tokenId;
     QString m_apiTokenSecret;
     QString m_multiHostsJson = QStringLiteral("[]");
+    bool m_debugEnabled = false;
     bool m_ignoreSsl = true;
     QString m_secretState = QStringLiteral("idle");
     bool m_refreshResolvingSecrets = false;

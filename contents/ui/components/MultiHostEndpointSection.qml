@@ -98,10 +98,7 @@ ColumnLayout {
     }
 
     Repeater {
-        model: {
-            console.log("[MultiHostEndpointSection] endpoint=", root.endpointLabel, "nodes=", root.nodes ? root.nodes.length : -1)
-            return root.nodes
-        }
+        model: root.nodes
 
         delegate: MultiHostNodeSection {
             required property int index
