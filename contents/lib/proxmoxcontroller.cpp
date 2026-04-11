@@ -46,6 +46,12 @@ ProxmoxController::ProxmoxController(QObject *parent)
 
     connect(m_singleSecretStore, &SecretStore::secretReady, this, [this](const QString &secret) {
         if (!secret.isEmpty()) {
+            const QString currentKey = keyFor(m_host, m_port, m_tokenId);
+            if (!m_activeSingleSecretKey.isEmpty() && m_activeSingleSecretKey != currentKey) {
+                m_singleSecretStore->setKey(currentKey);
+                m_singleSecretStore->writeSecret(secret);
+                m_singleSecretStore->setKey(m_activeSingleSecretKey);
+            }
             m_api->setHost(m_host);
             m_api->setPort(m_port);
             m_api->setTokenId(m_tokenId);
@@ -60,7 +66,8 @@ ProxmoxController::ProxmoxController(QObject *parent)
 
         if ((m_secretKeyCandidateIndex + 1) < m_secretKeyCandidates.size()) {
             m_secretKeyCandidateIndex += 1;
-            m_singleSecretStore->setKey(m_secretKeyCandidates.at(m_secretKeyCandidateIndex).toString());
+            m_activeSingleSecretKey = m_secretKeyCandidates.at(m_secretKeyCandidateIndex).toString();
+            m_singleSecretStore->setKey(m_activeSingleSecretKey);
             m_singleSecretStore->readSecret();
             return;
         }
@@ -242,6 +249,14 @@ void ProxmoxController::resolveSecretsIfNeeded() {
 
 void ProxmoxController::listStoredKeys() {
     m_singleSecretStore->listKWalletKeys();
+}
+
+void ProxmoxController::storeSingleSecret(const QString &secret) {
+    if (secret.trimmed().isEmpty() || m_host.trimmed().isEmpty() || m_tokenId.trimmed().isEmpty()) {
+        return;
+    }
+    m_singleSecretStore->setKey(keyFor(m_host, m_port, m_tokenId));
+    m_singleSecretStore->writeSecret(secret);
 }
 
 void ProxmoxController::setAutoRetry(bool value) {
@@ -552,6 +567,7 @@ void ProxmoxController::startSecretReadCandidates() {
 
     m_secretKeyCandidates = uniq;
     m_secretKeyCandidateIndex = 0;
+    m_activeSingleSecretKey.clear();
     if (m_secretKeyCandidates.isEmpty()) {
         setRefreshResolvingSecrets(false);
         setSecretState(QStringLiteral("missing"));
@@ -559,7 +575,8 @@ void ProxmoxController::startSecretReadCandidates() {
     }
 
     setRefreshResolvingSecrets(true);
-    m_singleSecretStore->setKey(m_secretKeyCandidates.first().toString());
+    m_activeSingleSecretKey = m_secretKeyCandidates.first().toString();
+    m_singleSecretStore->setKey(m_activeSingleSecretKey);
     m_singleSecretStore->readSecret();
 }
 

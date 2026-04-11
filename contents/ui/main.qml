@@ -1243,6 +1243,9 @@ PlasmoidItem {
     // Plasmoid.configuration.apiTokenSecret but may not change apiTokenId/host/port.
     // React to it so the widget transitions out of "Not Configured" immediately.
     onApiTokenSecretChanged: {
+        if (connectionMode === "single" && apiTokenSecret && apiTokenSecret.trim() !== "") {
+            controller.storeSingleSecret(apiTokenSecret)
+        }
         if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("apiTokenSecret")
     }

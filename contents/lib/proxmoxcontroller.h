@@ -109,6 +109,7 @@ public:
 
     Q_INVOKABLE void resolveSecretsIfNeeded();
     Q_INVOKABLE void listStoredKeys();
+    Q_INVOKABLE void storeSingleSecret(const QString &secret);
     Q_INVOKABLE void fetchData();
     Q_INVOKABLE void cancelRefresh();
     Q_INVOKABLE bool runAction(const QString &sessionKey,
@@ -244,6 +245,7 @@ private:
     QString m_trustedCertPem;
     QString m_trustedCertPath;
     QString m_multiHostsJson = QStringLiteral("[]");
+    QString m_activeSingleSecretKey;
     bool m_debugEnabled = false;
     bool m_ignoreSsl = true;
     QVariantList m_debugLog;
