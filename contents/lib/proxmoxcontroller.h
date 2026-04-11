@@ -16,6 +16,7 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
     Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
     Q_PROPERTY(bool ignoreSsl READ ignoreSsl WRITE setIgnoreSsl NOTIFY ignoreSslChanged)
+    Q_PROPERTY(QVariantList debugLog READ debugLog NOTIFY debugLogChanged)
     Q_PROPERTY(QString secretState READ secretState NOTIFY secretStateChanged)
     Q_PROPERTY(bool refreshResolvingSecrets READ refreshResolvingSecrets NOTIFY refreshResolvingSecretsChanged)
     Q_PROPERTY(QVariantList endpoints READ endpoints NOTIFY endpointsChanged)
@@ -68,6 +69,8 @@ public:
     bool ignoreSsl() const { return m_ignoreSsl; }
     void setIgnoreSsl(bool value);
 
+    QVariantList debugLog() const { return m_debugLog; }
+    QString sanitizeDebugString(const QString &value) const;
     QString secretState() const { return m_secretState; }
     bool refreshResolvingSecrets() const { return m_refreshResolvingSecrets; }
     QVariantList endpoints() const { return m_endpoints; }
@@ -115,6 +118,7 @@ signals:
     void multiHostsJsonChanged();
     void debugEnabledChanged();
     void ignoreSslChanged();
+    void debugLogChanged();
     void secretStateChanged();
     void refreshResolvingSecretsChanged();
     void endpointsChanged();
@@ -159,6 +163,7 @@ private:
     void setSecretState(const QString &value);
     void setRefreshResolvingSecrets(bool value);
     void setEndpoints(const QVariantList &value);
+    void appendDebugLog(const QString &message);
     void setSecretsResolved(int value);
     void setSecretsTotal(int value);
     void setMultiSecretHadError(bool value);
@@ -229,6 +234,7 @@ private:
     QString m_multiHostsJson = QStringLiteral("[]");
     bool m_debugEnabled = false;
     bool m_ignoreSsl = true;
+    QVariantList m_debugLog;
     QString m_secretState = QStringLiteral("idle");
     bool m_refreshResolvingSecrets = false;
     QVariantList m_endpoints;

@@ -71,6 +71,8 @@ Item {
         anchors.horizontalCenterOffset: 0
         spacing: 4
 
+        property bool hovered: compactMouseArea.containsMouse || iconMouseArea.containsMouse
+
         Kirigami.Icon {
             id: proxmoxIcon
             source: Qt.resolvedUrl("../../icons/proxmox-monitor.svg")
@@ -78,7 +80,9 @@ Item {
             implicitHeight: 22
 
             MouseArea {
+                id: iconMouseArea
                 anchors.fill: parent
+                hoverEnabled: true
                 onClicked: if (typeof compactRoot.onToggleExpanded === "function") compactRoot.onToggleExpanded()
             }
 
@@ -152,11 +156,14 @@ Item {
             }
             font.pixelSize: 13
             rightPadding: 20
+            color: compactLayout.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
         }
     }
 
     MouseArea {
+        id: compactMouseArea
         anchors.fill: parent
+        hoverEnabled: true
         onClicked: if (typeof compactRoot.onToggleExpanded === "function") compactRoot.onToggleExpanded()
     }
 }

@@ -17,6 +17,8 @@ ColumnLayout {
     property real uiBorderOpacity: 0.22
     property real uiNodeCardOpacity: 0.98
     property real uiWindowOpacity: 1.0
+    property real uiSurfaceAltOpacity: 0.10
+    property real uiSurfaceRunningOpacity: 0.12
     property color uiRunningColor: Kirigami.Theme.positiveTextColor
     property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property int scrollbarReserve: 0
@@ -205,8 +207,8 @@ ColumnLayout {
                     armedTimerRunning: root.armedTimerRunning
                     uiRowHeight: 28
                     uiRadiusS: 4
-                    uiSurfaceRunningOpacity: 0.15
-                    uiSurfaceAltOpacity: 0.10
+                    uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
+                    uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
                     uiRunningColor: root.uiRunningColor
                     uiStoppedColor: root.uiStoppedColor
                     uiWindowOpacity: root.uiWindowOpacity
@@ -259,8 +261,8 @@ ColumnLayout {
                     armedTimerRunning: root.armedTimerRunning
                     uiRowHeight: 28
                     uiRadiusS: 4
-                    uiSurfaceRunningOpacity: 0.15
-                    uiSurfaceAltOpacity: 0.10
+                    uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
+                    uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
                     uiRunningColor: root.uiRunningColor
                     uiStoppedColor: root.uiStoppedColor
                     uiWindowOpacity: root.uiWindowOpacity

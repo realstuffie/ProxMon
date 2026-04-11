@@ -320,7 +320,6 @@ PlasmoidItem {
             now.getMilliseconds().toString().padStart(3, '0')
         var safeMessage = redactSecretsForDebug(message)
         var line = "[Proxmox " + timestamp + "] " + safeMessage
-        console.log(line)
 
         var newLog = debugLog.slice()
         newLog.push(line)
@@ -331,45 +330,32 @@ PlasmoidItem {
     function buildDebugInfo() {
         var info = {
             version: (Plasmoid.metaData && Plasmoid.metaData.version) ? Plasmoid.metaData.version : "",
-            host: proxmoxHost,
+            host: proxmoxHost ? "REDACTED_HOST" : "",
             port: proxmoxPort,
-            tokenId: apiTokenId,
+            tokenId: apiTokenId ? redactSecretsForDebug(apiTokenId) : "",
             ignoreSsl: ignoreSsl,
             refreshIntervalSeconds: Math.round(refreshInterval / 1000),
             autoRetry: autoRetry,
             retryStartSeconds: Math.round(retryStartMs / 1000),
             retryMaxSeconds: Math.round(retryMaxMs / 1000),
             lastUpdate: lastUpdate,
-            errorMessage: errorMessage,
+            errorMessage: redactSecretsForDebug(errorMessage),
             nodeCount: displayedNodeList.length,
             vmCount: displayedVmData.length,
             lxcCount: displayedLxcData.length,
-            log: debugLog
+            qmlLog: debugLog.map(function(line) { return redactSecretsForDebug(line) }),
+            controllerLog: controller ? controller.debugLog : []
         }
         return JSON.stringify(info, null, 2)
     }
 
     function copyDebugInfo() {
-        // Pull plasmashell logs, keep only ProxMon lines, limit copied output.
-        var linesToCopy = 100
-        var sinceWindow = "30 min ago"
-        var primaryScanLines = 1000
-        var fallbackScanLines = 2000
-        var filterRegex = "proxmox|proxmon"
-        var cmdParts = [
-            "sh -lc 'set -e;",
-            "if command -v journalctl >/dev/null 2>&1; then",
-            "LOGS=$(journalctl --user --unit=plasma-plasmashell.service --since \"" + sinceWindow + "\" -n " + primaryScanLines + " --no-pager 2>/dev/null | grep -Ei \"" + filterRegex + "\" | tail -n " + linesToCopy + " || true);",
-            "if [ -z \"$LOGS\" ]; then",
-            "LOGS=$(journalctl --user --since \"" + sinceWindow + "\" -n " + fallbackScanLines + " --no-pager 2>/dev/null | grep \"plasmashell\" | grep -Ei \"" + filterRegex + "\" | tail -n " + linesToCopy + " || true);",
-            "fi;",
-            "if command -v wl-copy >/dev/null 2>&1; then printf %s \"$LOGS\" | wl-copy;",
-            "elif command -v xclip >/dev/null 2>&1; then printf %s \"$LOGS\" | xclip -selection clipboard;",
-            "else exit 1; fi;",
+        var payload = buildDebugInfo()
+        var encoded = Qt.btoa(payload)
+        var cmd = "sh -lc 'printf %s \"" + encoded + "\" | base64 -d | " +
+            "if command -v wl-copy >/dev/null 2>&1; then wl-copy; " +
+            "elif command -v xclip >/dev/null 2>&1; then xclip -selection clipboard; " +
             "else exit 1; fi'"
-        ]
-
-        var cmd = cmdParts.join(" ")
         executable.connectSource(cmd)
         sendNotification("Debug logs copied")
     }
@@ -825,7 +811,14 @@ PlasmoidItem {
             })
             break
         }
-        return sortByStatus(arr)
+        var seen = ({})
+        var deduped = arr.filter(function(vm) {
+            var key = String(sessionKey) + "::" + String(vm.node || "") + "::vm::" + String(vm.vmid)
+            if (seen[key]) return false
+            seen[key] = true
+            return true
+        })
+        return sortByStatus(deduped)
     }
 
     // Get LXCs for a specific node (use displayed data)
@@ -846,7 +839,14 @@ PlasmoidItem {
             })
             break
         }
-        return sortByStatus(arr2)
+        var seen = ({})
+        var deduped = arr2.filter(function(lxc) {
+            var key = String(sessionKey) + "::" + String(lxc.node || "") + "::lxc::" + String(lxc.vmid)
+            if (seen[key]) return false
+            seen[key] = true
+            return true
+        })
+        return sortByStatus(deduped)
     }
 
     // Get running VM count for a node (use displayed data)
@@ -1101,30 +1101,6 @@ PlasmoidItem {
     // Confirm is two-click (see confirmAndRunAction()); QQC2.Popup overlays are unreliable in plasmoids.
 
     Timer {
-        id: refreshWatchdog
-        interval: 15000
-        repeat: false
-        onTriggered: {
-            if (pendingNodeRequests > 0) {
-                logDebug("refreshWatchdog: Timed out with " + pendingNodeRequests + " pending")
-                api.cancelAll()
-                pendingNodeRequests = 0
-
-                if (tempVmData.length > 0 || tempLxcData.length > 0) {
-                    errorMessage = "Partial data (some nodes timed out)"
-                    checkRequestsComplete()
-                } else {
-                    errorMessage = "Request timed out"
-                    isRefreshing = false
-                    loading = false
-                    scheduleRetry("Request timed out")
-                }
-            }
-        }
-    }
-
-
-    Timer {
         id: secretResolveDebounce
         interval: 150
         repeat: false
@@ -1221,160 +1197,7 @@ PlasmoidItem {
         return String(sessionKey) + "::" + String(nodeName || "")
     }
 
-    // ---------- Multi-host: fetching / aggregation ----------
-
-    property var tempEndpointsData: ({})
-
-    function resetMultiTempData() {
-        tempEndpointsData = ({})
-        for (var i = 0; i < controller.endpoints.length; i++) {
-            var ep = controller.endpoints[i]
-            if (!ep) continue
-            ensureEndpointBucket(ep.sessionKey)
-        }
-    }
-
-    function isEndpointTimeout(message) {
-        var m = String(message || "").toLowerCase()
-        return m.indexOf("timed out") !== -1 || m.indexOf("timeout") !== -1
-    }
-
-    function ensureEndpointBucket(sessionKey) {
-        var b = tempEndpointsData[sessionKey]
-        if (b) return b
-        // find meta
-        var meta = null
-        for (var i = 0; i < controller.endpoints.length; i++) {
-            if (controller.endpoints[i].sessionKey === sessionKey) {
-                meta = controller.endpoints[i]
-                break
-            }
-        }
-        b = {
-            sessionKey: sessionKey,
-            label: meta ? meta.label : "",
-            host: meta ? meta.host : "",
-            port: meta ? meta.port : 8006,
-            error: "",
-            offline: false,
-            nodes: [],
-            vms: [],
-            lxcs: []
-        }
-        var newMap = Object.assign({}, tempEndpointsData)
-        newMap[sessionKey] = b
-        tempEndpointsData = newMap
-        return b
-    }
-
-    function bucketsToArray(map) {
-        var arr = []
-        for (var i = 0; i < controller.endpoints.length; i++) {
-            var ep = controller.endpoints[i]
-            if (!ep) continue
-            var bucket = map[ep.sessionKey] || {}
-            arr.push({
-                sessionKey: ep.sessionKey,
-                label: ep.label,
-                host: ep.host,
-                port: ep.port,
-                tokenId: ep.tokenId,
-                secret: ep.secret,
-                ignoreSsl: ep.ignoreSsl,
-                error: bucket.error || "",
-                offline: !!bucket.offline,
-                nodes: bucket.nodes || [],
-                vms: bucket.vms || [],
-                lxcs: bucket.lxcs || []
-            })
-        }
-        arr.sort(function(a, b) {
-            var la = (a.label || a.host || a.sessionKey || "")
-            var lb = (b.label || b.host || b.sessionKey || "")
-            return String(la).localeCompare(String(lb))
-        })
-        return arr
-    }
-
-    function handleMultiReply(sessionKey, kind, node, data) {
-        if (!sessionKey) return
-        if (kind === "nodes") {
-            var bucket = ensureEndpointBucket(sessionKey)
-            var list = (data && data.data) ? data.data.slice() : []
-            bucket.offline = false
-            bucket.error = ""
-            // annotate nodes with sessionKey for uniqueness/collapsing
-            for (var i = 0; i < list.length; i++) {
-                list[i].sessionKey = sessionKey
-            }
-            bucket.nodes = list
-
-            // Schedule per-node QEMU/LXC
-            var nodeNames = list.map(function(n) { return n.node })
-            pendingNodeRequests += nodeNames.length * 2
-            for (var ni = 0; ni < nodeNames.length; ni++) {
-                var ep = endpointBySession(sessionKey)
-                if (!ep) continue
-                api.requestQemuFor(sessionKey, ep.host, ep.port, ep.tokenId, ep.secret, ep.ignoreSsl, nodeNames[ni], refreshSeq)
-                api.requestLxcFor(sessionKey, ep.host, ep.port, ep.tokenId, ep.secret, ep.ignoreSsl, nodeNames[ni], refreshSeq)
-            }
-
-            // nodes call itself counts as one pending completion
-            pendingNodeRequests--
-            checkMultiRequestsComplete()
-            return
-        }
-
-        if (kind === "qemu" || kind === "lxc") {
-            var bucket2 = ensureEndpointBucket(sessionKey)
-            var items = (data && data.data) ? data.data : []
-            for (var j = 0; j < items.length; j++) {
-                var it = items[j]
-                it.node = node
-                it.sessionKey = sessionKey
-                if (kind === "qemu") bucket2.vms.push(it)
-                else bucket2.lxcs.push(it)
-            }
-            pendingNodeRequests--
-            checkMultiRequestsComplete()
-        }
-    }
-
-    function handleMultiError(sessionKey, kind, node, message) {
-        logDebug("api error (multi): " + sessionKey + " " + kind + " " + node + " - " + message)
-        errorMessage = message || "Connection failed"
-
-        var bucket = ensureEndpointBucket(sessionKey)
-        if (bucket && kind === "nodes") {
-            bucket.error = message || "Connection failed"
-            bucket.offline = isEndpointTimeout(message)
-            if (bucket.offline) {
-                bucket.nodes = []
-                bucket.vms = []
-                bucket.lxcs = []
-            }
-        }
-
-        // Decrement pending count for this individual request and continue.
-        // If this is the last outstanding request, checkMultiRequestsComplete() will
-        // commit whatever partial data we have from the successful controller.endpoints.
-        pendingNodeRequests--
-        if (pendingNodeRequests < 0) pendingNodeRequests = 0
-        checkMultiRequestsComplete()
-    }
-
-    function endpointBySession(sessionKey) {
-        for (var i = 0; i < controller.endpoints.length; i++) {
-            if (controller.endpoints[i].sessionKey === sessionKey) return controller.endpoints[i]
-        }
-        return null
-    }
-
-    function checkMultiRequestsComplete() {
-        if (pendingNodeRequests > 0) return
-        refreshWatchdog.stop()
-        checkStateChanges()
-    }
+    // ---------- Multi-host aggregation is controller-owned ----------
 
     Connections {
         target: controller
@@ -1803,6 +1626,8 @@ PlasmoidItem {
                         uiMutedTextOpacity: root.uiMutedTextOpacity
                         uiNodeCardOpacity: root.uiNodeCardOpacity
                         uiWindowOpacity: root.uiWindowOpacity
+                        uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
+                        uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
                         uiRunningColor: root.uiRunningColor
                         uiStoppedColor: root.uiStoppedColor
                         scrollbarReserve: scrollView.__scrollbarReserve

@@ -353,7 +353,7 @@ KCM.SimpleKCM {
 
             Rectangle {
                 implicitWidth: 220
-                implicitHeight: 96
+                implicitHeight: 140
                 radius: 10
                 border.width: 1
                 border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.35)
@@ -364,35 +364,56 @@ KCM.SimpleKCM {
                     anchors.margins: 10
                     spacing: 8
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: 24
-                        radius: 6
-                        color: Qt.rgba(root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).r,
-                                       root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).g,
-                                       root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).b,
-                                       root.cfg_appearanceCardTintOpacity / 100)
-
-                        QQC2.Label {
-                            anchors.centerIn: parent
-                            text: "Running"
-                            font.pixelSize: 10
-                        }
+                    QQC2.Label {
+                        text: "Workloads"
+                        font.bold: true
+                        font.pixelSize: 11
                     }
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: 24
-                        radius: 6
-                        color: Qt.rgba(root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).r,
-                                       root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).g,
-                                       root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).b,
-                                       root.cfg_appearanceCardTintOpacity / 100)
+                    Repeater {
+                        model: [
+                            { label: "117: Emby", running: true },
+                            { label: "100: npmplus", running: true },
+                            { label: "105: OMV", running: false }
+                        ]
 
-                        QQC2.Label {
-                            anchors.centerIn: parent
-                            text: "Stopped"
-                            font.pixelSize: 10
+                        delegate: Rectangle {
+                            required property var modelData
+                            Layout.fillWidth: true
+                            implicitHeight: 24
+                            radius: 6
+                            color: modelData.running
+                                ? Qt.rgba(root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).r,
+                                          root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).g,
+                                          root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).b,
+                                          (root.cfg_appearanceCardTintOpacity / 100) * (root.cfg_appearanceWindowOpacity / 100))
+                                : Qt.rgba(root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).r,
+                                          root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).g,
+                                          root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).b,
+                                          (root.cfg_appearanceCardTintOpacity / 100) * (root.cfg_appearanceWindowOpacity / 100))
+
+                            RowLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 8
+                                anchors.rightMargin: 8
+                                spacing: 6
+
+                                Rectangle {
+                                    implicitWidth: 8
+                                    implicitHeight: 8
+                                    radius: 4
+                                    color: modelData.running
+                                        ? root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor)
+                                        : root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor)
+                                }
+
+                                QQC2.Label {
+                                    text: modelData.label
+                                    font.pixelSize: 10
+                                    Layout.fillWidth: true
+                                    elide: Text.ElideRight
+                                }
+                            }
                         }
                     }
                 }
