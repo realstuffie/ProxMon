@@ -20,10 +20,6 @@ import org.kde.kcmutils as KCM
 KCM.SimpleKCM {
     id: root
 
-    ProxMon.ProxmoxController {
-        id: controllerBridge
-    }
-
     // Connection properties (aliased to UI controls)
     property alias cfg_proxmoxHost: singleHostSection.hostText
     property alias cfg_proxmoxPort: singleHostSection.portValue
@@ -252,9 +248,10 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             visible: (root.cfg_connectionMode || "single") === "single"
             onStashSecret: function(secret) {
-                controllerBridge.storeSingleSecret(secret)
+                cfg_apiTokenSecret = secret
             }
             onForgetSecret: function() {
+                cfg_apiTokenSecret = ""
             }
         }
 
@@ -263,9 +260,6 @@ KCM.SimpleKCM {
             visible: (root.cfg_connectionMode || "single") === "multiHost"
             trustedCertPem: root.cfg_trustedCertPem
             trustedCertPath: root.cfg_trustedCertPath
-            storeSecretDirect: function(host, port, tokenId, secret) {
-                controllerBridge.storeMultiHostSecret(host, port, tokenId, secret)
-            }
             ensureMultiHostsLen: root.ensureMultiHostsLen
             saveMultiHosts: root.saveMultiHosts
             multiHostSecretKey: root.multiHostSecretKey
@@ -423,9 +417,6 @@ KCM.SimpleKCM {
             saveStatusColor: saveStatus.color
             loadStatusText: loadStatus.text
             loadStatusColor: loadStatus.color
-            onStashSecret: function(secret) {
-                controllerBridge.storeSingleSecret(secret)
-            }
         }
 
         // Separator

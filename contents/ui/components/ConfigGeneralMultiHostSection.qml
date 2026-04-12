@@ -12,7 +12,6 @@ ColumnLayout {
     property string trustedCertPem: ""
     property string trustedCertPath: ""
     property string cfg_multiHostSecretsJson: "{}"
-    property var storeSecretDirect: null
     signal updateSecretsJson(string value)
 
     Layout.fillWidth: true
@@ -148,12 +147,6 @@ ColumnLayout {
                             var entryNow = arr[idx]
                             var key = root.multiHostSecretKey(entryNow)
                             if (!key) return
-
-                            if (typeof root.storeSecretDirect === "function") {
-                                root.storeSecretDirect(entryNow.host || "", entryNow.port || 8006, entryNow.tokenId || "", mhSecretField.text)
-                                mhSecretField.text = ""
-                                return
-                            }
 
                             var map = {}
                             try { map = JSON.parse(root.cfg_multiHostSecretsJson || "{}") } catch (e) { map = {} }

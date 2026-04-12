@@ -74,7 +74,7 @@ GridLayout {
             }
 
             QQC2.ToolTip.visible: hovered
-            QQC2.ToolTip.text: "Stores the secret temporarily; the widget will move it into the keyring on next load."
+            QQC2.ToolTip.text: "Stores the secret in the keyring immediately."
         }
 
         QQC2.Button {

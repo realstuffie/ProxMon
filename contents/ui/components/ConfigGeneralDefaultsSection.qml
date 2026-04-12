@@ -13,12 +13,10 @@ ColumnLayout {
     property var refreshField: null
     property var ignoreSslCheck: null
     property var enableNotificationsCheck: null
-    property string cfg_apiTokenSecret: ""
     property string saveStatusText: ""
     property color saveStatusColor: Kirigami.Theme.textColor
     property string loadStatusText: ""
     property color loadStatusColor: Kirigami.Theme.textColor
-    signal stashSecret(string secret)
 
     Layout.fillWidth: true
     spacing: 10
@@ -58,10 +56,6 @@ ColumnLayout {
                 safeJson = safeJson.replace(/[\r\n]+/g, " ")
 
                 root.saveExec.connectSource("mkdir -p ~/.config/proxmox-plasmoid && printf '%s' '" + safeJson + "' > ~/.config/proxmox-plasmoid/settings.json")
-
-                if (root.singleHostSection.tokenSecretText && root.singleHostSection.tokenSecretText.trim() !== "") {
-                    root.stashSecret(root.singleHostSection.tokenSecretText)
-                }
             }
         }
 

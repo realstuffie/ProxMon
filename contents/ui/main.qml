@@ -46,11 +46,12 @@ PlasmoidItem {
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
+    property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
     property string trustedCertPem: Plasmoid.configuration.trustedCertPem || ""
     property string trustedCertPath: Plasmoid.configuration.trustedCertPath || ""
     // Multi-host config (KCM stores these)
     property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
-    // Plaintext stash from KCM; runtime migrates to keyring and clears it.
+    property string multiHostSecretsJson: Plasmoid.configuration.multiHostSecretsJson || "{}"
 
     ProxMon.ProxmoxController {
         id: controller
@@ -1141,7 +1142,7 @@ PlasmoidItem {
 
         if (reason === "connectionMode" || reason === "multiHostsJson"
                 || reason === "proxmoxHost" || reason === "proxmoxPort"
-                || reason === "apiTokenId") {
+                || reason === "apiTokenId" || reason === "apiTokenSecret") {
             previousVmStates = ({})
             previousLxcStates = ({})
             previousNodeStates = ({})
@@ -1237,8 +1238,42 @@ PlasmoidItem {
         triggerRefreshFromConfigChange("apiTokenId")
     }
 
+    onApiTokenSecretChanged: {
+        if (connectionMode === "single" && apiTokenSecret && apiTokenSecret.trim() !== "") {
+            controller.storeSingleSecret(apiTokenSecret)
+            Plasmoid.configuration.apiTokenSecret = ""
+        }
+        if (connectionMode === "single") triggerSecretResolveFromConfigChange()
+        triggerRefreshFromConfigChange("apiTokenSecret")
+    }
+
     onTrustedCertPemChanged: triggerRefreshFromConfigChange("trustedCertPem")
     onTrustedCertPathChanged: triggerRefreshFromConfigChange("trustedCertPath")
+    onMultiHostSecretsJsonChanged: {
+        if (connectionMode !== "multiHost") return
+        if (!multiHostSecretsJson || multiHostSecretsJson.trim() === "") return
+        var map = {}
+        try { map = JSON.parse(multiHostSecretsJson || "{}") } catch (e) { map = {} }
+        var wrote = false
+        for (var key in map) {
+            if (!Object.prototype.hasOwnProperty.call(map, key)) continue
+            var secret = String(map[key] || "")
+            if (!secret.trim()) continue
+            var body = key.indexOf("apiTokenSecret:") === 0 ? key.slice("apiTokenSecret:".length) : ""
+            var colon = body.lastIndexOf(":")
+            var left = colon > 0 ? body.slice(0, colon) : ""
+            var port = colon > 0 ? Number(body.slice(colon + 1)) : 8006
+            var at = left.lastIndexOf("@")
+            var tokenId = at > 0 ? left.slice(0, at) : ""
+            var host = at > 0 ? left.slice(at + 1) : ""
+            if (!host || !tokenId) continue
+            controller.storeMultiHostSecret(host, port > 0 ? port : 8006, tokenId, secret)
+            wrote = true
+        }
+        if (wrote) {
+            Plasmoid.configuration.multiHostSecretsJson = "{}"
+        }
+    }
     onMultiHostsJsonChanged: {
         controllerPendingResolvedRefresh = true
         if (connectionMode === "multiHost") triggerSecretResolveFromConfigChange()
