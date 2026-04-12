@@ -4,6 +4,9 @@
 #include "secretstore.h"
 
 #include <QDateTime>
+#include <QDebug>
+#include <QHostAddress>
+#include <QHostInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -180,12 +183,6 @@ void ProxmoxController::setTokenId(const QString &value) {
     emit tokenIdChanged();
 }
 
-void ProxmoxController::setApiTokenSecret(const QString &value) {
-    if (m_apiTokenSecret == value) return;
-    m_apiTokenSecret = value;
-    emit apiTokenSecretChanged();
-}
-
 void ProxmoxController::setTrustedCertPem(const QString &value) {
     if (m_trustedCertPem == value) return;
     m_trustedCertPem = value;
@@ -257,6 +254,14 @@ void ProxmoxController::storeSingleSecret(const QString &secret) {
     }
     m_singleSecretStore->setKey(keyFor(m_host, m_port, m_tokenId));
     m_singleSecretStore->writeSecret(secret);
+}
+
+void ProxmoxController::storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret) {
+    if (secret.trimmed().isEmpty() || host.trimmed().isEmpty() || tokenId.trimmed().isEmpty()) {
+        return;
+    }
+    m_multiSecretStore->setKey(keyFor(host, port, tokenId));
+    m_multiSecretStore->writeSecret(secret);
 }
 
 void ProxmoxController::setAutoRetry(bool value) {
@@ -524,8 +529,13 @@ QString ProxmoxController::sanitizeDebugString(const QString &value) const {
 void ProxmoxController::appendDebugLog(const QString &message) {
     if (!m_debugEnabled) return;
 
+    constexpr bool debugLogToJournal = true;
     const QString timestamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss.zzz"));
-    m_debugLog.push_back(QStringLiteral("[Proxmox %1] %2").arg(timestamp, sanitizeDebugString(message)));
+    const QString line = QStringLiteral("[Proxmox %1] %2").arg(timestamp, sanitizeDebugString(message));
+    if (debugLogToJournal) {
+        qDebug().noquote() << line;
+    }
+    m_debugLog.push_back(line);
     constexpr int maxLines = 100;
     if (m_debugLog.size() > maxLines) {
         m_debugLog = m_debugLog.mid(m_debugLog.size() - maxLines);
@@ -1244,6 +1254,27 @@ QString ProxmoxController::normalizedHost(const QString &host) const {
     return host.trimmed().toLower();
 }
 
+QString ProxmoxController::resolvedHostFingerprint(const QString &host) const {
+    const QString normalized = normalizedHost(host);
+    if (normalized.isEmpty()) {
+        return {};
+    }
+
+    QHostAddress address;
+    if (address.setAddress(normalized)) {
+        return address.toString().toLower();
+    }
+
+    const QHostInfo info = QHostInfo::fromName(normalized);
+    for (const QHostAddress &candidate : info.addresses()) {
+        if (candidate.protocol() == QAbstractSocket::IPv4Protocol || candidate.protocol() == QAbstractSocket::IPv6Protocol) {
+            return candidate.toString().toLower();
+        }
+    }
+
+    return {};
+}
+
 QString ProxmoxController::normalizedTokenId(const QString &tokenId) const {
     return tokenId.trimmed();
 }
@@ -1277,15 +1308,33 @@ QVariantMap ProxmoxController::parseKeyEntry(const QString &key) const {
 QVariantList ProxmoxController::parseKeyEntries(const QStringList &keys) const {
     QVariantMap discoveredByKey;
     QStringList discoveredOrder;
+    QVariantMap discoveredFingerprintToKey;
     for (const QString &key : keys) {
         const QVariantMap parsed = parseKeyEntry(key);
         if (parsed.isEmpty()) continue;
-        const QString dedupeKey = keyFor(parsed.value(QStringLiteral("host")).toString(),
-                                         parsed.value(QStringLiteral("port")).toInt(),
-                                         parsed.value(QStringLiteral("tokenId")).toString());
+        const QString host = parsed.value(QStringLiteral("host")).toString();
+        const int port = parsed.value(QStringLiteral("port")).toInt();
+        const QString tokenId = parsed.value(QStringLiteral("tokenId")).toString();
+        const QString dedupeKey = keyFor(host, port, tokenId);
+        const QString fingerprint = QStringLiteral("%1|%2|%3").arg(normalizedTokenId(tokenId), QString::number(port), resolvedHostFingerprint(host));
         if (discoveredByKey.contains(dedupeKey)) continue;
+        if (!resolvedHostFingerprint(host).isEmpty() && discoveredFingerprintToKey.contains(fingerprint)) {
+            const QString existingKey = discoveredFingerprintToKey.value(fingerprint).toString();
+            const bool preferHostName = !QHostAddress().setAddress(normalizedHost(host));
+            if (preferHostName) {
+                discoveredByKey.remove(existingKey);
+                discoveredOrder.removeAll(existingKey);
+                discoveredByKey.insert(dedupeKey, parsed);
+                discoveredOrder.push_back(dedupeKey);
+                discoveredFingerprintToKey.insert(fingerprint, dedupeKey);
+            }
+            continue;
+        }
         discoveredByKey.insert(dedupeKey, parsed);
         discoveredOrder.push_back(dedupeKey);
+        if (!resolvedHostFingerprint(host).isEmpty()) {
+            discoveredFingerprintToKey.insert(fingerprint, dedupeKey);
+        }
     }
 
     QVariantList entries;
@@ -1299,8 +1348,20 @@ QVariantList ProxmoxController::parseKeyEntries(const QStringList &keys) const {
         int port = entry.value(QStringLiteral("port"), 8006).toInt();
         if (port <= 0) port = 8006;
         const QString dedupeKey = keyFor(host, port, tokenId);
-        if (!discoveredByKey.contains(dedupeKey)) continue;
-        const QVariantMap parsed = discoveredByKey.value(dedupeKey).toMap();
+        QVariantMap parsed = discoveredByKey.value(dedupeKey).toMap();
+        if (parsed.isEmpty()) {
+            const QString fingerprint = QStringLiteral("%1|%2|%3").arg(normalizedTokenId(tokenId), QString::number(port), resolvedHostFingerprint(host));
+            for (auto it = discoveredByKey.constBegin(); it != discoveredByKey.constEnd(); ++it) {
+                const QVariantMap candidate = it.value().toMap();
+                if (candidate.value(QStringLiteral("tokenId")).toString() != tokenId) continue;
+                if (candidate.value(QStringLiteral("port")).toInt() != port) continue;
+                if (resolvedHostFingerprint(candidate.value(QStringLiteral("host")).toString()) == fingerprint.section('|', 2, 2) && !fingerprint.section('|', 2, 2).isEmpty()) {
+                    parsed = candidate;
+                    break;
+                }
+            }
+        }
+        if (parsed.isEmpty()) continue;
         entry.insert(QStringLiteral("host"), parsed.value(QStringLiteral("host")));
         entry.insert(QStringLiteral("port"), parsed.value(QStringLiteral("port")));
         entry.insert(QStringLiteral("tokenId"), parsed.value(QStringLiteral("tokenId")));

@@ -15,6 +15,12 @@ KCM.SimpleKCM {
     property string cfg_apiTokenIdDefault: ""
     property string cfg_apiTokenSecret: ""
     property string cfg_apiTokenSecretDefault: ""
+    property string cfg_trustedCertPem: ""
+    property string cfg_trustedCertPemDefault: ""
+    property string cfg_trustedCertPath: ""
+    property string cfg_trustedCertPathDefault: ""
+    property bool cfg_debugLogToJournal: false
+    property bool cfg_debugLogToJournalDefault: false
     property int cfg_refreshInterval: 30
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSsl: true

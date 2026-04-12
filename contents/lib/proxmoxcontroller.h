@@ -12,7 +12,6 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString host READ host WRITE setHost NOTIFY hostChanged)
     Q_PROPERTY(int port READ port WRITE setPort NOTIFY portChanged)
     Q_PROPERTY(QString tokenId READ tokenId WRITE setTokenId NOTIFY tokenIdChanged)
-    Q_PROPERTY(QString apiTokenSecret READ apiTokenSecret WRITE setApiTokenSecret NOTIFY apiTokenSecretChanged)
     Q_PROPERTY(QString trustedCertPem READ trustedCertPem WRITE setTrustedCertPem NOTIFY trustedCertPemChanged)
     Q_PROPERTY(QString trustedCertPath READ trustedCertPath WRITE setTrustedCertPath NOTIFY trustedCertPathChanged)
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
@@ -58,9 +57,6 @@ public:
 
     QString tokenId() const { return m_tokenId; }
     void setTokenId(const QString &value);
-
-    QString apiTokenSecret() const { return m_apiTokenSecret; }
-    void setApiTokenSecret(const QString &value);
 
     bool debugEnabled() const { return m_debugEnabled; }
     void setDebugEnabled(bool value);
@@ -110,6 +106,7 @@ public:
     Q_INVOKABLE void resolveSecretsIfNeeded();
     Q_INVOKABLE void listStoredKeys();
     Q_INVOKABLE void storeSingleSecret(const QString &secret);
+    Q_INVOKABLE void storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void fetchData();
     Q_INVOKABLE void cancelRefresh();
     Q_INVOKABLE bool runAction(const QString &sessionKey,
@@ -123,7 +120,6 @@ signals:
     void hostChanged();
     void portChanged();
     void tokenIdChanged();
-    void apiTokenSecretChanged();
     void trustedCertPemChanged();
     void trustedCertPathChanged();
     void multiHostsJsonChanged();
@@ -232,6 +228,7 @@ private:
     void checkMultiRequestsComplete();
     QVariantMap endpointBySession(const QString &sessionKey) const;
     QString normalizedHost(const QString &host) const;
+    QString resolvedHostFingerprint(const QString &host) const;
     QString normalizedTokenId(const QString &tokenId) const;
     QString keyFor(const QString &host, int port, const QString &tokenId) const;
     QVariantMap parseKeyEntry(const QString &key) const;
@@ -241,7 +238,6 @@ private:
     QString m_host;
     int m_port = 8006;
     QString m_tokenId;
-    QString m_apiTokenSecret;
     QString m_trustedCertPem;
     QString m_trustedCertPath;
     QString m_multiHostsJson = QStringLiteral("[]");

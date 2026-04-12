@@ -20,11 +20,15 @@ import org.kde.kcmutils as KCM
 KCM.SimpleKCM {
     id: root
 
+    ProxMon.ProxmoxController {
+        id: controllerBridge
+    }
+
     // Connection properties (aliased to UI controls)
     property alias cfg_proxmoxHost: singleHostSection.hostText
     property alias cfg_proxmoxPort: singleHostSection.portValue
     property alias cfg_apiTokenId: singleHostSection.tokenIdText
-    property alias cfg_apiTokenSecret: singleHostSection.tokenSecretText
+    property string cfg_apiTokenSecret: ""
     property string cfg_trustedCertPem: ""
     property string cfg_trustedCertPath: ""
     property alias cfg_refreshInterval: refreshField.value
@@ -45,6 +49,8 @@ KCM.SimpleKCM {
     property string cfg_compactModeDefault: "cpu"
     property bool cfg_lowLatency: false
     property bool cfg_lowLatencyDefault: false
+    property bool cfg_debugLogToJournal: false
+    property bool cfg_debugLogToJournalDefault: false
     property string cfg_appearanceRunningColor: ""
     property string cfg_appearanceRunningColorDefault: ""
     property string cfg_appearanceStoppedColor: ""
@@ -200,8 +206,9 @@ KCM.SimpleKCM {
     /*
       Keyring handling is done by the plasmoid runtime (main.qml), which can load the
       native plugin. Keep the KCM simple and always loadable.
-      The secret field here is treated as an input that will be migrated into keyring
-      when the widget runs.
+      Single-host secrets still bridge through a transient runtime handoff.
+      Multi-host secrets now prefer direct keyring writes and only fall back to the
+      legacy JSON stash if no direct writer is available.
     */
 
     ColumnLayout {
@@ -245,10 +252,9 @@ KCM.SimpleKCM {
             Layout.fillWidth: true
             visible: (root.cfg_connectionMode || "single") === "single"
             onStashSecret: function(secret) {
-                cfg_apiTokenSecret = secret
+                controllerBridge.storeSingleSecret(secret)
             }
             onForgetSecret: function() {
-                cfg_apiTokenSecret = ""
             }
         }
 
@@ -257,6 +263,9 @@ KCM.SimpleKCM {
             visible: (root.cfg_connectionMode || "single") === "multiHost"
             trustedCertPem: root.cfg_trustedCertPem
             trustedCertPath: root.cfg_trustedCertPath
+            storeSecretDirect: function(host, port, tokenId, secret) {
+                controllerBridge.storeMultiHostSecret(host, port, tokenId, secret)
+            }
             ensureMultiHostsLen: root.ensureMultiHostsLen
             saveMultiHosts: root.saveMultiHosts
             multiHostSecretKey: root.multiHostSecretKey
@@ -415,7 +424,7 @@ KCM.SimpleKCM {
             loadStatusText: loadStatus.text
             loadStatusColor: loadStatus.color
             onStashSecret: function(secret) {
-                cfg_apiTokenSecret = secret
+                controllerBridge.storeSingleSecret(secret)
             }
         }
 

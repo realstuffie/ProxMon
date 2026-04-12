@@ -90,6 +90,12 @@ KCM.SimpleKCM {
     //Low latency mode (shorter network timeouts, may increase error rate on slow connections)
     property alias cfg_lowLatency: lowLatencyCheck.checked
     property bool cfg_lowLatencyDefault: false
+    property bool cfg_debugLogToJournal: false
+    property bool cfg_debugLogToJournalDefault: false
+    property string cfg_trustedCertPem: ""
+    property string cfg_trustedCertPemDefault: ""
+    property string cfg_trustedCertPath: ""
+    property string cfg_trustedCertPathDefault: ""
 
     property string cfg_appearanceRunningColor: ""
     property string cfg_appearanceRunningColorDefault: ""

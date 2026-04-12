@@ -46,9 +46,6 @@ PlasmoidItem {
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
     property int proxmoxPort: Plasmoid.configuration.proxmoxPort || 8006
     property string apiTokenId: Plasmoid.configuration.apiTokenId || ""
-    // apiTokenSecret stays bound to Plasmoid.configuration so onApiTokenSecretChanged
-    // keeps firing whenever the user saves a new secret via the KCM.
-    property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
     property string trustedCertPem: Plasmoid.configuration.trustedCertPem || ""
     property string trustedCertPath: Plasmoid.configuration.trustedCertPath || ""
     // Multi-host config (KCM stores these)
@@ -61,7 +58,6 @@ PlasmoidItem {
         host: root.proxmoxHost
         port: root.proxmoxPort
         tokenId: root.apiTokenId
-        apiTokenSecret: root.apiTokenSecret
         trustedCertPem: root.trustedCertPem
         trustedCertPath: root.trustedCertPath
         multiHostsJson: root.multiHostsJson
@@ -186,6 +182,7 @@ PlasmoidItem {
     }
     property bool defaultsLoaded: false
     property bool devMode: false
+    readonly property bool debugLogToJournal: true
     property int footerClickCount: 0
 
     // Per-item action busy map: key "node:kind:vmid" => true
@@ -325,6 +322,7 @@ PlasmoidItem {
             now.getMilliseconds().toString().padStart(3, '0')
         var safeMessage = redactSecretsForDebug(message)
         var line = "[Proxmox " + timestamp + "] " + safeMessage
+        if (debugLogToJournal) console.log(line)
 
         var newLog = debugLog.slice()
         newLog.push(line)
@@ -1143,7 +1141,7 @@ PlasmoidItem {
 
         if (reason === "connectionMode" || reason === "multiHostsJson"
                 || reason === "proxmoxHost" || reason === "proxmoxPort"
-                || reason === "apiTokenId" || reason === "apiTokenSecret") {
+                || reason === "apiTokenId") {
             previousVmStates = ({})
             previousLxcStates = ({})
             previousNodeStates = ({})
@@ -1239,16 +1237,6 @@ PlasmoidItem {
         triggerRefreshFromConfigChange("apiTokenId")
     }
 
-    // If the secret is entered via the config UI (legacy plaintext field), it updates
-    // Plasmoid.configuration.apiTokenSecret but may not change apiTokenId/host/port.
-    // React to it so the widget transitions out of "Not Configured" immediately.
-    onApiTokenSecretChanged: {
-        if (connectionMode === "single" && apiTokenSecret && apiTokenSecret.trim() !== "") {
-            controller.storeSingleSecret(apiTokenSecret)
-        }
-        if (connectionMode === "single") triggerSecretResolveFromConfigChange()
-        triggerRefreshFromConfigChange("apiTokenSecret")
-    }
     onTrustedCertPemChanged: triggerRefreshFromConfigChange("trustedCertPem")
     onTrustedCertPathChanged: triggerRefreshFromConfigChange("trustedCertPath")
     onMultiHostsJsonChanged: {
