@@ -25,6 +25,7 @@ KCM.SimpleKCM {
     property alias cfg_proxmoxPort: singleHostSection.portValue
     property alias cfg_apiTokenId: singleHostSection.tokenIdText
     property string cfg_apiTokenSecret: ""
+    property string cfg_apiTokenSecretDefault: ""
     property string cfg_trustedCertPem: ""
     property string cfg_trustedCertPath: ""
     property alias cfg_refreshInterval: refreshField.value
@@ -35,6 +36,7 @@ KCM.SimpleKCM {
     property string cfg_connectionMode: "single"
     property string cfg_multiHostsJson: "[]"
     property string cfg_multiHostSecretsJson: "{}"
+    property string cfg_multiHostSecretsJsonDefault: "{}"
 
     // Behavior-tab cfg_* keys are also injected into every KCM page by Plasma.
     // Declare inert placeholders here so configGeneral.qml accepts the initial
@@ -83,13 +85,11 @@ KCM.SimpleKCM {
     property string cfg_proxmoxHostDefault: ""
     property int cfg_proxmoxPortDefault: 8006
     property string cfg_apiTokenIdDefault: ""
-    property string cfg_apiTokenSecretDefault: ""
     property string cfg_trustedCertPemDefault: ""
     property string cfg_trustedCertPathDefault: ""
 
     property string cfg_connectionModeDefault: "single"
     property string cfg_multiHostsJsonDefault: "[]"
-    property string cfg_multiHostSecretsJsonDefault: "{}"
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
     property bool cfg_enableNotificationsDefault: true

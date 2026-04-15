@@ -48,7 +48,6 @@ kquitapp6 plasmashell && kstart plasmashell
 - `kpackagetool6` can install even if runtime import resolution still fails.
 - `qml` CLI import behavior can differ from `plasmashell`.
 
-
 ### Quick health check
 
 ```bash
