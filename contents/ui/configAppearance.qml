@@ -15,6 +15,12 @@ KCM.SimpleKCM {
     property string cfg_apiTokenIdDefault: ""
     property string cfg_apiTokenSecret: ""
     property string cfg_apiTokenSecretDefault: ""
+    property string cfg_trustedCertPem: ""
+    property string cfg_trustedCertPemDefault: ""
+    property string cfg_trustedCertPath: ""
+    property string cfg_trustedCertPathDefault: ""
+    property bool cfg_debugLogToJournal: false
+    property bool cfg_debugLogToJournalDefault: false
     property int cfg_refreshInterval: 30
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSsl: true
@@ -60,6 +66,8 @@ KCM.SimpleKCM {
     property string cfg_appearanceRunningColorDefault: ""
     property string cfg_appearanceStoppedColor: ""
     property string cfg_appearanceStoppedColorDefault: ""
+    property string cfg_appearanceNodeColor: ""
+    property string cfg_appearanceNodeColorDefault: ""
     property int cfg_appearanceCardTintOpacity: 10
     property int cfg_appearanceCardTintOpacityDefault: 10
     property int cfg_appearanceWindowOpacity: 100
@@ -101,14 +109,16 @@ KCM.SimpleKCM {
         var normalized = normalizeHexColor(value)
         if (normalized === null) return false
         if (targetKey === "running") root.cfg_appearanceRunningColor = normalized
-        else root.cfg_appearanceStoppedColor = normalized
+        else if (targetKey === "stopped") root.cfg_appearanceStoppedColor = normalized
+        else root.cfg_appearanceNodeColor = normalized
         return true
     }
 
     function setColorFromRgb(targetKey, r, g, b) {
         var color = rgbToHex(r, g, b)
         if (targetKey === "running") root.cfg_appearanceRunningColor = color
-        else root.cfg_appearanceStoppedColor = color
+        else if (targetKey === "stopped") root.cfg_appearanceStoppedColor = color
+        else root.cfg_appearanceNodeColor = color
     }
 
     function previewColor(value, fallback) {
@@ -311,6 +321,97 @@ KCM.SimpleKCM {
             }
 
             QQC2.Label {
+                text: "Node color:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignTop
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
+
+                    QQC2.TextField {
+                        id: nodeHexField
+                        Layout.fillWidth: true
+                        Layout.maximumWidth: 280
+                        placeholderText: "Theme default or #RRGGBB"
+                        text: root.cfg_appearanceNodeColor
+                        onEditingFinished: {
+                            if (!root.setColorFromHex("node", text)) text = root.cfg_appearanceNodeColor
+                        }
+                    }
+
+                    Rectangle {
+                        implicitWidth: 26
+                        implicitHeight: 26
+                        radius: 6
+                        border.width: 1
+                        border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.35)
+                        color: root.previewColor(root.cfg_appearanceNodeColor, Kirigami.Theme.backgroundColor)
+                    }
+                }
+
+                QQC2.Label {
+                    text: "Use a custom node card background color, or leave blank for the theme default."
+                    font.pixelSize: 11
+                    opacity: 0.6
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                }
+
+                QQC2.Label {
+                    text: "RGB values stay synced with the hex field."
+                    font.pixelSize: 11
+                    opacity: 0.6
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                }
+
+                RowLayout {
+                    spacing: 8
+
+                    QQC2.Label { text: "R" }
+                    QQC2.SpinBox {
+                        id: nodeRedSpin
+                        from: 0
+                        to: 255
+                        value: root.channelFromHex(root.cfg_appearanceNodeColor, 0)
+                        editable: true
+                        onValueModified: root.setColorFromRgb("node", value, nodeGreenSpin.value, nodeBlueSpin.value)
+                    }
+
+                    QQC2.Label { text: "G" }
+                    QQC2.SpinBox {
+                        id: nodeGreenSpin
+                        from: 0
+                        to: 255
+                        value: root.channelFromHex(root.cfg_appearanceNodeColor, 1)
+                        editable: true
+                        onValueModified: root.setColorFromRgb("node", nodeRedSpin.value, value, nodeBlueSpin.value)
+                    }
+
+                    QQC2.Label { text: "B" }
+                    QQC2.SpinBox {
+                        id: nodeBlueSpin
+                        from: 0
+                        to: 255
+                        value: root.channelFromHex(root.cfg_appearanceNodeColor, 2)
+                        editable: true
+                        onValueModified: root.setColorFromRgb("node", nodeRedSpin.value, nodeGreenSpin.value, value)
+                    }
+                }
+
+                QQC2.Button {
+                    text: "Use theme default"
+                    Layout.alignment: Qt.AlignLeft
+                    onClicked: root.cfg_appearanceNodeColor = ""
+                }
+            }
+
+            QQC2.Label {
                 text: "Card tint opacity:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
@@ -353,7 +454,7 @@ KCM.SimpleKCM {
 
             Rectangle {
                 implicitWidth: 220
-                implicitHeight: 96
+                implicitHeight: 140
                 radius: 10
                 border.width: 1
                 border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.35)
@@ -364,35 +465,74 @@ KCM.SimpleKCM {
                     anchors.margins: 10
                     spacing: 8
 
-                    Rectangle {
-                        Layout.fillWidth: true
-                        implicitHeight: 24
-                        radius: 6
-                        color: Qt.rgba(root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).r,
-                                       root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).g,
-                                       root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).b,
-                                       root.cfg_appearanceCardTintOpacity / 100)
-
-                        QQC2.Label {
-                            anchors.centerIn: parent
-                            text: "Running"
-                            font.pixelSize: 10
-                        }
+                    QQC2.Label {
+                        text: "Workloads"
+                        font.bold: true
+                        font.pixelSize: 11
                     }
 
                     Rectangle {
                         Layout.fillWidth: true
-                        implicitHeight: 24
-                        radius: 6
-                        color: Qt.rgba(root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).r,
-                                       root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).g,
-                                       root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).b,
-                                       root.cfg_appearanceCardTintOpacity / 100)
+                        implicitHeight: 96
+                        radius: 8
+                        color: Qt.rgba(root.previewColor(root.cfg_appearanceNodeColor, Kirigami.Theme.backgroundColor).r,
+                                       root.previewColor(root.cfg_appearanceNodeColor, Kirigami.Theme.backgroundColor).g,
+                                       root.previewColor(root.cfg_appearanceNodeColor, Kirigami.Theme.backgroundColor).b,
+                                       0.98 * (root.cfg_appearanceWindowOpacity / 100))
+                        border.width: 1
+                        border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, 0.22)
 
-                        QQC2.Label {
-                            anchors.centerIn: parent
-                            text: "Stopped"
-                            font.pixelSize: 10
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 8
+                            spacing: 6
+
+                            Repeater {
+                                model: [
+                                    { label: "117: Emby", running: true },
+                                    { label: "100: npmplus", running: true },
+                                    { label: "105: OMV", running: false }
+                                ]
+
+                                delegate: Rectangle {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    implicitHeight: 24
+                                    radius: 6
+                                    color: modelData.running
+                                        ? Qt.rgba(root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).r,
+                                                  root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).g,
+                                                  root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor).b,
+                                                  (root.cfg_appearanceCardTintOpacity / 100) * (root.cfg_appearanceWindowOpacity / 100))
+                                        : Qt.rgba(root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).r,
+                                                  root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).g,
+                                                  root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor).b,
+                                                  (root.cfg_appearanceCardTintOpacity / 100) * (root.cfg_appearanceWindowOpacity / 100))
+
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        anchors.leftMargin: 8
+                                        anchors.rightMargin: 8
+                                        spacing: 6
+
+                                        Rectangle {
+                                            implicitWidth: 8
+                                            implicitHeight: 8
+                                            radius: 4
+                                            color: modelData.running
+                                                ? root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor)
+                                                : root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor)
+                                        }
+
+                                        QQC2.Label {
+                                            text: modelData.label
+                                            font.pixelSize: 10
+                                            Layout.fillWidth: true
+                                            elide: Text.ElideRight
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

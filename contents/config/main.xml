@@ -15,11 +15,17 @@
         <entry name="apiTokenSecret" type="String">
             <default></default>
         </entry>
+        <entry name="trustedCertPem" type="String">
+            <default></default>
+        </entry>
+        <entry name="trustedCertPath" type="String">
+            <default></default>
+        </entry>
         <entry name="refreshInterval" type="Int">
             <default>30</default>
         </entry>
         <entry name="ignoreSsl" type="Bool">
-            <default>true</default>
+            <default>false</default>
         </entry>
 
         <!-- Connection Mode -->
@@ -90,12 +96,18 @@
         <entry name="lowLatency" type="Bool">
             <default>false</default>
         </entry>
+        <entry name="debugLogToJournal" type="Bool">
+            <default>false</default>
+        </entry>
 
         <!-- Appearance settings -->
         <entry name="appearanceRunningColor" type="String">
             <default></default>
         </entry>
         <entry name="appearanceStoppedColor" type="String">
+            <default></default>
+        </entry>
+        <entry name="appearanceNodeColor" type="String">
             <default></default>
         </entry>
         <entry name="appearanceCardTintOpacity" type="Int">

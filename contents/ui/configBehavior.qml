@@ -90,11 +90,19 @@ KCM.SimpleKCM {
     //Low latency mode (shorter network timeouts, may increase error rate on slow connections)
     property alias cfg_lowLatency: lowLatencyCheck.checked
     property bool cfg_lowLatencyDefault: false
+    property bool cfg_debugLogToJournal: false
+    property bool cfg_debugLogToJournalDefault: false
+    property string cfg_trustedCertPem: ""
+    property string cfg_trustedCertPemDefault: ""
+    property string cfg_trustedCertPath: ""
+    property string cfg_trustedCertPathDefault: ""
 
     property string cfg_appearanceRunningColor: ""
     property string cfg_appearanceRunningColorDefault: ""
     property string cfg_appearanceStoppedColor: ""
     property string cfg_appearanceStoppedColorDefault: ""
+    property string cfg_appearanceNodeColor: ""
+    property string cfg_appearanceNodeColorDefault: ""
     property int cfg_appearanceCardTintOpacity: 10
     property int cfg_appearanceCardTintOpacityDefault: 10
     property int cfg_appearanceWindowOpacity: 100

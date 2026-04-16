@@ -68,17 +68,23 @@ Item {
     RowLayout {
         id: compactLayout
         anchors.centerIn: parent
-        anchors.horizontalCenterOffset: 0
         spacing: 4
+        Item { implicitWidth: 3 }
+
+        property bool hovered: compactMouseArea.containsMouse || iconMouseArea.containsMouse
 
         Kirigami.Icon {
             id: proxmoxIcon
             source: Qt.resolvedUrl("../../icons/proxmox-monitor.svg")
             implicitWidth: 22
             implicitHeight: 22
-
+        
             MouseArea {
+                id: iconMouseArea
+        
+        
                 anchors.fill: parent
+                hoverEnabled: true
                 onClicked: if (typeof compactRoot.onToggleExpanded === "function") compactRoot.onToggleExpanded()
             }
 
@@ -151,12 +157,16 @@ Item {
                 return averageCpuText()
             }
             font.pixelSize: 13
-            rightPadding: 20
+            rightPadding: compactRoot.compactMode === "lastUpdate" ? 20 : 0
+            color: compactLayout.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
         }
+        Item { implicitWidth: 3 }
     }
 
     MouseArea {
+        id: compactMouseArea
         anchors.fill: parent
+        hoverEnabled: true
         onClicked: if (typeof compactRoot.onToggleExpanded === "function") compactRoot.onToggleExpanded()
     }
 }

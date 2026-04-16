@@ -24,7 +24,10 @@ KCM.SimpleKCM {
     property alias cfg_proxmoxHost: singleHostSection.hostText
     property alias cfg_proxmoxPort: singleHostSection.portValue
     property alias cfg_apiTokenId: singleHostSection.tokenIdText
-    property alias cfg_apiTokenSecret: singleHostSection.tokenSecretText
+    property string cfg_apiTokenSecret: ""
+    property string cfg_apiTokenSecretDefault: ""
+    property string cfg_trustedCertPem: ""
+    property string cfg_trustedCertPath: ""
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
     property alias cfg_enableNotifications: enableNotificationsCheck.checked
@@ -33,6 +36,7 @@ KCM.SimpleKCM {
     property string cfg_connectionMode: "single"
     property string cfg_multiHostsJson: "[]"
     property string cfg_multiHostSecretsJson: "{}"
+    property string cfg_multiHostSecretsJsonDefault: "{}"
 
     // Behavior-tab cfg_* keys are also injected into every KCM page by Plasma.
     // Declare inert placeholders here so configGeneral.qml accepts the initial
@@ -43,6 +47,8 @@ KCM.SimpleKCM {
     property string cfg_compactModeDefault: "cpu"
     property bool cfg_lowLatency: false
     property bool cfg_lowLatencyDefault: false
+    property bool cfg_debugLogToJournal: false
+    property bool cfg_debugLogToJournalDefault: false
     property string cfg_appearanceRunningColor: ""
     property string cfg_appearanceRunningColorDefault: ""
     property string cfg_appearanceStoppedColor: ""
@@ -67,6 +73,8 @@ KCM.SimpleKCM {
     property int cfg_notifyRateLimitSecondsDefault: 120
     property bool cfg_redactNotifyIdentities: true
     property bool cfg_redactNotifyIdentitiesDefault: true
+    property string cfg_appearanceNodeColor: ""
+    property string cfg_appearanceNodeColorDefault: ""
 
     // Auto-retry (handled in main.qml)
     property alias cfg_autoRetry: retrySection.autoRetryChecked
@@ -77,11 +85,11 @@ KCM.SimpleKCM {
     property string cfg_proxmoxHostDefault: ""
     property int cfg_proxmoxPortDefault: 8006
     property string cfg_apiTokenIdDefault: ""
-    property string cfg_apiTokenSecretDefault: ""
+    property string cfg_trustedCertPemDefault: ""
+    property string cfg_trustedCertPathDefault: ""
 
     property string cfg_connectionModeDefault: "single"
     property string cfg_multiHostsJsonDefault: "[]"
-    property string cfg_multiHostSecretsJsonDefault: "{}"
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
     property bool cfg_enableNotificationsDefault: true
@@ -194,8 +202,9 @@ KCM.SimpleKCM {
     /*
       Keyring handling is done by the plasmoid runtime (main.qml), which can load the
       native plugin. Keep the KCM simple and always loadable.
-      The secret field here is treated as an input that will be migrated into keyring
-      when the widget runs.
+      Single-host secrets still bridge through a transient runtime handoff.
+      Multi-host secrets now prefer direct keyring writes and only fall back to the
+      legacy JSON stash if no direct writer is available.
     */
 
     ColumnLayout {
@@ -249,6 +258,8 @@ KCM.SimpleKCM {
         ConfigGeneralMultiHostSection {
             Layout.fillWidth: true
             visible: (root.cfg_connectionMode || "single") === "multiHost"
+            trustedCertPem: root.cfg_trustedCertPem
+            trustedCertPath: root.cfg_trustedCertPath
             ensureMultiHostsLen: root.ensureMultiHostsLen
             saveMultiHosts: root.saveMultiHosts
             multiHostSecretKey: root.multiHostSecretKey
@@ -291,6 +302,30 @@ KCM.SimpleKCM {
                 id: ignoreSslCheck
                 checked: true
                 text: "Ignore SSL certificate errors"
+            }
+
+            QQC2.Label {
+                text: "Trusted Cert PEM:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignTop
+            }
+            QQC2.TextArea {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 90
+                text: root.cfg_trustedCertPem
+                placeholderText: "Paste PEM certificate here. If set, this takes precedence over file path."
+                wrapMode: TextEdit.Wrap
+                onTextChanged: root.cfg_trustedCertPem = text
+            }
+
+            QQC2.Label {
+                text: "Trusted Cert File:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+            QQC2.TextField {
+                Layout.fillWidth: true
+                text: root.cfg_trustedCertPath
+                placeholderText: "/etc/pve/pve-root-ca.pem"
+                onTextChanged: root.cfg_trustedCertPath = text
             }
 
             QQC2.Label {
@@ -382,9 +417,6 @@ KCM.SimpleKCM {
             saveStatusColor: saveStatus.color
             loadStatusText: loadStatus.text
             loadStatusColor: loadStatus.color
-            onStashSecret: function(secret) {
-                cfg_apiTokenSecret = secret
-            }
         }
 
         // Separator

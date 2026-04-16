@@ -10,13 +10,16 @@ ColumnLayout {
     property string sessionKey: endpoint ? endpoint.sessionKey : ""
     property string endpointLabel: endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : "")
     property string endpointError: endpoint && endpoint.error ? endpoint.error : ""
-    property bool endpointOffline: endpoint && endpoint.offline
+    property bool endpointOffline: endpoint ? !!endpoint.offline : false
     property var nodes: endpoint && endpoint.nodes ? endpoint.nodes : []
     property int uiRadiusL: 8
     property real uiBorderOpacity: 0.22
     property real uiMutedTextOpacity: 0.68
     property real uiNodeCardOpacity: 0.98
     property real uiWindowOpacity: 1.0
+    property color uiNodeColor: Kirigami.Theme.backgroundColor
+    property real uiSurfaceAltOpacity: 0.10
+    property real uiSurfaceRunningOpacity: 0.12
     property color uiRunningColor: Kirigami.Theme.positiveTextColor
     property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property int scrollbarReserve: 0
@@ -48,7 +51,7 @@ ColumnLayout {
         Layout.rightMargin: root.scrollbarReserve
         Layout.preferredHeight: 34
         radius: root.uiRadiusL
-        color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.10 * root.uiWindowOpacity)
+        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, root.uiNodeCardOpacity * root.uiWindowOpacity)
         border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, root.uiBorderOpacity)
         border.width: 1
 
@@ -124,6 +127,9 @@ ColumnLayout {
             getTotalLxcForNodeMulti: root.getTotalLxcForNodeMulti
             uiNodeCardOpacity: root.uiNodeCardOpacity
             uiWindowOpacity: root.uiWindowOpacity
+            uiNodeColor: root.uiNodeColor
+            uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
+            uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
             uiRunningColor: root.uiRunningColor
             uiStoppedColor: root.uiStoppedColor
             isActionBusy: root.isActionBusy

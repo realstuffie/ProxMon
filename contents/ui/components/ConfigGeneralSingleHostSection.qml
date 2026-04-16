@@ -68,10 +68,13 @@ GridLayout {
             text: "Update Keyring"
             icon.name: "dialog-password"
             enabled: tokenSecretField.text && tokenSecretField.text.trim() !== ""
-            onClicked: root.stashSecret(tokenSecretField.text)
+            onClicked: {
+                root.stashSecret(tokenSecretField.text)
+                tokenSecretField.text = ""
+            }
 
             QQC2.ToolTip.visible: hovered
-            QQC2.ToolTip.text: "Stores the secret temporarily; the widget will move it into the keyring on next load."
+            QQC2.ToolTip.text: "Stores the secret in the keyring immediately."
         }
 
         QQC2.Button {
@@ -86,4 +89,5 @@ GridLayout {
             QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
         }
     }
+
 }

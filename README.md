@@ -109,7 +109,9 @@ pveum user token add monitor@pve plasma-monitor
 ### Connection errors / "!" indicator
 
 - Verify token ID format: `user@realm!tokenname`
-- Enable **Ignore SSL** for self-signed certificates
+- For self-signed Proxmox certs, prefer adding the Proxmox root CA PEM (usually `/etc/pve/pve-root-ca.pem`) in widget settings before using **Ignore SSL**
+- Trusted certs only fix issuer trust; the configured host must still match a hostname or IP SAN on the server certificate
+- If your Proxmox cert is valid only for an internal hostname, add local DNS or an `/etc/hosts` entry and use that hostname in the widget instead of the raw IP
 - Check port 8006 is accessible
 
 ### Icons not showing

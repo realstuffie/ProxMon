@@ -24,8 +24,11 @@ ColumnLayout {
         if (m.indexOf("authentication failed") !== -1 || m.indexOf("http 401") !== -1 || m.indexOf("http 403") !== -1) {
             return "Check API Token ID/Secret and that the token has Sys.Audit + VM.Audit permissions."
         }
+        if (m.indexOf("hostname") !== -1 && m.indexOf("match") !== -1) {
+            return "Hostname mismatch. Use host value that matches cert SAN/CN, or use Ignore SSL only as fallback."
+        }
         if (m.indexOf("ssl") !== -1 || m.indexOf("tls") !== -1 || m.indexOf("certificate") !== -1) {
-            return "SSL/TLS error. If you use a self-signed cert, enable ‘Ignore SSL certificate errors’."
+            return "SSL/TLS error. Add a trusted cert PEM or cert file path first; use ‘Ignore SSL certificate errors’ only as a fallback."
         }
         if (m.indexOf("timed out") !== -1 || m.indexOf("timeout") !== -1) {
             return "Request timed out. Check host/port reachability, firewall, and DNS."

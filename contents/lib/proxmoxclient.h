@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QByteArray>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QSet>
@@ -36,6 +37,13 @@ public:
 
     //Low latency properties for quick updates, but require mutating object state and are not multi-session friendly.
     Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatency NOTIFY lowLatencyChanged)
+    Q_PROPERTY(QString trustedCertPem READ trustedCertPem WRITE setTrustedCertPem NOTIFY trustedCertPemChanged)
+    QString trustedCertPem() const { return m_trustedCertPem; }
+    void setTrustedCertPem(const QString &v);
+
+    Q_PROPERTY(QString trustedCertPath READ trustedCertPath WRITE setTrustedCertPath NOTIFY trustedCertPathChanged)
+    QString trustedCertPath() const { return m_trustedCertPath; }
+    void setTrustedCertPath(const QString &v);
     bool lowLatency() const { return m_lowLatency; }
     void setLowLatency(bool v);
 
@@ -93,6 +101,8 @@ signals:
     void tokenIdChanged();
     void tokenSecretChanged();
     void ignoreSslErrorsChanged();
+    void trustedCertPemChanged();
+    void trustedCertPathChanged();
     void lowLatencyChanged();
 
     // kind: "nodes" | "qemu" | "lxc"
@@ -139,6 +149,8 @@ private:
                     const QString &tokenId,
                     const QString &tokenSecret,
                     bool ignoreSslErrors,
+                    const QByteArray &trustedCertPem,
+                    const QString &trustedCertPath,
                     const QString &path,
                     int seq,
                     const QString &kind,
@@ -156,12 +168,28 @@ private:
                  const QString &tokenId,
                  const QString &tokenSecret,
                  bool ignoreSslErrors,
+                 const QByteArray &trustedCertPem,
+                 const QString &trustedCertPath,
                  const QString &path,
                  int seq,
                  const QString &actionKind,
                  const QString &node,
                  int vmid,
                  const QString &action);
+    void pollTaskStatus(const QString &sessionKey,
+                        const QString &host,
+                        int port,
+                        const QString &tokenId,
+                        const QString &tokenSecret,
+                        bool ignoreSslErrors,
+                        const QByteArray &trustedCertPem,
+                        const QString &trustedCertPath,
+                        const QString &upid,
+                        int seq,
+                        const QString &actionKind,
+                        const QString &node,
+                        int vmid,
+                        const QString &action);
 
     QNetworkAccessManager m_nam;
     QString m_host;
@@ -169,6 +197,8 @@ private:
     QString m_tokenId;
     QString m_tokenSecret;
     bool m_ignoreSslErrors = false;
+    QString m_trustedCertPem;
+    QString m_trustedCertPath;
     bool m_lowLatency = false;
     QSet<QNetworkReply *> m_inFlight;
 };
