@@ -243,7 +243,7 @@ private:
     QString m_multiHostsJson = QStringLiteral("[]");
     QString m_activeSingleSecretKey;
     bool m_debugEnabled = false;
-    bool m_ignoreSsl = true;
+    bool m_ignoreSsl = false;
     QVariantList m_debugLog;
     QString m_secretState = QStringLiteral("idle");
     bool m_refreshResolvingSecrets = false;
