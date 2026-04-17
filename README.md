@@ -4,14 +4,17 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ## Features
 
--  **Real-time monitoring** — Node status (CPU, Memory, Uptime)
--  **VM & Container tracking** — All VMs and LXC containers with status
--  **Multi-node cluster support**
--  **Desktop notifications** — State change alerts with rate limiting and filters
--  **Power commands** — Start, Stop, Restart VMs/CTs
--  **Secure** — API token authentication with SSL support, Local keychain integration 
--  **Theme integration** — Adapts to your Plasma theme
--  **Developer mode** — Triple-click footer for verbose logging
+- **Real-time monitoring** — Node status (CPU, Memory, Uptime)
+- **VM & Container tracking** — All VMs and LXC containers with status
+- **Multi-node cluster support**
+- **Desktop notifications** — State change alerts with rate limiting and filters
+- **Power commands** — Start, Stop, Restart VMs/CTs
+- **Secure** — API token authentication, trusted SSL certificate PEM/file support, and local keychain integration
+- **Custom appearance controls** — Override running, stopped, and node colors with live preview
+- **Tint + opacity tuning** — Adjust card tint strength and expanded window opacity
+- **Flexible compact label** — Show average CPU, running workloads, error state, or last update time in the panel
+- **Theme integration** — Adapts to your Plasma theme and lets you fall back to theme defaults anytime
+- **Developer mode** — Triple-click footer for verbose logging
 
 ## Screenshots
 
@@ -45,7 +48,6 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 ### Known bugs / limitations
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
-
 
 ## Installation
 
@@ -100,9 +102,10 @@ pveum user token add monitor@pve plasma-monitor
 ## Configuration
 
 1. Right-click the widget → **Configure Proxmox Monitor**
-2. **Connection tab**: Host, Port, Token ID (`user@realm!tokenname`), Token Secret, SSL, Refresh Interval
+2. **Connection tab**: Host, Port, Token ID (`user@realm!tokenname`), Token Secret, SSL verification, trusted cert PEM or file path, Refresh Interval
    - Click **Update Keyring** after changing the secret
-3. **Behavior tab**: Sorting, Notifications, Rate Limiting, Privacy (redact token fragments in notifications)
+3. **Behavior tab**: Sorting, compact panel label mode (Avg CPU, running workloads, error state, or last update time), Notifications, Rate Limiting, Privacy (redact token fragments in notifications)
+4. **Appearance tab**: Custom running/stopped/node colors, per-color hex or RGB input, card tint opacity, window opacity, and a live preview with one-click theme defaults
 
 ## Troubleshooting
 
@@ -119,13 +122,13 @@ pveum user token add monitor@pve plasma-monitor
 ```bash
 cp contents/icons/*.svg ~/.local/share/icons/hicolor/scalable/apps/
 gtk-update-icon-cache ~/.local/share/icons/hicolor/
-plasmashell --replace &
+quitapp6 plasmashell && kstart plasmashell
 ```
 
 ### Widget not appearing after install
 
 ```bash
-plasmashell --replace &
+kquitapp6 plasmashell && kstart plasmashell
 ```
 
 If your distro blocks loading the packaged native plugin path:
@@ -133,23 +136,6 @@ If your distro blocks loading the packaged native plugin path:
 ```bash
 bash install.sh --install-standalone-qml-module
 ```
-
-### Ubuntu 26.04 AppArmor
-
-AppArmor class=net denial was a kernel bug fixed in 6.19.0-9.9
-
-```bash
-sudo journalctl -k -b --no-pager | grep -i 'apparmor="DENIED".*profile="plasmashell"'
-```
-
-Workaround (complain mode — logs but does not block):
-
-```bash
-sudo aa-complain plasmashell
-plasmashell --replace &
-```
-
-Revert with `sudo aa-enforce plasmashell`.
 
 ### Logs
 
@@ -187,6 +173,13 @@ Open an issue with your KDE Plasma version (`plasmashell --version`), Proxmox VE
 GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
+
+### v0.5.0
+
+- New appearance tab with custom running, stopped/offline, and node colors
+- Appearance controls now include synced hex/RGB inputs, live preview, card tint opacity, and expanded window opacity
+- Connection settings now support trusted SSL certificate PEM input or a cert file path as a safer alternative to ignoring certificate errors
+- Compact panel label can now show average CPU, running workloads, error state, or last update time
 
 ### v0.4.3
 
