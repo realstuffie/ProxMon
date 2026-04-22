@@ -260,7 +260,8 @@ QString extractTaskExitMessage(const QVariant &data) {
     QString exitStatus = payload.value(QStringLiteral("exitstatus")).toString().trimmed();
     QString status = payload.value(QStringLiteral("status")).toString().trimmed();
 
-    if (exitStatus.compare(QStringLiteral("OK"), Qt::CaseInsensitive) == 0) {
+    if (exitStatus.compare(QStringLiteral("OK"), Qt::CaseInsensitive) == 0
+        || exitStatus.compare(QStringLiteral("TASK OK"), Qt::CaseInsensitive) == 0) {
         return {};
     }
     if (!exitStatus.isEmpty()) {

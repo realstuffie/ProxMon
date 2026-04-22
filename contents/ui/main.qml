@@ -13,6 +13,29 @@ import "../lib/proxmox" as ProxMon
 PlasmoidItem {
     id: root
 
+    function switchSizeFromSize(formFactor, compactMax, fullMin) {
+        if (Plasmoid.formFactor === PlasmaCore.Types.Planar) {
+            return -1
+        }
+
+        if (Plasmoid.formFactor === formFactor) {
+            return 1
+        }
+
+        if (!Number.isFinite(compactMax)) {
+            compactMax = compactRepresentationItem?.implicitWidth ?? Kirigami.Units.iconSizes.enormous - 1
+        }
+
+        if (fullMin <= 0) {
+            fullMin = Kirigami.Units.iconSizes.enormous - 1
+        }
+
+        return Math.max(compactMax, fullMin)
+    }
+
+    switchWidth: switchSizeFromSize(PlasmaCore.Types.Horizontal, compactRepresentationItem?.implicitWidth ?? Infinity, fullRepresentationItem?.Layout.minimumWidth ?? -1)
+    switchHeight: switchSizeFromSize(PlasmaCore.Types.Vertical, compactRepresentationItem?.implicitHeight ?? Infinity, fullRepresentationItem?.Layout.minimumHeight ?? -1)
+
     // Toggle expanded state when the applet is activated (e.g. keyboard shortcut).
     // The compactRepresentation also has a MouseArea for direct clicks.
     activationTogglesExpanded: true
@@ -1384,7 +1407,6 @@ PlasmoidItem {
         displayedEndpoints: root.displayedEndpointsModel
         displayedProxmoxData: root.displayedProxmoxData
         safeCpuPercent: root.safeCpuPercent
-        onToggleExpanded: function() { root.expanded = !root.expanded }
     }
 
     // ==================== FULL REPRESENTATION ====================

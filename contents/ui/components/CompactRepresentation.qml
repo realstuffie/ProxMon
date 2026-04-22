@@ -6,11 +6,21 @@ import org.kde.kirigami as Kirigami
 Item {
     id: compactRoot
 
+    Rectangle {
+        anchors.fill: parent
+        visible: compactRoot.debugBounds
+        color: "transparent"
+        border.color: "magenta"
+        border.width: 1
+        z: 999
+    }
+
     property bool hasCoreConfig: false
     property string secretState: "idle"
     property bool configured: false
     property bool loading: false
     property bool isRefreshing: false
+    property bool debugBounds: false
     property string compactMode: "cpu"
     property int runningVMs: 0
     property int runningLXC: 0
@@ -22,7 +32,6 @@ Item {
     property var displayedEndpoints: []
     property var displayedProxmoxData: null
     property var safeCpuPercent: null
-    property var onToggleExpanded: null
 
     implicitWidth: compactLayout.implicitWidth
     implicitHeight: compactLayout.implicitHeight
@@ -65,27 +74,49 @@ Item {
         return "-"
     }
 
+    MouseArea {
+        anchors.fill: compactLayout
+        acceptedButtons: Qt.LeftButton
+        onClicked: root.expanded = !root.expanded
+        hoverEnabled: true
+
+        HoverHandler {
+            id: hoverHandler
+        }
+    }
+
+    Rectangle {
+        anchors.fill: compactLayout
+        visible: compactRoot.debugBounds
+        color: "transparent"
+        border.color: "cyan"
+        border.width: 1
+        z: 998
+    }
+
+    TextMetrics {
+        id: labelMetrics
+        font.pixelSize: 13
+        text: "99%"
+    }
+
     RowLayout {
         id: compactLayout
         anchors.centerIn: parent
         spacing: 4
-        Item { implicitWidth: 3 }
 
-        property bool hovered: compactMouseArea.containsMouse || iconMouseArea.containsMouse
+        Item { implicitWidth: 3 }
 
         Kirigami.Icon {
             id: proxmoxIcon
             source: Qt.resolvedUrl("../../icons/proxmox-monitor.svg")
             implicitWidth: 22
             implicitHeight: 22
-        
+
             MouseArea {
-                id: iconMouseArea
-        
-        
                 anchors.fill: parent
-                hoverEnabled: true
-                onClicked: if (typeof compactRoot.onToggleExpanded === "function") compactRoot.onToggleExpanded()
+                acceptedButtons: Qt.LeftButton
+                onClicked: root.expanded = !root.expanded
             }
 
             SequentialAnimation {
@@ -117,14 +148,12 @@ Item {
             Connections {
                 target: compactRoot
                 function onLoadingChanged() {
-                    if (!compactRoot.loading && !compactRoot.isRefreshing) {
+                    if (!compactRoot.loading && !compactRoot.isRefreshing)
                         proxmoxIcon.scale = 1.0
-                    }
                 }
                 function onIsRefreshingChanged() {
-                    if (!compactRoot.loading && !compactRoot.isRefreshing) {
+                    if (!compactRoot.loading && !compactRoot.isRefreshing)
                         proxmoxIcon.scale = 1.0
-                    }
                 }
             }
         }
@@ -157,16 +186,9 @@ Item {
                 return averageCpuText()
             }
             font.pixelSize: 13
+            Layout.minimumWidth: labelMetrics.width + 2
             rightPadding: compactRoot.compactMode === "lastUpdate" ? 20 : 0
-            color: compactLayout.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+            color: hoverHandler.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
         }
-        Item { implicitWidth: 3 }
-    }
-
-    MouseArea {
-        id: compactMouseArea
-        anchors.fill: parent
-        hoverEnabled: true
-        onClicked: if (typeof compactRoot.onToggleExpanded === "function") compactRoot.onToggleExpanded()
     }
 }
