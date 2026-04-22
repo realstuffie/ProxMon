@@ -1,7 +1,11 @@
 #pragma once
 
 #include <QObject>
+#include <QHash>
+#include <QTimer>
 #include <QVariant>
+
+#include "pbstypes.h"
 
 class ProxmoxClient;
 class SecretStore;
@@ -15,6 +19,14 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString trustedCertPem READ trustedCertPem WRITE setTrustedCertPem NOTIFY trustedCertPemChanged)
     Q_PROPERTY(QString trustedCertPath READ trustedCertPath WRITE setTrustedCertPath NOTIFY trustedCertPathChanged)
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
+    Q_PROPERTY(bool pbsEnabled READ pbsEnabled WRITE setPbsEnabled NOTIFY pbsEnabledChanged)
+    Q_PROPERTY(QString pbsHost READ pbsHost WRITE setPbsHost NOTIFY pbsHostChanged)
+    Q_PROPERTY(int pbsPort READ pbsPort WRITE setPbsPort NOTIFY pbsPortChanged)
+    Q_PROPERTY(QString pbsTokenId READ pbsTokenId WRITE setPbsTokenId NOTIFY pbsTokenIdChanged)
+    Q_PROPERTY(bool pbsIgnoreSsl READ pbsIgnoreSsl WRITE setPbsIgnoreSsl NOTIFY pbsIgnoreSslChanged)
+    Q_PROPERTY(int pbsBackupWarningDays READ pbsBackupWarningDays WRITE setPbsBackupWarningDays NOTIFY pbsBackupWarningDaysChanged)
+    Q_PROPERTY(int pbsBackupStaleDays READ pbsBackupStaleDays WRITE setPbsBackupStaleDays NOTIFY pbsBackupStaleDaysChanged)
+    Q_PROPERTY(int pbsRefreshInterval READ pbsRefreshInterval WRITE setPbsRefreshInterval NOTIFY pbsRefreshIntervalChanged)
     Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
     Q_PROPERTY(bool ignoreSsl READ ignoreSsl WRITE setIgnoreSsl NOTIFY ignoreSslChanged)
     Q_PROPERTY(QVariantList debugLog READ debugLog NOTIFY debugLogChanged)
@@ -35,6 +47,7 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(int retryAttempt READ retryAttempt NOTIFY retryAttemptChanged)
     Q_PROPERTY(int retryNextDelayMs READ retryNextDelayMs NOTIFY retryNextDelayMsChanged)
     Q_PROPERTY(QString retryStatusText READ retryStatusText NOTIFY retryStatusTextChanged)
+    Q_PROPERTY(QString pbsLastError READ pbsLastError NOTIFY pbsLastErrorChanged)
     Q_PROPERTY(QVariant displayedProxmoxData READ displayedProxmoxData NOTIFY displayedProxmoxDataChanged)
     Q_PROPERTY(QVariantList displayedVmData READ displayedVmData NOTIFY displayedVmDataChanged)
     Q_PROPERTY(QVariantList displayedLxcData READ displayedLxcData NOTIFY displayedLxcDataChanged)
@@ -70,6 +83,30 @@ public:
     QString multiHostsJson() const { return m_multiHostsJson; }
     void setMultiHostsJson(const QString &value);
 
+    bool pbsEnabled() const { return m_pbsEnabled; }
+    void setPbsEnabled(bool value);
+
+    QString pbsHost() const { return m_pbsHost; }
+    void setPbsHost(const QString &value);
+
+    int pbsPort() const { return m_pbsPort; }
+    void setPbsPort(int value);
+
+    QString pbsTokenId() const { return m_pbsTokenId; }
+    void setPbsTokenId(const QString &value);
+
+    bool pbsIgnoreSsl() const { return m_pbsIgnoreSsl; }
+    void setPbsIgnoreSsl(bool value);
+
+    int pbsBackupWarningDays() const { return m_pbsBackupWarningDays; }
+    void setPbsBackupWarningDays(int value);
+
+    int pbsBackupStaleDays() const { return m_pbsBackupStaleDays; }
+    void setPbsBackupStaleDays(int value);
+
+    int pbsRefreshInterval() const { return m_pbsRefreshInterval; }
+    void setPbsRefreshInterval(int value);
+
     bool ignoreSsl() const { return m_ignoreSsl; }
     void setIgnoreSsl(bool value);
 
@@ -95,6 +132,7 @@ public:
     int retryAttempt() const { return m_retryAttempt; }
     int retryNextDelayMs() const { return m_retryNextDelayMs; }
     QString retryStatusText() const { return m_retryStatusText; }
+    QString pbsLastError() const { return m_pbsRefreshError; }
     QVariant displayedProxmoxData() const { return m_displayedProxmoxData; }
     QVariantList displayedVmData() const { return m_displayedVmData; }
     QVariantList displayedLxcData() const { return m_displayedLxcData; }
@@ -106,8 +144,14 @@ public:
     Q_INVOKABLE void resolveSecretsIfNeeded();
     Q_INVOKABLE void listStoredKeys();
     Q_INVOKABLE void storeSingleSecret(const QString &secret);
+    Q_INVOKABLE void storeSinglePBSSecret(const QString &host, const QString &secret);
     Q_INVOKABLE void storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
+    Q_INVOKABLE void storeMultiHostPBSSecret(const QString &host, const QString &secret);
     Q_INVOKABLE void fetchData();
+    Q_INVOKABLE void testPBSConnection(const QString &host,
+                                       int port,
+                                       const QString &tokenId,
+                                       bool ignoreSslErrors);
     Q_INVOKABLE void cancelRefresh();
     Q_INVOKABLE bool runAction(const QString &sessionKey,
                                const QString &kind,
@@ -123,6 +167,14 @@ signals:
     void trustedCertPemChanged();
     void trustedCertPathChanged();
     void multiHostsJsonChanged();
+    void pbsEnabledChanged();
+    void pbsHostChanged();
+    void pbsPortChanged();
+    void pbsTokenIdChanged();
+    void pbsIgnoreSslChanged();
+    void pbsBackupWarningDaysChanged();
+    void pbsBackupStaleDaysChanged();
+    void pbsRefreshIntervalChanged();
     void debugEnabledChanged();
     void ignoreSslChanged();
     void debugLogChanged();
@@ -143,6 +195,7 @@ signals:
     void retryAttemptChanged();
     void retryNextDelayMsChanged();
     void retryStatusTextChanged();
+    void pbsLastErrorChanged();
     void displayedProxmoxDataChanged();
     void displayedVmDataChanged();
     void displayedLxcDataChanged();
@@ -165,6 +218,8 @@ signals:
                      int vmid,
                      const QString &action,
                      const QString &message);
+    void pbsTestSucceeded(const QString &pbsHost);
+    void pbsTestFailed(const QString &pbsHost, const QString &message);
 
 private:
     void setSecretState(const QString &value);
@@ -227,6 +282,12 @@ private:
     void checkRequestsComplete();
     void checkMultiRequestsComplete();
     QVariantMap endpointBySession(const QString &sessionKey) const;
+    void refreshPBS();
+    void applyBackupState(QVariantList &items, const QVariantMap &endpointMap, bool isLxc, bool &anyChanged);
+    BackupStatus evaluateBackupStatus(qint64 lastBackupTime, int warningDays, int staleDays) const;
+    QString lastBackupDisplay(qint64 backupTime) const;
+    void correlateBackups();
+    QString pbsKeyForHost(const QString &host) const;
     QString normalizedHost(const QString &host) const;
     QString resolvedHostFingerprint(const QString &host) const;
     QString normalizedTokenId(const QString &tokenId) const;
@@ -241,6 +302,14 @@ private:
     QString m_trustedCertPem;
     QString m_trustedCertPath;
     QString m_multiHostsJson = QStringLiteral("[]");
+    bool m_pbsEnabled = false;
+    QString m_pbsHost;
+    int m_pbsPort = 8007;
+    QString m_pbsTokenId;
+    bool m_pbsIgnoreSsl = false;
+    int m_pbsBackupWarningDays = 7;
+    int m_pbsBackupStaleDays = 14;
+    int m_pbsRefreshInterval = 3600;
     QString m_activeSingleSecretKey;
     bool m_debugEnabled = false;
     bool m_ignoreSsl = false;
@@ -268,6 +337,9 @@ private:
     int m_retryAttempt = 0;
     int m_retryNextDelayMs = 0;
     QString m_retryStatusText;
+    QString m_pbsRefreshError;
+    bool m_pbsTestInProgress = false;
+    int m_pendingPbsEndpoints = 0;
     QVariant m_proxmoxData;
     QVariantList m_vmData;
     QVariantList m_lxcData;
@@ -282,6 +354,9 @@ private:
     QVariantList m_tempLxcData;
     int m_refreshSeq = 0;
     QVariantMap m_tempEndpointsData;
+    QHash<QString, PBSSnapshot> m_latestBackups;
+    QTimer *m_pbsTimer = nullptr;
+    int m_pendingPbsSnapshotRequests = 0;
     ProxmoxClient *m_api;
     SecretStore *m_singleSecretStore;
     SecretStore *m_multiSecretStore;

@@ -25,6 +25,24 @@ KCM.SimpleKCM {
     property alias cfg_proxmoxPort: singleHostSection.portValue
     property alias cfg_apiTokenId: singleHostSection.tokenIdText
     property string cfg_apiTokenSecret: ""
+    property alias cfg_pbsEnabled: singleHostSection.pbsEnabled
+    property alias cfg_pbsHost: singleHostSection.pbsHostText
+    property alias cfg_pbsPort: singleHostSection.pbsPortValue
+    property alias cfg_pbsTokenId: singleHostSection.pbsTokenIdText
+    property string cfg_pbsTokenSecretBuffer: ""
+    property string cfg_pbsTokenSecretBufferDefault: ""
+    property alias cfg_pbsIgnoreSsl: singleHostSection.pbsIgnoreSsl
+    property alias cfg_pbsBackupWarningDays: singleHostSection.pbsWarningDays
+    property alias cfg_pbsBackupStaleDays: singleHostSection.pbsStaleDays
+    property alias cfg_pbsRefreshInterval: singleHostSection.pbsRefreshInterval
+    property bool cfg_pbsEnabledDefault: false
+    property string cfg_pbsHostDefault: ""
+    property int cfg_pbsPortDefault: 8007
+    property string cfg_pbsTokenIdDefault: ""
+    property bool cfg_pbsIgnoreSslDefault: false
+    property int cfg_pbsBackupWarningDaysDefault: 7
+    property int cfg_pbsBackupStaleDaysDefault: 14
+    property int cfg_pbsRefreshIntervalDefault: 3600
     property string cfg_apiTokenSecretDefault: ""
     property string cfg_trustedCertPem: ""
     property string cfg_trustedCertPath: ""
@@ -247,11 +265,20 @@ KCM.SimpleKCM {
             id: singleHostSection
             Layout.fillWidth: true
             visible: (root.cfg_connectionMode || "single") === "single"
+            controller: typeof kcm !== "undefined" && kcm.controller ? kcm.controller : null
             onStashSecret: function(secret) {
                 cfg_apiTokenSecret = secret
             }
             onForgetSecret: function() {
                 cfg_apiTokenSecret = ""
+            }
+            onStashPbsSecret: function(secret) {
+                cfg_pbsTokenSecretBuffer = secret
+            }
+            onTestPbsConnection: function(host, port, tokenId, ignoreSslErrors) {
+                if (singleHostSection.controller) {
+                    singleHostSection.controller.testPBSConnection(host, port, tokenId, ignoreSslErrors)
+                }
             }
         }
 
@@ -264,6 +291,7 @@ KCM.SimpleKCM {
             saveMultiHosts: root.saveMultiHosts
             multiHostSecretKey: root.multiHostSecretKey
             cfg_multiHostSecretsJson: root.cfg_multiHostSecretsJson
+            controller: typeof kcm !== "undefined" && kcm.controller ? kcm.controller : null
             onUpdateSecretsJson: function(value) {
                 root.cfg_multiHostSecretsJson = value
             }

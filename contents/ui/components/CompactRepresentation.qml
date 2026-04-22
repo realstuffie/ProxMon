@@ -74,15 +74,14 @@ Item {
         return "-"
     }
 
-    MouseArea {
-        anchors.fill: compactLayout
-        acceptedButtons: Qt.LeftButton
-        onClicked: root.expanded = !root.expanded
-        hoverEnabled: true
+    HoverHandler {
+        id: hoverHandler
+    }
 
-        HoverHandler {
-            id: hoverHandler
-        }
+    TapHandler {
+        acceptedButtons: Qt.LeftButton
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        onTapped: root.expanded = !root.expanded
     }
 
     Rectangle {
@@ -113,11 +112,6 @@ Item {
             implicitWidth: 22
             implicitHeight: 22
 
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton
-                onClicked: root.expanded = !root.expanded
-            }
 
             SequentialAnimation {
                 id: heartbeatAnimation

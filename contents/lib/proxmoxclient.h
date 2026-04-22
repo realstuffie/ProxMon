@@ -2,10 +2,13 @@
 
 #include <QObject>
 #include <QByteArray>
+#include <QList>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QSet>
 #include <QVariant>
+
+#include "pbstypes.h"
 
 class ProxmoxClient : public QObject {
     Q_OBJECT
@@ -94,6 +97,20 @@ public:
 
     // Abort any in-flight network requests (useful when refreshing or timing out).
     Q_INVOKABLE void cancelAll();
+    Q_INVOKABLE void fetchPBSDatastores(const QString &pbsHost,
+                                        int port,
+                                        const QString &tokenId,
+                                        const QString &tokenSecret,
+                                        bool ignoreSslErrors,
+                                        const QByteArray &trustedCertPem,
+                                        const QString &trustedCertPath);
+    Q_INVOKABLE void testPBSConnection(const QString &pbsHost,
+                                       int port,
+                                       const QString &tokenId,
+                                       const QString &tokenSecret,
+                                       bool ignoreSslErrors,
+                                       const QByteArray &trustedCertPem,
+                                       const QString &trustedCertPath);
 
 signals:
     void hostChanged();
@@ -140,6 +157,13 @@ signals:
                         int vmid,
                         const QString &action,
                         const QString &message);
+    void pbsDatastoresReceived(const QString &pbsHost,
+                               const QList<QString> &datastores);
+    void pbsSnapshotsReceived(const QString &pbsHost,
+                              const QString &datastore,
+                              const QList<PBSSnapshot> &snapshots);
+    void pbsError(const QString &pbsHost, const QString &message);
+    void pbsConnectionOk(const QString &pbsHost);
 
 private:
     void request(const QString &path, int seq, const QString &kind, const QString &node);

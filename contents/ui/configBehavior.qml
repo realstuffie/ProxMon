@@ -18,6 +18,22 @@ KCM.SimpleKCM {
     property string cfg_apiTokenIdDefault: ""
     property string cfg_apiTokenSecret: ""
     property string cfg_apiTokenSecretDefault: ""
+    property bool cfg_pbsEnabled: false
+    property bool cfg_pbsEnabledDefault: false
+    property string cfg_pbsHost: ""
+    property string cfg_pbsHostDefault: ""
+    property int cfg_pbsPort: 8007
+    property int cfg_pbsPortDefault: 8007
+    property string cfg_pbsTokenId: ""
+    property string cfg_pbsTokenIdDefault: ""
+    property bool cfg_pbsIgnoreSsl: false
+    property bool cfg_pbsIgnoreSslDefault: false
+    property int cfg_pbsBackupWarningDays: 7
+    property int cfg_pbsBackupWarningDaysDefault: 7
+    property int cfg_pbsBackupStaleDays: 14
+    property int cfg_pbsBackupStaleDaysDefault: 14
+    property int cfg_pbsRefreshInterval: 3600
+    property int cfg_pbsRefreshIntervalDefault: 3600
     property int cfg_refreshInterval: 30
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSsl: true

@@ -103,6 +103,36 @@ Rectangle {
             }
         }
 
+        Row {
+            spacing: 4
+            visible: root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0
+
+            Rectangle {
+                width: 8
+                height: 8
+                radius: 4
+                anchors.verticalCenter: parent.verticalCenter
+                color: {
+                    switch (root.ctModel ? root.ctModel.backupStatus : 0) {
+                    case 1: return Kirigami.Theme.positiveTextColor
+                    case 2: return Kirigami.Theme.neutralTextColor
+                    case 3: return Kirigami.Theme.negativeTextColor
+                    case 4: return Kirigami.Theme.negativeTextColor
+                    default: return "transparent"
+                    }
+                }
+            }
+
+            PlasmaComponents.Label {
+                text: root.ctModel ? (root.ctModel.lastBackupDisplay || "") : ""
+                font.pixelSize: 8
+                opacity: 0.8
+                color: root.ctModel && root.ctModel.verifyState === "failed"
+                    ? Kirigami.Theme.negativeTextColor
+                    : Kirigami.Theme.textColor
+            }
+        }
+
         RowLayout {
             spacing: Kirigami.Units.smallSpacing
             Layout.preferredWidth: 70

@@ -85,6 +85,14 @@ PlasmoidItem {
         trustedCertPem: root.trustedCertPem
         trustedCertPath: root.trustedCertPath
         multiHostsJson: root.multiHostsJson
+        pbsEnabled: root.pbsEnabled
+        pbsHost: root.pbsHost
+        pbsPort: root.pbsPort
+        pbsTokenId: root.pbsTokenId
+        pbsIgnoreSsl: root.pbsIgnoreSsl
+        pbsBackupWarningDays: root.pbsBackupWarningDays
+        pbsBackupStaleDays: root.pbsBackupStaleDays
+        pbsRefreshInterval: root.pbsRefreshInterval
         debugEnabled: root.devMode
         ignoreSsl: root.ignoreSsl
         autoRetry: root.autoRetry
@@ -109,6 +117,15 @@ PlasmoidItem {
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl === true
+    property bool pbsEnabled: Plasmoid.configuration.pbsEnabled === true
+    property string pbsHost: Plasmoid.configuration.pbsHost || ""
+    property int pbsPort: Math.max(1, Plasmoid.configuration.pbsPort || 8007)
+    property string pbsTokenId: Plasmoid.configuration.pbsTokenId || ""
+    property string pbsTokenSecretBuffer: ""
+    property bool pbsIgnoreSsl: Plasmoid.configuration.pbsIgnoreSsl === true
+    property int pbsBackupWarningDays: Math.max(1, Plasmoid.configuration.pbsBackupWarningDays || 7)
+    property int pbsBackupStaleDays: Math.max(1, Plasmoid.configuration.pbsBackupStaleDays || 14)
+    property int pbsRefreshInterval: Math.max(1800, Plasmoid.configuration.pbsRefreshInterval || 3600)
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
 
     // Auto-retry/backoff
@@ -1242,6 +1259,12 @@ PlasmoidItem {
             errorMessage = message || ("Action failed: " + action)
             configRefreshDebounce.restart()
         }
+        function onPbsTestSucceeded(pbsHost) {
+            sendNotification("PBS connection OK", pbsHost || "Connection succeeded", "network-connect", "pbs-test-" + String(pbsHost || "ok"))
+        }
+        function onPbsTestFailed(pbsHost, message) {
+            errorMessage = message || ("PBS connection failed: " + String(pbsHost || ""))
+        }
     }
 
     function resolveSecretIfNeeded() {
@@ -1269,7 +1292,14 @@ PlasmoidItem {
         if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("apiTokenSecret")
     }
-
+    onPbsTokenSecretBufferChanged: {
+        const secret = pbsTokenSecretBuffer
+        if (!secret || !secret.trim()) return
+        Plasmoid.configuration.pbsTokenSecretBuffer = ""
+        if (connectionMode === "single" && pbsHost && pbsHost.trim() !== "") {
+            controller.storeSinglePBSSecret(pbsHost, secret)
+        }
+    }
     onTrustedCertPemChanged: triggerRefreshFromConfigChange("trustedCertPem")
     onTrustedCertPathChanged: triggerRefreshFromConfigChange("trustedCertPath")
     onMultiHostSecretsJsonChanged: {
@@ -1282,16 +1312,27 @@ PlasmoidItem {
             if (!Object.prototype.hasOwnProperty.call(map, key)) continue
             var secret = String(map[key] || "")
             if (!secret.trim()) continue
-            var body = key.indexOf("apiTokenSecret:") === 0 ? key.slice("apiTokenSecret:".length) : ""
-            var colon = body.lastIndexOf(":")
-            var left = colon > 0 ? body.slice(0, colon) : ""
-            var port = colon > 0 ? Number(body.slice(colon + 1)) : 8006
-            var at = left.lastIndexOf("@")
-            var tokenId = at > 0 ? left.slice(0, at) : ""
-            var host = at > 0 ? left.slice(at + 1) : ""
-            if (!host || !tokenId) continue
-            controller.storeMultiHostSecret(host, port > 0 ? port : 8006, tokenId, secret)
-            wrote = true
+
+            if (key.indexOf("apiTokenSecret:") === 0) {
+                var body = key.slice("apiTokenSecret:".length)
+                var colon = body.lastIndexOf(":")
+                var left = colon > 0 ? body.slice(0, colon) : ""
+                var port = colon > 0 ? Number(body.slice(colon + 1)) : 8006
+                var at = left.lastIndexOf("@")
+                var tokenId = at > 0 ? left.slice(0, at) : ""
+                var host = at > 0 ? left.slice(at + 1) : ""
+                if (!host || !tokenId) continue
+                controller.storeMultiHostSecret(host, port > 0 ? port : 8006, tokenId, secret)
+                wrote = true
+                continue
+            }
+
+            if (key.indexOf("pbsTokenSecret:") === 0) {
+                var pbsHost = key.slice("pbsTokenSecret:".length).trim()
+                if (!pbsHost) continue
+                controller.storeMultiHostPBSSecret(pbsHost, secret)
+                wrote = true
+            }
         }
         if (wrote) {
             Plasmoid.configuration.multiHostSecretsJson = "{}"
@@ -1310,6 +1351,14 @@ PlasmoidItem {
 
     onRefreshIntervalChanged: triggerRefreshFromConfigChange("refreshInterval")
     onIgnoreSslChanged: triggerRefreshFromConfigChange("ignoreSsl")
+    onPbsEnabledChanged: triggerRefreshFromConfigChange("pbsEnabled")
+    onPbsHostChanged: triggerRefreshFromConfigChange("pbsHost")
+    onPbsPortChanged: triggerRefreshFromConfigChange("pbsPort")
+    onPbsTokenIdChanged: triggerRefreshFromConfigChange("pbsTokenId")
+    onPbsIgnoreSslChanged: triggerRefreshFromConfigChange("pbsIgnoreSsl")
+    onPbsBackupWarningDaysChanged: triggerRefreshFromConfigChange("pbsBackupWarningDays")
+    onPbsBackupStaleDaysChanged: triggerRefreshFromConfigChange("pbsBackupStaleDays")
+    onPbsRefreshIntervalChanged: triggerRefreshFromConfigChange("pbsRefreshInterval")
     onDefaultSortingChanged: triggerRefreshFromConfigChange("defaultSorting")
     onAutoRetryChanged: triggerRefreshFromConfigChange("autoRetry")
     onRetryStartMsChanged: triggerRefreshFromConfigChange("retryStartMs")
@@ -1325,6 +1374,14 @@ PlasmoidItem {
     onCompactModeChanged: triggerRefreshFromConfigChange("compactMode")
 
     Component.onCompleted: {
+        const pendingPbsSecret = Plasmoid.configuration.pbsTokenSecretBuffer
+        if (pendingPbsSecret && pendingPbsSecret.trim() !== "") {
+            Plasmoid.configuration.pbsTokenSecretBuffer = ""
+            if (pbsHost && pbsHost.trim() !== "") {
+                controller.storeSinglePBSSecret(pbsHost, pendingPbsSecret)
+            }
+        }
+
         logDebug("Component.onCompleted: Plasmoid initialized")
         resolveSecretIfNeeded()
 

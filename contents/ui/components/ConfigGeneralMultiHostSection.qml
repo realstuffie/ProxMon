@@ -12,6 +12,7 @@ ColumnLayout {
     property string trustedCertPem: ""
     property string trustedCertPath: ""
     property string cfg_multiHostSecretsJson: "{}"
+    property var controller: null
     signal updateSecretsJson(string value)
 
     Layout.fillWidth: true
@@ -171,6 +172,162 @@ ColumnLayout {
 
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "PBS Enabled:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    QQC2.CheckBox {
+                        checked: entry.pbsEnabled === true
+                        text: checked ? "Enabled" : "Disabled"
+                        onToggled: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[idx].pbsEnabled = checked
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "PBS Host:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    QQC2.TextField {
+                        Layout.fillWidth: true
+                        text: entry.pbsHost || ""
+                        placeholderText: "backup-server or IP"
+                        onTextChanged: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[idx].pbsHost = text
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "PBS Port:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    QQC2.SpinBox {
+                        from: 1
+                        to: 65535
+                        value: entry.pbsPort || 8007
+                        editable: true
+                        onValueModified: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[idx].pbsPort = value
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "PBS Token ID:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    QQC2.TextField {
+                        Layout.fillWidth: true
+                        text: entry.pbsTokenId || ""
+                        placeholderText: "user@pbs!tokenname"
+                        onTextChanged: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[idx].pbsTokenId = text
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "PBS Token Secret:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        QQC2.TextField {
+                            id: pbsSecretField
+                            Layout.fillWidth: true
+                            echoMode: TextInput.Password
+                            placeholderText: "Stored in keyring after Apply"
+                        }
+
+                        QQC2.Button {
+                            text: "Update Keyring"
+                            enabled: pbsSecretField.text && pbsSecretField.text.trim() !== ""
+                            onClicked: {
+                                var arr = root.ensureMultiHostsLen(5)
+                                var entryNow = arr[idx]
+                                var host = String(entryNow.pbsHost || "").trim()
+                                if (!host) return
+
+                                var map = {}
+                                try { map = JSON.parse(root.cfg_multiHostSecretsJson || "{}") } catch (e) { map = {} }
+                                map["pbsTokenSecret:" + host] = pbsSecretField.text
+                                root.updateSecretsJson(JSON.stringify(map))
+                                pbsSecretField.text = ""
+                            }
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "PBS SSL:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    QQC2.CheckBox {
+                        checked: entry.pbsIgnoreSsl === true
+                        text: "Ignore SSL errors"
+                        onToggled: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[idx].pbsIgnoreSsl = checked
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "PBS Warning Days:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    QQC2.SpinBox {
+                        from: 1
+                        to: 30
+                        value: entry.pbsBackupWarningDays || 7
+                        editable: true
+                        onValueModified: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[idx].pbsBackupWarningDays = value
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "PBS Stale Days:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    QQC2.SpinBox {
+                        from: 1
+                        to: 90
+                        value: entry.pbsBackupStaleDays || 14
+                        editable: true
+                        onValueModified: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[idx].pbsBackupStaleDays = value
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    Item {
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        implicitHeight: 1
+                    }
+
+                    QQC2.Button {
+                        Layout.columnSpan: 2
+                        text: "Test PBS Connection"
+                        onClicked: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            var entryNow = arr[idx]
+                            if (!root.controller) return
+                            root.controller.testPBSConnection(entryNow.pbsHost || "", entryNow.pbsPort || 8007, entryNow.pbsTokenId || "", entryNow.pbsIgnoreSsl === true)
                         }
                     }
                 }
