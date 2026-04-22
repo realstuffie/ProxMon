@@ -194,8 +194,13 @@ GridLayout {
                     { text: "24 hours", value: 86400 }
                 ]
                 textRole: "text"
+                valueRole: "value"
                 onActivated: root.pbsRefreshInterval = currentValue
-                Component.onCompleted: currentIndex = 1
+                Component.onCompleted: {
+                    var intervals = [1800, 3600, 10800, 21600, 43200, 86400]
+                    var idx = intervals.indexOf(root.pbsRefreshInterval)
+                    currentIndex = idx >= 0 ? idx : 1
+                }
             }
 
             QQC2.Label { text: "Warning threshold:" }

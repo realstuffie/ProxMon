@@ -18,6 +18,7 @@ class ProxmoxClient : public QObject {
     Q_PROPERTY(QString tokenId READ tokenId WRITE setTokenId NOTIFY tokenIdChanged)
     Q_PROPERTY(QString tokenSecret READ tokenSecret WRITE setTokenSecret NOTIFY tokenSecretChanged)
     Q_PROPERTY(bool ignoreSslErrors READ ignoreSslErrors WRITE setIgnoreSslErrors NOTIFY ignoreSslErrorsChanged)
+    Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
 
 public:
     explicit ProxmoxClient(QObject *parent = nullptr);
@@ -37,6 +38,9 @@ public:
 
     bool ignoreSslErrors() const { return m_ignoreSslErrors; }
     void setIgnoreSslErrors(bool v);
+
+    bool debugEnabled() const { return m_debugEnabled; }
+    void setDebugEnabled(bool value);
 
     //Low latency properties for quick updates, but require mutating object state and are not multi-session friendly.
     Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatency NOTIFY lowLatencyChanged)
@@ -118,6 +122,7 @@ signals:
     void tokenIdChanged();
     void tokenSecretChanged();
     void ignoreSslErrorsChanged();
+    void debugEnabledChanged();
     void trustedCertPemChanged();
     void trustedCertPathChanged();
     void lowLatencyChanged();
@@ -221,6 +226,7 @@ private:
     QString m_tokenId;
     QString m_tokenSecret;
     bool m_ignoreSslErrors = false;
+    bool m_debugEnabled = false;
     QString m_trustedCertPem;
     QString m_trustedCertPath;
     bool m_lowLatency = false;

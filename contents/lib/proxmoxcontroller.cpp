@@ -335,6 +335,7 @@ void ProxmoxController::setPbsRefreshInterval(int value) {
 void ProxmoxController::setDebugEnabled(bool value) {
     if (m_debugEnabled == value) return;
     m_debugEnabled = value;
+    m_api->setDebugEnabled(value);
     emit debugEnabledChanged();
 }
 
@@ -712,6 +713,9 @@ QString ProxmoxController::sanitizeDebugString(const QString &value) const {
     QString sanitized = value;
     if (!m_host.isEmpty()) {
         sanitized.replace(m_host, QStringLiteral("REDACTED_HOST"), Qt::CaseInsensitive);
+    }
+    if (!m_pbsHost.isEmpty()) {
+        sanitized.replace(m_pbsHost, QStringLiteral("REDACTED_PBS_HOST"), Qt::CaseInsensitive);
     }
     if (!m_tokenId.isEmpty()) {
         sanitized.replace(m_tokenId, QStringLiteral("REDACTED_TOKEN"));
