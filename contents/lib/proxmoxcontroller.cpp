@@ -285,30 +285,35 @@ void ProxmoxController::setPbsEnabled(bool value) {
     if (m_pbsEnabled == value) return;
     m_pbsEnabled = value;
     emit pbsEnabledChanged();
+    refreshPBS();
 }
 
 void ProxmoxController::setPbsHost(const QString &value) {
     if (m_pbsHost == value) return;
     m_pbsHost = value;
     emit pbsHostChanged();
+    refreshPBS();
 }
 
 void ProxmoxController::setPbsPort(int value) {
     if (m_pbsPort == value) return;
     m_pbsPort = value;
     emit pbsPortChanged();
+    refreshPBS();
 }
 
 void ProxmoxController::setPbsTokenId(const QString &value) {
     if (m_pbsTokenId == value) return;
     m_pbsTokenId = value;
     emit pbsTokenIdChanged();
+    refreshPBS();
 }
 
 void ProxmoxController::setPbsIgnoreSsl(bool value) {
     if (m_pbsIgnoreSsl == value) return;
     m_pbsIgnoreSsl = value;
     emit pbsIgnoreSslChanged();
+    refreshPBS();
 }
 
 void ProxmoxController::setPbsBackupWarningDays(int value) {
