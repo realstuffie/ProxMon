@@ -81,8 +81,6 @@ bash install.sh --no-deps
 |---------------------|----------------------|--------------------------------------|
 | `Sys.Audit`         | `/`                  | Read node status                     |
 | `VM.Audit`          | `/vms`               | Read VM & container status           |
-| `DatastoreReader`   | `/storage/<storage>` | Read storage and backup task status  |
-| `Datastore.Audit`   | `/datastore/<name>`  | Read PBS datastore and snapshots     |
 
 ### Power Action Permissions
 
@@ -100,6 +98,23 @@ pveum user add monitor@pve -comment "Plasma Monitor"
 pveum aclmod / -user monitor@pve -role PVEAuditor
 pveum user token add monitor@pve plasma-monitor
 ```
+
+## Proxmox Backup Server API Token Setup
+
+1. Go to **Configuration → Access Control → Users → Add** and create a user e.g. `proxmon@pbs`
+2. Go to **Configuration → Access Control → API Tokens → Add**, select the user and set a token name
+3. Go to **Configuration → Access Control → Permissions → Add**
+   - Path: `/datastore/YourDatastoreName`
+   - Role: `DatastoreReader`
+   - Copy the token secret — shown only once
+
+### Minimum PBS Permissions
+
+| Role                         | Path                | Purpose                              |
+|------------------------------|---------------------|--------------------------------------|
+| `DatastoreReader` (built-in) | `/datastore/<name>` | Read datastore and snapshot listings |
+
+Token ID format: `user@pbs!tokenname`
 
 ## Configuration
 
