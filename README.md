@@ -191,6 +191,14 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.5.1
+
+- PBS integration: optional Proxmox Backup Server support per endpoint
+- Backup status badges inline on VM and container rows (green/amber/red)
+- Separate hourly PBS poll timer independent of PVE refresh
+- Per-endpoint configurable warning and stale thresholds
+- PBS secret stored securely in keyring matching existing PVE handoff pattern
+
 ### v0.5.0
 
 - New appearance tab with custom running, stopped/offline, and node colors
