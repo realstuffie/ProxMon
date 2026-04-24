@@ -109,7 +109,7 @@ PlasmoidItem {
             Plasmoid.configuration.multiHostsJson = value
         }
         onSecretStateChanged: {
-            if (controller.secretState === "ready" && root.configured && !root.loading && !root.isRefreshing) {
+            if (controller.secretState === "ready" && root.configured && !root.loading && !root.isRefreshing && !configRefreshDebounce.running) {
                 root.fetchData()
             }
         }

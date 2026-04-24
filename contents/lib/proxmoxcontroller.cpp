@@ -551,7 +551,7 @@ void ProxmoxController::fetchData() {
 }
 
 void ProxmoxController::cancelRefresh() {
-    m_api->cancelAll();
+    m_api->cancelPVE();
 }
 
 bool ProxmoxController::runAction(const QString &sessionKey,
@@ -1468,6 +1468,7 @@ void ProxmoxController::refreshPBS() {
 }
 
 void ProxmoxController::refreshPBSNow() {
+    m_api->cancelPBS();
     appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS mode=%1").arg(m_connectionMode));
     m_latestBackups.clear();
     m_pendingPbsSnapshotRequests = 0;

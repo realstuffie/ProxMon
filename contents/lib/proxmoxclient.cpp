@@ -21,6 +21,8 @@ void ProxmoxClient::cancelAll() {
     //
     // QNetworkReply::abort() emits finished() (Qt docs), so snapshot first to avoid
     // iterating while callbacks remove from m_inFlight.
+    const auto pbsReplies = m_pbsInFlight.values();
+    m_pbsInFlight.clear();
     const auto replies = m_inFlight.values();
     m_inFlight.clear();
 
@@ -28,6 +30,22 @@ void ProxmoxClient::cancelAll() {
         if (r) {
             r->abort();
         }
+    }
+}
+
+void ProxmoxClient::cancelPVE() {
+    const auto replies = m_inFlight.values();
+    m_inFlight.clear();
+    for (QNetworkReply *r : replies) {
+        if (r) r->abort();
+    }
+}
+
+void ProxmoxClient::cancelPBS() {
+    const auto pbsReplies = m_pbsInFlight.values();
+    m_pbsInFlight.clear();
+    for (QNetworkReply *r : pbsReplies) {
+        if (r) r->abort();
     }
 }
 
@@ -583,7 +601,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
     req.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
 
     QNetworkReply *r = m_nam.get(req);
-    m_inFlight.insert(r);
+    m_pbsInFlight.insert(r);
 
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -592,7 +610,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
     }
 
     QObject::connect(r, &QNetworkReply::finished, this, [this, r, pbsHost, port, tokenId, tokenSecret, ignoreSslErrors, trustedCertPem, trustedCertPath]() {
-        m_inFlight.remove(r);
+        m_pbsInFlight.remove(r);
 
         auto emitErr = [&](const QString &msg) {
             if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSDatastores error host=%1 message=%2").arg(pbsHost, msg);
@@ -622,7 +640,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
                 snapshotReq.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
 
                 QNetworkReply *snapshotReply = m_nam.get(snapshotReq);
-                m_inFlight.insert(snapshotReply);
+                m_pbsInFlight.insert(snapshotReply);
                 if (ignoreSslErrors) {
                     QObject::connect(snapshotReply, &QNetworkReply::sslErrors, snapshotReply, [snapshotReply](const QList<QSslError> &) {
                         snapshotReply->ignoreSslErrors();
@@ -630,7 +648,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
                 }
 
                 QObject::connect(snapshotReply, &QNetworkReply::finished, this, [this, snapshotReply, pbsHost, datastore]() {
-                    m_inFlight.remove(snapshotReply);
+                    m_pbsInFlight.remove(snapshotReply);
                     auto emitSnapErr = [&](const QString &msg) {
                         if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSSnapshots error host=%1 datastore=%2 message=%3").arg(pbsHost, datastore, msg);
                         emit pbsError(pbsHost, msg);
@@ -685,7 +703,7 @@ void ProxmoxClient::testPBSConnection(const QString &pbsHost,
     req.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
 
     QNetworkReply *r = m_nam.get(req);
-    m_inFlight.insert(r);
+    m_pbsInFlight.insert(r);
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
             r->ignoreSslErrors();
@@ -693,7 +711,7 @@ void ProxmoxClient::testPBSConnection(const QString &pbsHost,
     }
 
     QObject::connect(r, &QNetworkReply::finished, this, [this, r, pbsHost]() {
-        m_inFlight.remove(r);
+        m_pbsInFlight.remove(r);
         auto emitErr = [&](const QString &msg) {
             if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] testPBSConnection error host=%1 message=%2").arg(pbsHost, msg);
             emit pbsError(pbsHost, msg);

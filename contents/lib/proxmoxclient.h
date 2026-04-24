@@ -101,6 +101,8 @@ public:
 
     // Abort any in-flight network requests (useful when refreshing or timing out).
     Q_INVOKABLE void cancelAll();
+    Q_INVOKABLE void cancelPVE();
+    Q_INVOKABLE void cancelPBS();
     Q_INVOKABLE void fetchPBSDatastores(const QString &pbsHost,
                                         int port,
                                         const QString &tokenId,
@@ -231,4 +233,5 @@ private:
     QString m_trustedCertPath;
     bool m_lowLatency = false;
     QSet<QNetworkReply *> m_inFlight;
+    QSet<QNetworkReply *> m_pbsInFlight;
 };
