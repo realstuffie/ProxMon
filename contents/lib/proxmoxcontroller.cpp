@@ -118,8 +118,12 @@ ProxmoxController::ProxmoxController(QObject *parent)
     });
 
     m_pbsTimer = new QTimer(this);
-    connect(m_pbsTimer, &QTimer::timeout, this, &ProxmoxController::refreshPBS);
+    connect(m_pbsTimer, &QTimer::timeout, this, &ProxmoxController::refreshPBSNow);
     m_pbsTimer->setInterval(m_pbsRefreshInterval * 1000);
+    m_pbsDebounceTimer = new QTimer(this);
+    m_pbsDebounceTimer->setSingleShot(true);
+    m_pbsDebounceTimer->setInterval(500);
+    connect(m_pbsDebounceTimer, &QTimer::timeout, this, &ProxmoxController::refreshPBSNow);
 
     connect(m_singleSecretStore, &SecretStore::secretReady, this, [this](const QString &secret) {
         if (!secret.isEmpty()) {
@@ -1458,6 +1462,12 @@ QVariantList ProxmoxController::buildSecretQueue() const {
 }
 
 void ProxmoxController::refreshPBS() {
+    if (m_pbsDebounceTimer) {
+        m_pbsDebounceTimer->start();
+    }
+}
+
+void ProxmoxController::refreshPBSNow() {
     appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS mode=%1").arg(m_connectionMode));
     m_latestBackups.clear();
     m_pendingPbsSnapshotRequests = 0;

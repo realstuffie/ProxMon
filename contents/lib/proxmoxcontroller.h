@@ -283,6 +283,7 @@ private:
     void checkMultiRequestsComplete();
     QVariantMap endpointBySession(const QString &sessionKey) const;
     void refreshPBS();
+    void refreshPBSNow();
     void applyBackupState(QVariantList &items, const QVariantMap &endpointMap, bool isLxc, bool &anyChanged);
     BackupStatus evaluateBackupStatus(qint64 lastBackupTime, int warningDays, int staleDays) const;
     QString lastBackupDisplay(qint64 backupTime) const;
@@ -309,7 +310,7 @@ private:
     bool m_pbsIgnoreSsl = false;
     int m_pbsBackupWarningDays = 7;
     int m_pbsBackupStaleDays = 14;
-    int m_pbsRefreshInterval = 3600;
+    int m_pbsRefreshInterval = 0;
     QString m_activeSingleSecretKey;
     bool m_debugEnabled = false;
     bool m_ignoreSsl = false;
@@ -356,6 +357,7 @@ private:
     QVariantMap m_tempEndpointsData;
     QHash<QString, PBSSnapshot> m_latestBackups;
     QTimer *m_pbsTimer = nullptr;
+    QTimer *m_pbsDebounceTimer = nullptr;
     int m_pendingPbsSnapshotRequests = 0;
     ProxmoxClient *m_api;
     SecretStore *m_singleSecretStore;
