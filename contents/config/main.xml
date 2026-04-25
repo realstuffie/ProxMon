@@ -68,6 +68,13 @@
         <entry name="multiHostSecretsJson" type="String">
             <default>{}</default>
         </entry>
+        <!-- PBS Settings -->
+        <entry name="pbsExcludeTag" type="String">
+            <default></default>
+        </entry>
+        <entry name="pbsExcludeVmids" type="String">
+            <default></default>
+        </entry>
 
         <!-- Behavior Settings -->
         <entry name="defaultSorting" type="String">

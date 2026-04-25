@@ -27,6 +27,8 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(int pbsBackupWarningDays READ pbsBackupWarningDays WRITE setPbsBackupWarningDays NOTIFY pbsBackupWarningDaysChanged)
     Q_PROPERTY(int pbsBackupStaleDays READ pbsBackupStaleDays WRITE setPbsBackupStaleDays NOTIFY pbsBackupStaleDaysChanged)
     Q_PROPERTY(int pbsRefreshInterval READ pbsRefreshInterval WRITE setPbsRefreshInterval NOTIFY pbsRefreshIntervalChanged)
+    Q_PROPERTY(QString pbsExcludeTag READ pbsExcludeTag WRITE setPbsExcludeTag NOTIFY pbsExcludeTagChanged)
+    Q_PROPERTY(QString pbsExcludeVmids READ pbsExcludeVmids WRITE setPbsExcludeVmids NOTIFY pbsExcludeVmidsChanged)
     Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
     Q_PROPERTY(bool ignoreSsl READ ignoreSsl WRITE setIgnoreSsl NOTIFY ignoreSslChanged)
     Q_PROPERTY(QVariantList debugLog READ debugLog NOTIFY debugLogChanged)
@@ -106,6 +108,10 @@ public:
 
     int pbsRefreshInterval() const { return m_pbsRefreshInterval; }
     void setPbsRefreshInterval(int value);
+    QString pbsExcludeTag() const { return m_pbsExcludeTag; }
+    void setPbsExcludeTag(const QString &value);
+    QString pbsExcludeVmids() const { return m_pbsExcludeVmids; }
+    void setPbsExcludeVmids(const QString &value);
 
     bool ignoreSsl() const { return m_ignoreSsl; }
     void setIgnoreSsl(bool value);
@@ -175,6 +181,8 @@ signals:
     void pbsBackupWarningDaysChanged();
     void pbsBackupStaleDaysChanged();
     void pbsRefreshIntervalChanged();
+    void pbsExcludeTagChanged();
+    void pbsExcludeVmidsChanged();
     void debugEnabledChanged();
     void ignoreSslChanged();
     void debugLogChanged();
@@ -311,6 +319,8 @@ private:
     int m_pbsBackupWarningDays = 7;
     int m_pbsBackupStaleDays = 14;
     int m_pbsRefreshInterval = 0;
+    QString m_pbsExcludeTag;
+    QString m_pbsExcludeVmids;
     QString m_activeSingleSecretKey;
     bool m_debugEnabled = false;
     bool m_ignoreSsl = false;

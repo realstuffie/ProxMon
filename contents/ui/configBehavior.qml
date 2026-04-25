@@ -34,6 +34,10 @@ KCM.SimpleKCM {
     property int cfg_pbsBackupStaleDaysDefault: 14
     property int cfg_pbsRefreshInterval: 3600
     property int cfg_pbsRefreshIntervalDefault: 3600
+    property string cfg_pbsExcludeTag: ""
+    property string cfg_pbsExcludeTagDefault: ""
+    property string cfg_pbsExcludeVmids: ""
+    property string cfg_pbsExcludeVmidsDefault: ""
     property int cfg_refreshInterval: 30
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSsl: true
@@ -283,6 +287,71 @@ KCM.SimpleKCM {
             wrapMode: Text.WordWrap
         }
 
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            Layout.bottomMargin: 10
+            implicitHeight: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.3
+        }
+
+            // ==================== PBS FILTERING SECTION ====================
+        Kirigami.Heading {
+            text: "PBS Backup Filtering"
+            level: 2
+        }
+
+        QQC2.Label {
+            text: "Exclude VMs and containers from PBS backup status display."
+            font.pixelSize: 11
+            opacity: 0.6
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+        }
+
+        GridLayout {
+            columns: 2
+            columnSpacing: 15
+            rowSpacing: 12
+            Layout.fillWidth: true
+
+            QQC2.Label {
+                text: "Exclude by tag:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+
+            QQC2.TextField {
+                id: pbsExcludeTagField
+                Layout.fillWidth: true
+                placeholderText: "no-pbs"
+                text: root.cfg_pbsExcludeTag
+                onTextChanged: root.cfg_pbsExcludeTag = text
+            }
+
+            QQC2.Label {
+                text: "Exclude by VM IDs:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+
+            QQC2.TextField {
+                id: pbsExcludeVmidsField
+                Layout.fillWidth: true
+                placeholderText: "100, 105, 200"
+                text: root.cfg_pbsExcludeVmids
+                onTextChanged: root.cfg_pbsExcludeVmids = text
+            }
+        }
+
+        QQC2.Label {
+            text: "VMs/CTs matching the tag or any listed ID will not show PBS backup status."
+            font.pixelSize: 11
+            opacity: 0.6
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+        }
+
+        // Separator
         Rectangle {
             Layout.fillWidth: true
             Layout.topMargin: 10

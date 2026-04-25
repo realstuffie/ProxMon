@@ -341,6 +341,20 @@ void ProxmoxController::setPbsRefreshInterval(int value) {
     emit pbsRefreshIntervalChanged();
 }
 
+void ProxmoxController::setPbsExcludeTag(const QString &value) {
+    if (m_pbsExcludeTag == value) return;
+    m_pbsExcludeTag = value;
+    emit pbsExcludeTagChanged();
+    correlateBackups();
+}
+
+void ProxmoxController::setPbsExcludeVmids(const QString &value) {
+    if (m_pbsExcludeVmids == value) return;
+    m_pbsExcludeVmids = value;
+    emit pbsExcludeVmidsChanged();
+    correlateBackups();
+}
+
 void ProxmoxController::setDebugEnabled(bool value) {
     if (m_debugEnabled == value) return;
     m_debugEnabled = value;
@@ -1625,6 +1639,36 @@ void ProxmoxController::applyBackupState(QVariantList &items, const QVariantMap 
             const QString oldDisplay = item.value(QStringLiteral("lastBackupDisplay")).toString();
             const QString oldVerify = item.value(QStringLiteral("verifyState")).toString();
             if (oldStatus != int(BackupStatus::Unknown) || !oldDisplay.isEmpty() || !oldVerify.isEmpty()) {
+                item.insert(QStringLiteral("backupStatus"), int(BackupStatus::Unknown));
+                item.insert(QStringLiteral("lastBackupTime"), 0);
+                item.insert(QStringLiteral("lastBackupDisplay"), QString());
+                item.insert(QStringLiteral("verifyState"), QString());
+                anyChanged = true;
+            }
+            itemValue = item;
+            continue;
+        }
+            // Check exclusions
+        const int itemVmid = item.value(QStringLiteral("vmid")).toInt();
+        const QString itemTags = item.value(QStringLiteral("tags")).toString();
+        bool excluded = false;
+        if (!m_pbsExcludeTag.trimmed().isEmpty()) {
+            excluded = itemTags.contains(m_pbsExcludeTag.trimmed(), Qt::CaseInsensitive);
+        }
+        if (!excluded && !m_pbsExcludeVmids.trimmed().isEmpty()) {
+            const QStringList vmids = m_pbsExcludeVmids.split(QLatin1Char(','), Qt::SkipEmptyParts);
+            for (const QString &v : vmids) {
+                if (v.trimmed().toInt() == itemVmid) {
+                    excluded = true;
+                    break;
+                }
+            }
+        }
+        if (excluded) {
+            const int exOldStatus = item.value(QStringLiteral("backupStatus"), int(BackupStatus::Unknown)).toInt();
+            const QString exOldDisplay = item.value(QStringLiteral("lastBackupDisplay")).toString();
+            const QString exOldVerify = item.value(QStringLiteral("verifyState")).toString();
+            if (exOldStatus != int(BackupStatus::Unknown) || !exOldDisplay.isEmpty() || !exOldVerify.isEmpty()) {
                 item.insert(QStringLiteral("backupStatus"), int(BackupStatus::Unknown));
                 item.insert(QStringLiteral("lastBackupTime"), 0);
                 item.insert(QStringLiteral("lastBackupDisplay"), QString());

@@ -93,6 +93,8 @@ PlasmoidItem {
         pbsBackupWarningDays: root.pbsBackupWarningDays
         pbsBackupStaleDays: root.pbsBackupStaleDays
         pbsRefreshInterval: root.pbsRefreshInterval
+        pbsExcludeTag: root.pbsExcludeTag
+        pbsExcludeVmids: root.pbsExcludeVmids
         debugEnabled: root.devMode
         ignoreSsl: root.ignoreSsl
         autoRetry: root.autoRetry
@@ -126,6 +128,8 @@ PlasmoidItem {
     property int pbsBackupWarningDays: Math.max(1, Plasmoid.configuration.pbsBackupWarningDays || 7)
     property int pbsBackupStaleDays: Math.max(1, Plasmoid.configuration.pbsBackupStaleDays || 14)
     property int pbsRefreshInterval: Math.max(1800, Plasmoid.configuration.pbsRefreshInterval || 3600)
+    property string pbsExcludeTag: Plasmoid.configuration.pbsExcludeTag || ""
+    property string pbsExcludeVmids: Plasmoid.configuration.pbsExcludeVmids || ""
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
 
     // Auto-retry/backoff
@@ -1359,6 +1363,8 @@ PlasmoidItem {
     onPbsBackupWarningDaysChanged: triggerRefreshFromConfigChange("pbsBackupWarningDays")
     onPbsBackupStaleDaysChanged: triggerRefreshFromConfigChange("pbsBackupStaleDays")
     onPbsRefreshIntervalChanged: triggerRefreshFromConfigChange("pbsRefreshInterval")
+    onPbsExcludeTagChanged: triggerRefreshFromConfigChange("pbsExcludeTag")
+    onPbsExcludeVmidsChanged: triggerRefreshFromConfigChange("pbsExcludeVmids")
     onDefaultSortingChanged: triggerRefreshFromConfigChange("defaultSorting")
     onAutoRetryChanged: triggerRefreshFromConfigChange("autoRetry")
     onRetryStartMsChanged: triggerRefreshFromConfigChange("retryStartMs")
