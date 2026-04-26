@@ -27,6 +27,33 @@
         <entry name="ignoreSsl" type="Bool">
             <default>false</default>
         </entry>
+        <entry name="pbsEnabled" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="pbsHost" type="String">
+            <default></default>
+        </entry>
+        <entry name="pbsPort" type="Int">
+            <default>8007</default>
+        </entry>
+        <entry name="pbsTokenId" type="String">
+            <default></default>
+        </entry>
+        <entry name="pbsTokenSecretBuffer" type="String">
+            <default></default>
+        </entry>
+        <entry name="pbsIgnoreSsl" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="pbsBackupWarningDays" type="Int">
+            <default>7</default>
+        </entry>
+        <entry name="pbsBackupStaleDays" type="Int">
+            <default>14</default>
+        </entry>
+        <entry name="pbsRefreshInterval" type="Int">
+            <default>3600</default>
+        </entry>
 
         <!-- Connection Mode -->
         <entry name="connectionMode" type="String">
@@ -40,6 +67,13 @@
              Runtime migrates these into keyring and clears this map. -->
         <entry name="multiHostSecretsJson" type="String">
             <default>{}</default>
+        </entry>
+        <!-- PBS Settings -->
+        <entry name="pbsExcludeTag" type="String">
+            <default></default>
+        </entry>
+        <entry name="pbsExcludeVmids" type="String">
+            <default></default>
         </entry>
 
         <!-- Behavior Settings -->

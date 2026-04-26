@@ -32,6 +32,7 @@ qt_add_library(proxmoxclientplugin SHARED
     proxmoxclient.h
     proxmoxcontroller.cpp
     proxmoxcontroller.h
+    pbstypes.h
     secretstore.cpp
     secretstore.h
     notifier.cpp

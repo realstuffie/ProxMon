@@ -1,6 +1,7 @@
 #include "proxmoxclient.h"
 
 #include <QFile>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
@@ -20,6 +21,8 @@ void ProxmoxClient::cancelAll() {
     //
     // QNetworkReply::abort() emits finished() (Qt docs), so snapshot first to avoid
     // iterating while callbacks remove from m_inFlight.
+    const auto pbsReplies = m_pbsInFlight.values();
+    m_pbsInFlight.clear();
     const auto replies = m_inFlight.values();
     m_inFlight.clear();
 
@@ -27,6 +30,22 @@ void ProxmoxClient::cancelAll() {
         if (r) {
             r->abort();
         }
+    }
+}
+
+void ProxmoxClient::cancelPVE() {
+    const auto replies = m_inFlight.values();
+    m_inFlight.clear();
+    for (QNetworkReply *r : replies) {
+        if (r) r->abort();
+    }
+}
+
+void ProxmoxClient::cancelPBS() {
+    const auto pbsReplies = m_pbsInFlight.values();
+    m_pbsInFlight.clear();
+    for (QNetworkReply *r : pbsReplies) {
+        if (r) r->abort();
     }
 }
 
@@ -58,6 +77,12 @@ void ProxmoxClient::setIgnoreSslErrors(bool v) {
     if (m_ignoreSslErrors == v) return;
     m_ignoreSslErrors = v;
     emit ignoreSslErrorsChanged();
+}
+
+void ProxmoxClient::setDebugEnabled(bool value) {
+    if (m_debugEnabled == value) return;
+    m_debugEnabled = value;
+    emit debugEnabledChanged();
 }
 
 void ProxmoxClient::setTrustedCertPem(const QString &v) {
@@ -260,7 +285,8 @@ QString extractTaskExitMessage(const QVariant &data) {
     QString exitStatus = payload.value(QStringLiteral("exitstatus")).toString().trimmed();
     QString status = payload.value(QStringLiteral("status")).toString().trimmed();
 
-    if (exitStatus.compare(QStringLiteral("OK"), Qt::CaseInsensitive) == 0) {
+    if (exitStatus.compare(QStringLiteral("OK"), Qt::CaseInsensitive) == 0
+        || exitStatus.compare(QStringLiteral("TASK OK"), Qt::CaseInsensitive) == 0) {
         return {};
     }
     if (!exitStatus.isEmpty()) {
@@ -554,6 +580,147 @@ void ProxmoxClient::postFor(const QString &sessionKey,
                        node,
                        vmid,
                        action);
+    });
+}
+
+void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
+                                      int port,
+                                      const QString &tokenId,
+                                      const QString &tokenSecret,
+                                      bool ignoreSslErrors,
+                                      const QByteArray &trustedCertPem,
+                                      const QString &trustedCertPath) {
+    if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSDatastores host=%1 port=%2 tokenIdEmpty=%3 secretEmpty=%4 ignoreSsl=%5")
+        .arg(pbsHost, QString::number(port), tokenId.isEmpty() ? QStringLiteral("true") : QStringLiteral("false"), tokenSecret.isEmpty() ? QStringLiteral("true") : QStringLiteral("false"), ignoreSslErrors ? QStringLiteral("true") : QStringLiteral("false"));
+    if (pbsHost.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
+        emit pbsError(pbsHost, QStringLiteral("Not configured"));
+        return;
+    }
+
+    QNetworkRequest req = buildRequest(pbsHost, port, QStringLiteral("/admin/datastore"), tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? 5000 : 10000);
+    req.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
+
+    QNetworkReply *r = m_nam.get(req);
+    m_pbsInFlight.insert(r);
+
+    if (ignoreSslErrors) {
+        QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
+            r->ignoreSslErrors();
+        });
+    }
+
+    QObject::connect(r, &QNetworkReply::finished, this, [this, r, pbsHost, port, tokenId, tokenSecret, ignoreSslErrors, trustedCertPem, trustedCertPath]() {
+        m_pbsInFlight.remove(r);
+
+        auto emitErr = [&](const QString &msg) {
+            if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSDatastores error host=%1 message=%2").arg(pbsHost, msg);
+            emit pbsError(pbsHost, msg);
+        };
+        auto emitOk = [&](const QVariant &data) {
+            if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSDatastores ok host=%1").arg(pbsHost);
+            QStringList datastores;
+            const QVariantList rows = data.toMap().value(QStringLiteral("data")).toList();
+            for (const QVariant &rowValue : rows) {
+                const QVariantMap row = rowValue.toMap();
+                const QString store = row.value(QStringLiteral("store")).toString().trimmed();
+                if (!store.isEmpty()) {
+                    datastores.push_back(store);
+                }
+            }
+            emit pbsDatastoresReceived(pbsHost, datastores);
+            for (const QString &datastore : datastores) {
+                QNetworkRequest snapshotReq = buildRequest(pbsHost,
+                                                           port,
+                                                           QStringLiteral("/admin/datastore/%1/snapshots").arg(QString::fromUtf8(QUrl::toPercentEncoding(datastore))),
+                                                           tokenId,
+                                                           tokenSecret,
+                                                           trustedCertPem,
+                                                           trustedCertPath,
+                                                           m_lowLatency ? 5000 : 10000);
+                snapshotReq.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
+
+                QNetworkReply *snapshotReply = m_nam.get(snapshotReq);
+                m_pbsInFlight.insert(snapshotReply);
+                if (ignoreSslErrors) {
+                    QObject::connect(snapshotReply, &QNetworkReply::sslErrors, snapshotReply, [snapshotReply](const QList<QSslError> &) {
+                        snapshotReply->ignoreSslErrors();
+                    });
+                }
+
+                QObject::connect(snapshotReply, &QNetworkReply::finished, this, [this, snapshotReply, pbsHost, datastore]() {
+                    m_pbsInFlight.remove(snapshotReply);
+                    auto emitSnapErr = [&](const QString &msg) {
+                        if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSSnapshots error host=%1 datastore=%2 message=%3").arg(pbsHost, datastore, msg);
+                        emit pbsError(pbsHost, msg);
+                    };
+                    auto emitSnapOk = [&](const QVariant &snapData) {
+                        if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSSnapshots ok host=%1 datastore=%2").arg(pbsHost, datastore);
+                        QList<PBSSnapshot> snapshots;
+                        const QVariantList rows = snapData.toMap().value(QStringLiteral("data")).toList();
+                        for (const QVariant &rowValue : rows) {
+                            const QVariantMap row = rowValue.toMap();
+                            bool vmidOk = false;
+                            const int vmid = row.value(QStringLiteral("backup-id")).toString().toInt(&vmidOk);
+                            if (!vmidOk) {
+                                continue;
+                            }
+                            PBSSnapshot snapshot;
+                            snapshot.vmid = vmid;
+                            snapshot.backupType = row.value(QStringLiteral("backup-type")).toString();
+                            snapshot.backupTime = row.value(QStringLiteral("backup-time")).toLongLong();
+                            snapshot.size = row.value(QStringLiteral("size")).toLongLong();
+                            snapshot.verifyState = row.value(QStringLiteral("verification")).toMap().value(QStringLiteral("state")).toString();
+                            snapshot.datastoreName = datastore;
+                            snapshot.pbsHost = pbsHost;
+                            snapshots.push_back(snapshot);
+                        }
+                        emit pbsSnapshotsReceived(pbsHost, datastore, snapshots);
+                    };
+                    handleFinishedReply(snapshotReply, 0, QStringLiteral("pbs-snapshots"), datastore, QString(), emitSnapErr, emitSnapOk);
+                });
+            }
+        };
+
+        handleFinishedReply(r, 0, QStringLiteral("pbs-datastores"), QString(), QString(), emitErr, emitOk);
+    });
+}
+
+void ProxmoxClient::testPBSConnection(const QString &pbsHost,
+                                      int port,
+                                      const QString &tokenId,
+                                      const QString &tokenSecret,
+                                      bool ignoreSslErrors,
+                                      const QByteArray &trustedCertPem,
+                                      const QString &trustedCertPath) {
+    if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] testPBSConnection host=%1 port=%2 tokenIdEmpty=%3 secretEmpty=%4 ignoreSsl=%5")
+        .arg(pbsHost, QString::number(port), tokenId.isEmpty() ? QStringLiteral("true") : QStringLiteral("false"), tokenSecret.isEmpty() ? QStringLiteral("true") : QStringLiteral("false"), ignoreSslErrors ? QStringLiteral("true") : QStringLiteral("false"));
+    if (pbsHost.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
+        emit pbsError(pbsHost, QStringLiteral("Not configured"));
+        return;
+    }
+
+    QNetworkRequest req = buildRequest(pbsHost, port, QStringLiteral("/version"), tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? 5000 : 10000);
+    req.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
+
+    QNetworkReply *r = m_nam.get(req);
+    m_pbsInFlight.insert(r);
+    if (ignoreSslErrors) {
+        QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
+            r->ignoreSslErrors();
+        });
+    }
+
+    QObject::connect(r, &QNetworkReply::finished, this, [this, r, pbsHost]() {
+        m_pbsInFlight.remove(r);
+        auto emitErr = [&](const QString &msg) {
+            if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] testPBSConnection error host=%1 message=%2").arg(pbsHost, msg);
+            emit pbsError(pbsHost, msg);
+        };
+        auto emitOk = [&](const QVariant &) {
+            if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] testPBSConnection ok host=%1").arg(pbsHost);
+            emit pbsConnectionOk(pbsHost);
+        };
+        handleFinishedReply(r, 0, QStringLiteral("pbs-version"), QString(), QString(), emitErr, emitOk);
     });
 }
 

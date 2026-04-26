@@ -6,11 +6,21 @@ import org.kde.kirigami as Kirigami
 Item {
     id: compactRoot
 
+    Rectangle {
+        anchors.fill: parent
+        visible: compactRoot.debugBounds
+        color: "transparent"
+        border.color: "magenta"
+        border.width: 1
+        z: 999
+    }
+
     property bool hasCoreConfig: false
     property string secretState: "idle"
     property bool configured: false
     property bool loading: false
     property bool isRefreshing: false
+    property bool debugBounds: false
     property string compactMode: "cpu"
     property int runningVMs: 0
     property int runningLXC: 0
@@ -22,23 +32,23 @@ Item {
     property var displayedEndpoints: []
     property var displayedProxmoxData: null
     property var safeCpuPercent: null
-    property var onToggleExpanded: null
 
     implicitWidth: compactLayout.implicitWidth
     implicitHeight: compactLayout.implicitHeight
 
     function averageCpuText() {
         if (typeof safeCpuPercent !== "function") return "-"
-
+            
         if (connectionMode === "multiHost") {
             if (!displayedEndpoints || displayedEndpoints.length === 0) return "-"
+
             var totalCpu = 0
             var onlineCount = 0
-            for (var ei = 0; ei < displayedEndpoints.length; ei++) {
-                var endpoint = displayedEndpoints[ei]
+            for (var eidx = 0; eidx < displayedEndpoints.length; eidx++) {
+                var endpoint = displayedEndpoints[eidx]
                 if (!endpoint || !endpoint.nodes) continue
-                for (var ni = 0; ni < endpoint.nodes.length; ni++) {
-                    var node = endpoint.nodes[ni]
+                for (var nidx = 0; nidx < endpoint.nodes.length; nidx++) {
+                    var node = endpoint.nodes[nidx]
                     if (node && node.status === "online") {
                         totalCpu += safeCpuPercent(node.cpu)
                         onlineCount++
@@ -49,44 +59,50 @@ Item {
             return Math.round(totalCpu / onlineCount) + "%"
         }
 
-        if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
-            var totalCpu2 = 0
-            var onlineCount2 = 0
-            for (var i = 0; i < displayedProxmoxData.data.length; i++) {
-                if (displayedProxmoxData.data[i].status === "online") {
-                    totalCpu2 += safeCpuPercent(displayedProxmoxData.data[i].cpu)
-                    onlineCount2++
-                }
-            }
-            if (onlineCount2 === 0) return "!"
-            return Math.round(totalCpu2 / onlineCount2) + "%"
-        }
+        if (!displayedProxmoxData || !displayedProxmoxData.data) return "-"
+        var node = displayedProxmoxData.data[0]
+        if (!node || node.status !== "online") return "!"
+        return Math.round(safeCpuPercent(node.cpu)) + "%"
+    }
 
-        return "-"
+    HoverHandler {
+        id: hoverHandler
+    }
+
+    TapHandler {
+        acceptedButtons: Qt.LeftButton
+        gesturePolicy: TapHandler.ReleaseWithinBounds
+        onTapped: root.expanded = !root.expanded
+    }
+
+    Rectangle {
+        anchors.fill: compactLayout
+        visible: compactRoot.debugBounds
+        color: "transparent"
+        border.color: "cyan"
+        border.width: 1
+        z: 998
+    }
+
+    TextMetrics {
+        id: labelMetrics
+        font.pixelSize: 13
+        text: "99%"
     }
 
     RowLayout {
         id: compactLayout
         anchors.centerIn: parent
         spacing: 4
-        Item { implicitWidth: 3 }
 
-        property bool hovered: compactMouseArea.containsMouse || iconMouseArea.containsMouse
+        Item { implicitWidth: 3 }
 
         Kirigami.Icon {
             id: proxmoxIcon
             source: Qt.resolvedUrl("../../icons/proxmox-monitor.svg")
             implicitWidth: 22
             implicitHeight: 22
-        
-            MouseArea {
-                id: iconMouseArea
-        
-        
-                anchors.fill: parent
-                hoverEnabled: true
-                onClicked: if (typeof compactRoot.onToggleExpanded === "function") compactRoot.onToggleExpanded()
-            }
+
 
             SequentialAnimation {
                 id: heartbeatAnimation
@@ -117,14 +133,12 @@ Item {
             Connections {
                 target: compactRoot
                 function onLoadingChanged() {
-                    if (!compactRoot.loading && !compactRoot.isRefreshing) {
+                    if (!compactRoot.loading && !compactRoot.isRefreshing)
                         proxmoxIcon.scale = 1.0
-                    }
                 }
                 function onIsRefreshingChanged() {
-                    if (!compactRoot.loading && !compactRoot.isRefreshing) {
+                    if (!compactRoot.loading && !compactRoot.isRefreshing)
                         proxmoxIcon.scale = 1.0
-                    }
                 }
             }
         }
@@ -157,16 +171,9 @@ Item {
                 return averageCpuText()
             }
             font.pixelSize: 13
+            Layout.minimumWidth: labelMetrics.width + 2
             rightPadding: compactRoot.compactMode === "lastUpdate" ? 20 : 0
-            color: compactLayout.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+            color: hoverHandler.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
         }
-        Item { implicitWidth: 3 }
-    }
-
-    MouseArea {
-        id: compactMouseArea
-        anchors.fill: parent
-        hoverEnabled: true
-        onClicked: if (typeof compactRoot.onToggleExpanded === "function") compactRoot.onToggleExpanded()
     }
 }

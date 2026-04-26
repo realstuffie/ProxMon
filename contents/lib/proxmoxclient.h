@@ -2,10 +2,13 @@
 
 #include <QObject>
 #include <QByteArray>
+#include <QList>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QSet>
 #include <QVariant>
+
+#include "pbstypes.h"
 
 class ProxmoxClient : public QObject {
     Q_OBJECT
@@ -15,6 +18,7 @@ class ProxmoxClient : public QObject {
     Q_PROPERTY(QString tokenId READ tokenId WRITE setTokenId NOTIFY tokenIdChanged)
     Q_PROPERTY(QString tokenSecret READ tokenSecret WRITE setTokenSecret NOTIFY tokenSecretChanged)
     Q_PROPERTY(bool ignoreSslErrors READ ignoreSslErrors WRITE setIgnoreSslErrors NOTIFY ignoreSslErrorsChanged)
+    Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
 
 public:
     explicit ProxmoxClient(QObject *parent = nullptr);
@@ -34,6 +38,9 @@ public:
 
     bool ignoreSslErrors() const { return m_ignoreSslErrors; }
     void setIgnoreSslErrors(bool v);
+
+    bool debugEnabled() const { return m_debugEnabled; }
+    void setDebugEnabled(bool value);
 
     //Low latency properties for quick updates, but require mutating object state and are not multi-session friendly.
     Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatency NOTIFY lowLatencyChanged)
@@ -94,6 +101,22 @@ public:
 
     // Abort any in-flight network requests (useful when refreshing or timing out).
     Q_INVOKABLE void cancelAll();
+    Q_INVOKABLE void cancelPVE();
+    Q_INVOKABLE void cancelPBS();
+    Q_INVOKABLE void fetchPBSDatastores(const QString &pbsHost,
+                                        int port,
+                                        const QString &tokenId,
+                                        const QString &tokenSecret,
+                                        bool ignoreSslErrors,
+                                        const QByteArray &trustedCertPem,
+                                        const QString &trustedCertPath);
+    Q_INVOKABLE void testPBSConnection(const QString &pbsHost,
+                                       int port,
+                                       const QString &tokenId,
+                                       const QString &tokenSecret,
+                                       bool ignoreSslErrors,
+                                       const QByteArray &trustedCertPem,
+                                       const QString &trustedCertPath);
 
 signals:
     void hostChanged();
@@ -101,6 +124,7 @@ signals:
     void tokenIdChanged();
     void tokenSecretChanged();
     void ignoreSslErrorsChanged();
+    void debugEnabledChanged();
     void trustedCertPemChanged();
     void trustedCertPathChanged();
     void lowLatencyChanged();
@@ -140,6 +164,13 @@ signals:
                         int vmid,
                         const QString &action,
                         const QString &message);
+    void pbsDatastoresReceived(const QString &pbsHost,
+                               const QList<QString> &datastores);
+    void pbsSnapshotsReceived(const QString &pbsHost,
+                              const QString &datastore,
+                              const QList<PBSSnapshot> &snapshots);
+    void pbsError(const QString &pbsHost, const QString &message);
+    void pbsConnectionOk(const QString &pbsHost);
 
 private:
     void request(const QString &path, int seq, const QString &kind, const QString &node);
@@ -197,8 +228,10 @@ private:
     QString m_tokenId;
     QString m_tokenSecret;
     bool m_ignoreSslErrors = false;
+    bool m_debugEnabled = false;
     QString m_trustedCertPem;
     QString m_trustedCertPath;
     bool m_lowLatency = false;
     QSet<QNetworkReply *> m_inFlight;
+    QSet<QNetworkReply *> m_pbsInFlight;
 };

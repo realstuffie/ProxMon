@@ -190,3 +190,19 @@ Triple-click the footer to enable:
 ### Known bugs / limitations
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
+
+### Compact representation click handling
+
+`Kirigami.Icon` silently absorbs mouse events in custom `compactRepresentation` items,
+preventing a parent `MouseArea` from receiving clicks over the icon area (KDE bug 518024,
+unresolved as of Plasma 6.6.3). Workaround: add a second `MouseArea` directly inside the
+`Kirigami.Icon` in addition to the root item's `MouseArea`.
+
+`activationTogglesExpanded` is not used — both `MouseArea` handlers call
+`root.expanded = !root.expanded` directly to avoid double-toggle.
+
+A `HoverHandler` nested inside the root `MouseArea` provides hover highlighting passively
+without consuming click events. The root `MouseArea` is bounded to `compactLayout` rather
+than `parent` to avoid overlapping adjacent applet click areas. A `TextMetrics` item
+measuring `"99%"` provides a stable minimum label width to prevent layout shifting as CPU
+values change between one and two digits.

@@ -6,6 +6,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 - **Real-time monitoring** — Node status (CPU, Memory, Uptime)
 - **VM & Container tracking** — All VMs and LXC containers with status
+- **PBS Backup status** -  Inline PBS backup results within each VM/CT row
 - **Multi-node cluster support**
 - **Desktop notifications** — State change alerts with rate limiting and filters
 - **Power commands** — Start, Stop, Restart VMs/CTs
@@ -14,7 +15,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - **Tint + opacity tuning** — Adjust card tint strength and expanded window opacity
 - **Flexible compact label** — Show average CPU, running workloads, error state, or last update time in the panel
 - **Theme integration** — Adapts to your Plasma theme and lets you fall back to theme defaults anytime
-- **Developer mode** — Triple-click footer for verbose logging
+- **Developer mode** — Triple-click footer for verbose logging (logging is strictly santized before output)
 
 ## Screenshots
 
@@ -77,10 +78,10 @@ bash install.sh --no-deps
 
 ### Minimum Permissions
 
-| Permission  | Path   | Purpose                        |
-|-------------|--------|--------------------------------|
-| `Sys.Audit` | `/`    | Read node status               |
-| `VM.Audit`  | `/vms` | Read VM & container status     |
+| Permission          | Path                 | Purpose                              |
+|---------------------|----------------------|--------------------------------------|
+| `Sys.Audit`         | `/`                  | Read node status                     |
+| `VM.Audit`          | `/vms`               | Read VM & container status           |
 
 ### Power Action Permissions
 
@@ -99,6 +100,23 @@ pveum aclmod / -user monitor@pve -role PVEAuditor
 pveum user token add monitor@pve plasma-monitor
 ```
 
+## Proxmox Backup Server API Token Setup
+
+1. Go to **Configuration → Access Control → Users → Add** and create a user e.g. `proxmon@pbs`
+2. Go to **Configuration → Access Control → API Tokens → Add**, select the user and set a token name
+3. Go to **Configuration → Access Control → Permissions → Add**
+   - Path: `/datastore/YourDatastoreName`
+   - Role: `DatastoreReader`
+   - Copy the token secret — shown only once
+
+### Minimum PBS Permissions
+
+| Role                         | Path                | Purpose                              |
+|------------------------------|---------------------|--------------------------------------|
+| `DatastoreReader` (built-in) | `/datastore/<name>` | Read datastore and snapshot listings |
+
+Token ID format: `user@pbs!tokenname`
+
 ## Configuration
 
 1. Right-click the widget → **Configure Proxmox Monitor**
@@ -112,10 +130,10 @@ pveum user token add monitor@pve plasma-monitor
 ### Connection errors / "!" indicator
 
 - Verify token ID format: `user@realm!tokenname`
-- For self-signed Proxmox certs, prefer adding the Proxmox root CA PEM (usually `/etc/pve/pve-root-ca.pem`) in widget settings before using **Ignore SSL**
-- Trusted certs only fix issuer trust; the configured host must still match a hostname or IP SAN on the server certificate
-- If your Proxmox cert is valid only for an internal hostname, add local DNS or an `/etc/hosts` entry and use that hostname in the widget instead of the raw IP
-- Check port 8006 is accessible
+- For self-signed Proxmox certs, prefer adding the Proxmox root CA PEM (usually `/etc/pve/pve-root-ca.pem`) in widget settings before using **Ignore SSL**.
+- Trusted certs only fix issuer trust; the configured host must still match a hostname or IP SAN on the server certificate.
+- If your Proxmox cert is valid only for an internal hostname, add local DNS or an `/etc/hosts` entry and use that hostname in the widget instead of the raw IP.
+- Check port 8006 is accessible.
 
 ### Icons not showing
 
@@ -173,6 +191,14 @@ Open an issue with your KDE Plasma version (`plasmashell --version`), Proxmox VE
 GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
+
+### v0.5.1
+
+- PBS integration: optional Proxmox Backup Server support per endpoint
+- Backup status badges inline on VM and container rows (green/amber/red)
+- Separate hourly PBS poll timer independent of PVE refresh
+- Per-endpoint configurable warning and stale thresholds
+- PBS secret stored securely in keyring matching existing PVE handoff pattern
 
 ### v0.5.0
 

@@ -57,9 +57,6 @@ Rectangle {
         Item { Layout.fillWidth: true }
 
         RowLayout {
-            Layout.preferredWidth: 68
-            Layout.minimumWidth: 68
-            Layout.maximumWidth: 68
             Layout.alignment: Qt.AlignVCenter
             spacing: 1
 
@@ -72,9 +69,6 @@ Rectangle {
                 font.pixelSize: 10
                 opacity: 0.7
                 horizontalAlignment: Text.AlignRight
-                Layout.preferredWidth: 32
-                Layout.minimumWidth: 32
-                Layout.maximumWidth: 32
             }
 
             PlasmaComponents.Label {
@@ -96,10 +90,39 @@ Rectangle {
                 font.pixelSize: 10
                 opacity: 0.7
                 horizontalAlignment: Text.AlignLeft
-                Layout.preferredWidth: 32
-                Layout.minimumWidth: 32
-                Layout.maximumWidth: 32
                 Layout.leftMargin: 2
+            }
+        }
+
+        Row {
+            spacing: 4
+            Layout.leftMargin: 4
+            Layout.preferredWidth: 50
+            opacity: (root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0) ? 1 : 0
+
+            Rectangle {
+                width: 8
+                height: 8
+                radius: 4
+                anchors.verticalCenter: parent.verticalCenter
+                color: {
+                    switch (root.ctModel ? root.ctModel.backupStatus : 0) {
+                    case 1: return Kirigami.Theme.positiveTextColor
+                    case 2: return Kirigami.Theme.neutralTextColor
+                    case 3: return Kirigami.Theme.negativeTextColor
+                    case 4: return Kirigami.Theme.negativeTextColor
+                    default: return "transparent"
+                    }
+                }
+            }
+
+            PlasmaComponents.Label {
+                text: root.ctModel ? (root.ctModel.lastBackupDisplay || "") : ""
+                font.pixelSize: 8
+                opacity: 0.8
+                color: root.ctModel && root.ctModel.verifyState === "failed"
+                    ? Kirigami.Theme.negativeTextColor
+                    : Kirigami.Theme.textColor
             }
         }
 
