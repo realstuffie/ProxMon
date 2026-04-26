@@ -6,6 +6,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 - **Real-time monitoring** — Node status (CPU, Memory, Uptime)
 - **VM & Container tracking** — All VMs and LXC containers with status
+- **PBS Backup status** -  Inline PBS backup results within each VM/CT row
 - **Multi-node cluster support**
 - **Desktop notifications** — State change alerts with rate limiting and filters
 - **Power commands** — Start, Stop, Restart VMs/CTs
@@ -14,7 +15,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 - **Tint + opacity tuning** — Adjust card tint strength and expanded window opacity
 - **Flexible compact label** — Show average CPU, running workloads, error state, or last update time in the panel
 - **Theme integration** — Adapts to your Plasma theme and lets you fall back to theme defaults anytime
-- **Developer mode** — Triple-click footer for verbose logging
+- **Developer mode** — Triple-click footer for verbose logging (logging is strictly santized before output)
 
 ## Screenshots
 

@@ -38,16 +38,17 @@ Item {
 
     function averageCpuText() {
         if (typeof safeCpuPercent !== "function") return "-"
-
+            
         if (connectionMode === "multiHost") {
             if (!displayedEndpoints || displayedEndpoints.length === 0) return "-"
+
             var totalCpu = 0
             var onlineCount = 0
-            for (var ei = 0; ei < displayedEndpoints.length; ei++) {
-                var endpoint = displayedEndpoints[ei]
+            for (var eidx = 0; eidx < displayedEndpoints.length; eidx++) {
+                var endpoint = displayedEndpoints[eidx]
                 if (!endpoint || !endpoint.nodes) continue
-                for (var ni = 0; ni < endpoint.nodes.length; ni++) {
-                    var node = endpoint.nodes[ni]
+                for (var nidx = 0; nidx < endpoint.nodes.length; nidx++) {
+                    var node = endpoint.nodes[nidx]
                     if (node && node.status === "online") {
                         totalCpu += safeCpuPercent(node.cpu)
                         onlineCount++
@@ -58,20 +59,10 @@ Item {
             return Math.round(totalCpu / onlineCount) + "%"
         }
 
-        if (displayedProxmoxData && displayedProxmoxData.data && displayedProxmoxData.data[0]) {
-            var totalCpu2 = 0
-            var onlineCount2 = 0
-            for (var i = 0; i < displayedProxmoxData.data.length; i++) {
-                if (displayedProxmoxData.data[i].status === "online") {
-                    totalCpu2 += safeCpuPercent(displayedProxmoxData.data[i].cpu)
-                    onlineCount2++
-                }
-            }
-            if (onlineCount2 === 0) return "!"
-            return Math.round(totalCpu2 / onlineCount2) + "%"
-        }
-
-        return "-"
+        if (!displayedProxmoxData || !displayedProxmoxData.data) return "-"
+        var node = displayedProxmoxData.data[0]
+        if (!node || node.status !== "online") return "!"
+        return Math.round(safeCpuPercent(node.cpu)) + "%"
     }
 
     HoverHandler {
