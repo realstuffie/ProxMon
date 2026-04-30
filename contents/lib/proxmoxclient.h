@@ -99,6 +99,16 @@ public:
                                       const QString &action,
                                       int seq);
 
+    Q_INVOKABLE void requestVncProxy(const QString &sessionKey,
+                                  const QString &host,
+                                  int port,
+                                  const QString &tokenId,
+                                  const QString &tokenSecret,
+                                  bool ignoreSslErrors,
+                                  const QString &node,
+                                  const QString &kind,
+                                  int vmid);
+
     // Abort any in-flight network requests (useful when refreshing or timing out).
     Q_INVOKABLE void cancelAll();
     Q_INVOKABLE void cancelPVE();
@@ -128,6 +138,18 @@ signals:
     void trustedCertPemChanged();
     void trustedCertPathChanged();
     void lowLatencyChanged();
+    void vncProxyReady(const QString &sessionKey,
+                   const QString &host,
+                   const QString &node,
+                   const QString &kind,
+                   int vmid,
+                   int vncPort,
+                   const QString &ticket);
+    void vncProxyError(const QString &sessionKey,
+                   const QString &node,
+                   const QString &kind,
+                   int vmid,
+                   const QString &message);
 
     // kind: "nodes" | "qemu" | "lxc"
     void reply(int seq, const QString &kind, const QString &node, const QVariant &data);

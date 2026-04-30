@@ -23,6 +23,7 @@ Rectangle {
     property var anonymizeVmId: null
     property var anonymizeLxcName: null
     property var onAction: null
+    property var onConsole: null
 
     Layout.fillWidth: true
     Layout.preferredHeight: uiRowHeight
@@ -137,9 +138,9 @@ Rectangle {
 
         RowLayout {
             spacing: Kirigami.Units.smallSpacing
-            Layout.preferredWidth: 70
-            Layout.minimumWidth: 70
-            Layout.maximumWidth: 70
+            Layout.preferredWidth: 92
+            Layout.minimumWidth: 92
+            Layout.maximumWidth: 92
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             Layout.preferredHeight: 28
             Layout.minimumHeight: 28
@@ -217,6 +218,25 @@ Rectangle {
                 onClicked: if (typeof root.onAction === "function") root.onAction("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name, "reboot")
             }
             Item { implicitWidth: 22; implicitHeight: 22; visible: !root.ctModel || root.busy || root.ctModel.status !== "running" }
+            PlasmaComponents.ToolButton {
+                flat: true
+                icon.name: "utilities-terminal"
+                implicitWidth: 22
+                implicitHeight: 22
+                visible: root.ctModel && root.ctModel.status === "running"
+
+                PlasmaComponents.ToolTip { text: "Open Console" }
+
+                background: Rectangle {
+                    radius: 4
+                    color: parent.hovered
+                        ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                        : "transparent"
+                }
+
+                onClicked: if (typeof root.onConsole === "function") root.onConsole("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name)
+            }
+            Item { implicitWidth: 22; implicitHeight: 22; visible: !root.ctModel || root.ctModel.status !== "running" }
         }
 
         Item {

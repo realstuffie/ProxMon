@@ -170,6 +170,11 @@ public:
                                const QString &node,
                                int vmid,
                                const QString &action);
+    Q_INVOKABLE void openConsole(const QString &sessionKey,
+                              const QString &kind,
+                              const QString &node,
+                              int vmid,
+                              const QString &vmName);
 
 signals:
     void connectionModeChanged();
@@ -236,6 +241,18 @@ signals:
                      const QString &message);
     void pbsTestSucceeded(const QString &pbsHost);
     void pbsTestFailed(const QString &pbsHost, const QString &message);
+
+    void consoleReady(const QString &host,
+                  const QString &node,
+                  const QString &kind,
+                  int vmid,
+                  const QString &vmName,
+                  int vncPort,
+                  const QString &ticket);
+    void consoleError(const QString &node,
+                  const QString &kind,
+                  int vmid,
+                  const QString &message);
 
 private:
     void setSecretState(const QString &value);

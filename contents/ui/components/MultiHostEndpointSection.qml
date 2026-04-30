@@ -41,6 +41,7 @@ ColumnLayout {
     property string armedActionSessionKey: ""
     property var onToggleCollapsed: null
     property var onAction: null
+    property var onConsole: null
 
     Layout.fillWidth: true
     Layout.alignment: Qt.AlignTop
@@ -138,6 +139,7 @@ ColumnLayout {
             armedActionSessionKey: root.armedActionSessionKey
             onToggleCollapsed: root.onToggleCollapsed
             onAction: root.onAction
+            onConsole: root.onConsole
         }
     }
 }

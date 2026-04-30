@@ -9,6 +9,7 @@ import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.plasma.core as PlasmaCore
 import "components"
 import "../lib/proxmox" as ProxMon
+import "components"
 
 PlasmoidItem {
     id: root
@@ -116,6 +117,10 @@ PlasmoidItem {
                 root.fetchData()
             }
         }
+    }
+    Component {
+        id: consoleComponent
+        VncConsole {}
     }
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
@@ -1259,6 +1264,19 @@ PlasmoidItem {
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
+        function onConsoleReady(host, node, kind, vmid, vmName, vncPort, ticket) {
+            consoleComponent.createObject(root, {
+                host: host,
+                nodeName: node,
+                vmid: vmid,
+                vmName: vmName || (kind + " " + vmid),
+                vncPort: vncPort,
+                vncTicket: ticket
+            })
+        }
+        function onConsoleError(node, kind, vmid, message) {
+            errorMessage = "Console failed: " + message
+        }
         function onActionError(sessionKey, actionKind, node, vmid, action, message) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
             errorMessage = message || ("Action failed: " + action)
@@ -1726,6 +1744,9 @@ PlasmoidItem {
                         onAction: function(kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunAction(kind, nodeName, vmid, displayName, action)
                         }
+                        onConsole: function(kind, nodeName, vmid, displayName) {
+                            controller.openConsole("", kind, nodeName, vmid, displayName)
+                        }
                     }
                 }
 
@@ -1772,6 +1793,9 @@ PlasmoidItem {
                         armedActionSessionKey: root.armedActionKey.indexOf("::") !== -1 ? root.armedActionKey.split("::")[0] : ""
                         onToggleCollapsed: function(nodeName, sessionKey) {
                             root.toggleNodeCollapsed(nodeName, sessionKey)
+                        }
+                        onConsole: function(sessionKey, kind, nodeName, vmid, displayName) {
+                            controller.openConsole(sessionKey, kind, nodeName, vmid, displayName)
                         }
                         onAction: function(sessionKey, kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunActionForSession(sessionKey, kind, nodeName, vmid, displayName, action)

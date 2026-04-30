@@ -812,3 +812,87 @@ void ProxmoxClient::pollTaskStatus(const QString &sessionKey,
                             });
     });
 }
+
+void ProxmoxClient::requestVncProxy(const QString &sessionKey,
+                                     const QString &host,
+                                     int port,
+                                     const QString &tokenId,
+                                     const QString &tokenSecret,
+                                     bool ignoreSslErrors,
+                                     const QString &node,
+                                     const QString &kind,
+                                     int vmid)
+    {
+    if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
+        emit vncProxyError(sessionKey, node, kind, vmid, QStringLiteral("Not configured"));
+        return;
+    }
+
+    const QString path = QStringLiteral("/nodes/%1/%2/%3/vncproxy")
+                             .arg(node).arg(kind).arg(vmid);
+
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,
+                                       m_trustedCertPem.toUtf8(), m_trustedCertPath);
+
+    // websocket=1 tells Proxmox to prepare a WebSocket-compatible VNC session
+    QByteArray body = "websocket=1";
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QNetworkReply *r = m_nam.post(req, body);
+    m_inFlight.insert(r);
+
+    if (ignoreSslErrors) {
+        QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
+            r->ignoreSslErrors();
+        });
+    }
+
+    QObject::connect(r, &QNetworkReply::finished, this,
+        [this, r, sessionKey, host, node, kind, vmid]() {
+            m_inFlight.remove(r);
+
+            const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+            const int httpStatus = httpAttr.isValid() ? httpAttr.toInt() : 0;
+            const QByteArray body = r->readAll();
+
+            auto fail = [&](const QString &msg) {
+                emit vncProxyError(sessionKey, node, kind, vmid,
+                                   QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+                r->deleteLater();
+            };
+
+            if (r->error() != QNetworkReply::NoError) {
+                if (r->error() == QNetworkReply::OperationCanceledError) {
+                    r->deleteLater();
+                    return;
+                }
+                fail(r->errorString());
+                return;
+            }
+
+            if (httpStatus >= 400) {
+                fail(QStringLiteral("HTTP error"));
+                return;
+            }
+
+            QJsonParseError pe;
+            const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+            if (pe.error != QJsonParseError::NoError || doc.isNull()) {
+                fail(QStringLiteral("JSON parse error: %1").arg(pe.errorString()));
+                return;
+            }
+
+            const QVariantMap data = doc.toVariant().toMap()
+                                         .value(QStringLiteral("data")).toMap();
+            const int vncPort   = data.value(QStringLiteral("port")).toInt();
+            const QString ticket = data.value(QStringLiteral("ticket")).toString();
+
+            if (ticket.isEmpty() || vncPort == 0) {
+                fail(QStringLiteral("Invalid vncproxy response"));
+                return;
+            }
+
+            emit vncProxyReady(sessionKey, host, node, kind, vmid, vncPort, ticket);
+            r->deleteLater();
+        });
+}

@@ -48,6 +48,12 @@ ProxmoxController::ProxmoxController(QObject *parent)
     connect(m_api, &ProxmoxClient::actionErrorFor, this, [this](int, const QString &sessionKey, const QString &actionKind, const QString &node, int vmid, const QString &action, const QString &message) {
         emit actionError(sessionKey, actionKind, node, vmid, action, message);
     });
+    connect(m_api, &ProxmoxClient::vncProxyReady, this, [this](const QString &, const QString &host, const QString &node, const QString &kind, int vmid, int vncPort, const QString &ticket) {
+        emit consoleReady(host, node, kind, vmid, QString(), vncPort, ticket);
+    });
+    connect(m_api, &ProxmoxClient::vncProxyError, this, [this](const QString &, const QString &node, const QString &kind, int vmid, const QString &message) {
+        emit consoleError(node, kind, vmid, message);
+    });
     connect(m_api, &ProxmoxClient::pbsSnapshotsReceived, this, [this](const QString &pbsHost, const QString &, const QList<PBSSnapshot> &snapshots) {
         if (!m_pbsRefreshError.isEmpty()) {
             m_pbsRefreshError.clear();
@@ -601,6 +607,37 @@ bool ProxmoxController::runAction(const QString &sessionKey,
     return true;
 }
 
+void ProxmoxController::openConsole(const QString &sessionKey,
+                                     const QString &kind,
+                                     const QString &node,
+                                     int vmid,
+                                     const QString &vmName)
+{
+    if (sessionKey.isEmpty()) {
+        readSingleSecretFor({
+            {QStringLiteral("kind"), QStringLiteral("console")},
+            {QStringLiteral("actionKind"), kind},
+            {QStringLiteral("node"), node},
+            {QStringLiteral("vmid"), vmid},
+            {QStringLiteral("vmName"), vmName},
+        });
+        return;
+    }
+    const QVariantMap endpoint = endpointBySession(sessionKey);
+    if (endpoint.isEmpty()) {
+        emit consoleError(node, kind, vmid, QStringLiteral("Endpoint not found"));
+        return;
+    }
+    readMultiSecretFor({
+        {QStringLiteral("kind"), QStringLiteral("console")},
+        {QStringLiteral("sessionKey"), sessionKey},
+        {QStringLiteral("actionKind"), kind},
+        {QStringLiteral("node"), node},
+        {QStringLiteral("vmid"), vmid},
+        {QStringLiteral("vmName"), vmName},
+    });
+}
+
 void ProxmoxController::setSecretState(const QString &value) {
     if (m_secretState == value) return;
     appendDebugLog(QStringLiteral("[ProxmoxController] secretState %1 -> %2").arg(m_secretState, value));
@@ -925,13 +962,23 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
             dispatchSingleFetchWithSecret(secret);
             return;
         }
-
         if (kind == QStringLiteral("action")) {
             dispatchSingleActionWithSecret(request.value(QStringLiteral("actionKind")).toString(),
                                            request.value(QStringLiteral("node")).toString(),
                                            request.value(QStringLiteral("vmid")).toInt(),
                                            request.value(QStringLiteral("action")).toString(),
                                            secret);
+        }
+        if (kind == QStringLiteral("console")) {
+            m_api->requestVncProxy(QString(),
+                                   m_host,
+                                   m_port,
+                                   m_tokenId,
+                                   secret,
+                                   m_ignoreSsl,
+                                   request.value(QStringLiteral("node")).toString(),
+                                   request.value(QStringLiteral("actionKind")).toString(),
+                                   request.value(QStringLiteral("vmid")).toInt());
         }
     }, Qt::SingleShotConnection);
     connect(m_singleSecretStore, &SecretStore::error, this, [this, request](const QString &) {
@@ -940,7 +987,12 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
             dispatchSingleFetchWithSecret(QString());
             return;
         }
-
+        if (kind == QStringLiteral("console")) {
+            emit consoleError(request.value(QStringLiteral("node")).toString(),
+                              request.value(QStringLiteral("actionKind")).toString(),
+                              request.value(QStringLiteral("vmid")).toInt(),
+                              QStringLiteral("credentials unavailable"));
+        }
         if (kind == QStringLiteral("action")) {
             emit actionError(QString(),
                              request.value(QStringLiteral("actionKind")).toString(),

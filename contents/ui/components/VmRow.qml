@@ -23,6 +23,7 @@ Rectangle {
     property var anonymizeVmId: null
     property var anonymizeVmName: null
     property var onAction: null
+    property var onConsole: null
 
     Layout.fillWidth: true
     Layout.preferredHeight: uiRowHeight
@@ -137,9 +138,9 @@ Rectangle {
 
         RowLayout {
             spacing: Kirigami.Units.smallSpacing
-            Layout.preferredWidth: 70
-            Layout.minimumWidth: 70
-            Layout.maximumWidth: 70
+            Layout.preferredWidth: 92
+            Layout.minimumWidth: 92
+            Layout.maximumWidth: 92
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             Layout.preferredHeight: 28
             Layout.minimumHeight: 28
@@ -218,6 +219,26 @@ Rectangle {
             }
             Item { implicitWidth: 22; implicitHeight: 22; visible: !root.vmModel || root.busy || root.vmModel.status !== "running" }
         }
+
+        PlasmaComponents.ToolButton {
+                flat: true
+                icon.name: "utilities-terminal"
+                implicitWidth: 22
+                implicitHeight: 22
+                visible: root.vmModel && root.vmModel.status === "running"
+
+                PlasmaComponents.ToolTip { text: "Open Console" }
+
+                background: Rectangle {
+                    radius: 4
+                    color: parent.hovered
+                        ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                        : "transparent"
+                }
+
+                onClicked: if (typeof root.onConsole === "function") root.onConsole("qemu", root.nodeName, root.vmModel.vmid, root.vmModel.name)
+            }
+            Item { implicitWidth: 22; implicitHeight: 22; visible: !root.vmModel || root.vmModel.status !== "running" }
 
         Item {
             Layout.preferredWidth: root.scrollbarReserve
