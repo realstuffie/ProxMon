@@ -6,7 +6,8 @@ import org.kde.kcmutils as KCM
 
 KCM.SimpleKCM {
     id: root
-
+    /* Connection-tab cfg_* keys are also injected into every KCM page by Plasma.
+       Declare inert placeholders here. */
     property string cfg_proxmoxHost: ""
     property string cfg_proxmoxHostDefault: ""
     property int cfg_proxmoxPort: 8006
@@ -31,6 +32,12 @@ KCM.SimpleKCM {
     property int cfg_pbsBackupStaleDaysDefault: 14
     property int cfg_pbsRefreshInterval: 3600
     property int cfg_pbsRefreshIntervalDefault: 3600
+    property string cfg_pbsExcludeTag: ""
+    property string cfg_pbsExcludeTagDefault: ""
+    property string cfg_pbsExcludeVmids: ""
+    property string cfg_pbsExcludeVmidsDefault: ""
+    property string cfg_pbsTokenSecretBuffer: ""
+    property string cfg_pbsTokenSecretBufferDefault: ""
     property string cfg_trustedCertPem: ""
     property string cfg_trustedCertPemDefault: ""
     property string cfg_trustedCertPath: ""

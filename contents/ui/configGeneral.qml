@@ -49,6 +49,9 @@ KCM.SimpleKCM {
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
     property alias cfg_enableNotifications: enableNotificationsCheck.checked
+    property string cfg_pbsExcludeVmids: ""
+    property string cfg_pbsExcludeTag: ""
+
 
     // Multi-host mode (cfg_* values are provided by the KCM engine)
     property string cfg_connectionMode: "single"
@@ -111,6 +114,8 @@ KCM.SimpleKCM {
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSslDefault: true
     property bool cfg_enableNotificationsDefault: true
+    property string cfg_pbsExcludeVmidsDefault: ""
+    property string cfg_pbsExcludeTagDefault: ""
 
     // Auto-retry defaults
     property bool cfg_autoRetryDefault: true

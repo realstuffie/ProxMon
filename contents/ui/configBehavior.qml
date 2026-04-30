@@ -7,9 +7,8 @@ import org.kde.kcmutils as KCM
 KCM.SimpleKCM {
     id: root
 
-    // Connection-tab cfg_* keys are also injected into every KCM page by Plasma.
-    // Declare inert placeholders here so configBehavior.qml accepts the initial
-    // property set instead of warning about missing properties.
+    /* Connection-tab cfg_* keys are also injected into every KCM page by Plasma.
+       Declare inert placeholders here. */
     property string cfg_proxmoxHost: ""
     property string cfg_proxmoxHostDefault: ""
     property int cfg_proxmoxPort: 8006
@@ -38,6 +37,8 @@ KCM.SimpleKCM {
     property string cfg_pbsExcludeTagDefault: ""
     property string cfg_pbsExcludeVmids: ""
     property string cfg_pbsExcludeVmidsDefault: ""
+    property string cfg_pbsTokenSecretBuffer: ""
+    property string cfg_pbsTokenSecretBufferDefault: ""
     property int cfg_refreshInterval: 30
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSsl: true
@@ -55,14 +56,14 @@ KCM.SimpleKCM {
     property int cfg_retryMaxSeconds: 300
     property int cfg_retryMaxSecondsDefault: 300
 
-    // Bind cfg_* keys to the actual controls (KDE Plasma config convention).
-    // This ensures Apply/Cancel works and values persist via Plasmoid.configuration.
-    //
-    // IMPORTANT:
-    // Avoid adding custom properties directly onto QQC2.ComboBox. Some Plasma/Qt
-    // versions will throw "Cannot override FINAL property" which prevents the
-    // entire KCM page (Behavior tab) from loading.
-    // Store the selected value in a separate QtObject and alias to it.
+    /*  Bind cfg_* keys to the actual controls (KDE Plasma config convention).
+        This ensures Apply/Cancel works and values persist via Plasmoid.configuration.
+     
+        IMPORTANT:
+        Avoid adding custom properties directly onto QQC2.ComboBox. Some Plasma/Qt
+        versions will throw "Cannot override FINAL property" which prevents the
+        entire KCM page (Behavior tab) from loading.
+        Store the selected value in a separate QtObject and alias to it. */
     QtObject {
         id: sortingValue
         property string value: "status"
