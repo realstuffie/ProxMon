@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(proxmoxclientplugin LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-find_package(Qt6 REQUIRED COMPONENTS Core Network Qml DBus Gui)
+find_package(Qt6 REQUIRED COMPONENTS Core Network Qml DBus Gui Quick)
 set(CMAKE_AUTOMOC ON)
 set(QT_QML_LINT_OPTIONS --disable-warning unqualified)
 # Bundled dependency: QtKeychain (stores secrets in the desktop keyring: KWallet/libsecret/etc)
@@ -39,6 +39,8 @@ qt_add_library(proxmoxclientplugin SHARED
     notifier.h
     vncclient.cpp
     vncclient.h
+    vncframeview.cpp
+    vncframeview.h
 )
 
 target_include_directories(proxmoxclientplugin PRIVATE
@@ -51,6 +53,7 @@ target_link_libraries(proxmoxclientplugin PRIVATE
     Qt6::Qml
     Qt6::DBus
     Qt6::Gui
+    Qt6::Quick
     qt6keychain
     ${LIBVNCCLIENT_LIBRARIES}
 )

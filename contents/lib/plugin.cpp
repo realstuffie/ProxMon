@@ -5,6 +5,7 @@
 #include "secretstore.h"
 #include "notifier.h"
 #include "vncclient.h"
+#include "vncframeview.h"
 
 class ProxmoxClientPlugin : public QQmlExtensionPlugin {
     Q_OBJECT
@@ -16,6 +17,7 @@ public:
         qmlRegisterType<ProxmoxController>(uri, 1, 0, "ProxmoxController");
         qmlRegisterType<SecretStore>(uri, 1, 0, "SecretStore");
         qmlRegisterType<Notifier>(uri, 1, 0, "Notifier");
+        qmlRegisterType<VncFrameView>(uri, 1, 0, "VncFrameView");
         qmlRegisterType<VncClient>(uri, 1, 0, "VncClient");
     }
 };
