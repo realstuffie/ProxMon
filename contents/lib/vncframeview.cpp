@@ -18,6 +18,7 @@ void VncFrameView::paint(QPainter *painter)
 {
     QMutexLocker lock(&m_mutex);
     if (m_frame.isNull()) return;
+    painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
     painter->drawImage(QRectF(0, 0, width(), height()), m_frame);
 }
 

@@ -97,7 +97,7 @@ void VncClient::connectToVnc(const QString &host, int port, const QString &vncTi
     }
 
     setState(QStringLiteral("connected"));
-    m_pollTimer->start(33); // ~30fps poll
+    m_pollTimer->start(16); // ~60fps poll
     // Reset all modifier keys on connect
     SendKeyEvent(m_rfb, 0xFFE1, FALSE); // Shift
     SendKeyEvent(m_rfb, 0xFFE3, FALSE); // Ctrl
