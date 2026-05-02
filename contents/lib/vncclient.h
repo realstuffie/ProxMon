@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QImage>
+#include <QHash>
 #include <QTimer>
 
 struct _rfbClient;
@@ -27,8 +28,9 @@ public:
                                    int port,
                                    const QString &vncTicket);
     Q_INVOKABLE void disconnect();
-    Q_INVOKABLE void sendKeyEvent(quint32 key, bool pressed);
+    Q_INVOKABLE void sendKeyEvent(int qtKey, const QString &text, int location, bool pressed);
     Q_INVOKABLE void sendPointerEvent(int x, int y, int buttonMask);
+    Q_INVOKABLE void allKeysUp();
 
 signals:
     void stateChanged();
@@ -37,6 +39,7 @@ signals:
     void errorOccurred(const QString &message);
 
 private:
+    QHash<quint32, quint32> m_keyDownList;
     void setState(const QString &state);
     void pollLoop();
     rfbClient *m_rfb = nullptr;

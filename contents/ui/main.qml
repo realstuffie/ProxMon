@@ -122,6 +122,7 @@ PlasmoidItem {
         id: consoleComponent
         VncConsole {}
     }
+    property var openConsoles: ({})
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl === true
@@ -1265,7 +1266,13 @@ PlasmoidItem {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
         function onConsoleReady(host, node, kind, vmid, vmName, vncPort, ticket) {
-            consoleComponent.createObject(root, {
+            var key = kind + ":" + vmid
+            if (openConsoles[key] && !openConsoles[key].closed) {
+                openConsoles[key].raise()
+                openConsoles[key].requestActivate()
+                return
+            }
+            var win = consoleComponent.createObject(root, {
                 host: host,
                 nodeName: node,
                 vmid: vmid,
@@ -1273,6 +1280,8 @@ PlasmoidItem {
                 vncPort: vncPort,
                 vncTicket: ticket
             })
+            openConsoles[key] = win
+            win.closing.connect(function() { delete openConsoles[key] })
         }
         function onConsoleError(node, kind, vmid, message) {
             errorMessage = "Console failed: " + message

@@ -169,20 +169,19 @@ Window {
 
             Keys.onPressed: function(event) {
                 if (vncClient && vncClient.state === "connected") {
-                    var key = event.key
-                    vncClient.sendKeyEvent(key, true)
+                    vncClient.sendKeyEvent(event.key, event.text, 0, true)
                     event.accepted = true
                 }
             }
             Keys.onReleased: function(event) {
                 if (vncClient && vncClient.state === "connected") {
-                    var key = event.key
-                    vncClient.sendKeyEvent(key, false)
+                    vncClient.sendKeyEvent(event.key, event.text, 0, false)
                     event.accepted = true
                 }
             }
 
             focus: true
+            onActiveFocusChanged: if (!activeFocus) vncClient.allKeysUp()
         }
 
         PlasmaComponents.Label {
