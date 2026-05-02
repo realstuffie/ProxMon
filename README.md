@@ -239,3 +239,4 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 - [Proxmox VE](https://www.proxmox.com/) - Virtualization platform
 - [KDE Plasma](https://kde.org/plasma-desktop/) - Desktop environment
+- [noVNC](https://github.com/novnc/noVNC) — DOM key table ported from `core/input/domkeytable.js`, licensed under MPL 2.0

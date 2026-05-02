@@ -31,7 +31,8 @@ public:
     Q_INVOKABLE void sendKeyEvent(int qtKey, const QString &text, int location, bool pressed);
     Q_INVOKABLE void sendPointerEvent(int x, int y, int buttonMask);
     Q_INVOKABLE void allKeysUp();
-
+    Q_INVOKABLE void resizeRemote(int width, int height);
+    
 signals:
     void stateChanged();
     void frameSizeChanged();

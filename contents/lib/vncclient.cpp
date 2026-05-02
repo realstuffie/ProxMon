@@ -89,6 +89,7 @@ void VncClient::connectToVnc(const QString &host, int port, const QString &vncTi
     };
     rfbClientSetClientData(m_rfb, (void*)1, strdup(ticket.toUtf8().constData()));
 
+    m_rfb->appData.encodingsString = "extdesktopsize zrle tight hextile raw";
     if (!rfbInitClient(m_rfb, nullptr, nullptr)) {
         m_rfb = nullptr; // rfbInitClient frees on failure
         setState(QStringLiteral("error"));
@@ -142,7 +143,8 @@ void VncClient::allKeysUp()
 void VncClient::sendPointerEvent(int x, int y, int buttonMask)
 {
     if (m_rfb) {
-        SendPointerEvent(m_rfb, x, y, buttonMask);
+        int vncMask = (buttonMask & 1) | ((buttonMask & 2) << 1) | ((buttonMask & 4) >> 1);
+        SendPointerEvent(m_rfb, x, y, vncMask);
     }
 }
 
@@ -176,4 +178,9 @@ void VncClient::setFrameSize(int w, int h)
     m_frameWidth  = w;
     m_frameHeight = h;
     emit frameSizeChanged();
+}
+void VncClient::resizeRemote(int width, int height)
+{
+    if (!m_rfb || width <= 0 || height <= 0) return;
+    SendExtDesktopSize(m_rfb, width, height);
 }

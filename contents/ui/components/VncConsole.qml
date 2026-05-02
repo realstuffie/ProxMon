@@ -7,6 +7,8 @@ import "../../lib/proxmox" as ProxMon
 
 Window {
     id: consoleWindow
+    onWidthChanged: if (vncClient && vncClient.state === "connected") vncClient.resizeRemote(width - 0, height - 36)
+    onHeightChanged: if (vncClient && vncClient.state === "connected") vncClient.resizeRemote(width - 0, height - 36)
 
     property string vmName: ""
     property string nodeName: ""
