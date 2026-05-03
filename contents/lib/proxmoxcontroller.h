@@ -242,7 +242,8 @@ signals:
     void pbsTestSucceeded(const QString &pbsHost);
     void pbsTestFailed(const QString &pbsHost, const QString &message);
 
-    void consoleReady(const QString &host,
+    void consoleReady(const QString &sessionKey,
+                  const QString &host,
                   const QString &node,
                   const QString &kind,
                   int vmid,

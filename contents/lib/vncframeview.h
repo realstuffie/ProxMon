@@ -14,7 +14,7 @@ public:
     void paint(QPainter *painter) override;
 
 public slots:
-    void updateFrame(const QImage &image);
+    void updateFrame(const QImage &image, int x, int y, int w, int h);
 
 private:
     QImage m_frame;

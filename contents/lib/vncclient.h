@@ -36,7 +36,7 @@ public:
 signals:
     void stateChanged();
     void frameSizeChanged();
-    void frameUpdated(const QImage &image);
+    void frameUpdated(const QImage &image, int x, int y, int w, int h);
     void errorOccurred(const QString &message);
 
 private:

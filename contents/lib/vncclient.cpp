@@ -43,11 +43,9 @@ static void updateCallback(rfbClient *client, int x, int y, int w, int h)
                  client->height,
                  client->width * 4,
                  QImage::Format_RGB32);
-    QMetaObject::invokeMethod(self, [self, img = frame.copy()]() {
-        emit self->frameUpdated(img);
+    QMetaObject::invokeMethod(self, [self, img = frame.copy(), x, y, w, h]() {
+        emit self->frameUpdated(img, x, y, w, h);
     }, Qt::QueuedConnection);
-
-    Q_UNUSED(x); Q_UNUSED(y); Q_UNUSED(w); Q_UNUSED(h);
 }
 
 VncClient::VncClient(QObject *parent)
@@ -89,7 +87,7 @@ void VncClient::connectToVnc(const QString &host, int port, const QString &vncTi
     };
     rfbClientSetClientData(m_rfb, (void*)1, strdup(ticket.toUtf8().constData()));
 
-    m_rfb->appData.encodingsString = "extdesktopsize zrle tight hextile raw";
+    m_rfb->appData.encodingsString = "tight zrle hextile raw";
     if (!rfbInitClient(m_rfb, nullptr, nullptr)) {
         m_rfb = nullptr; // rfbInitClient frees on failure
         setState(QStringLiteral("error"));
@@ -182,5 +180,6 @@ void VncClient::setFrameSize(int w, int h)
 void VncClient::resizeRemote(int width, int height)
 {
     if (!m_rfb || width <= 0 || height <= 0) return;
+    qDebug() << "[VNC resize]" << width << height;
     SendExtDesktopSize(m_rfb, width, height);
 }

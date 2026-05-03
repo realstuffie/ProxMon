@@ -1265,9 +1265,10 @@ PlasmoidItem {
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
-        function onConsoleReady(host, node, kind, vmid, vmName, vncPort, ticket) {
+        function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, ticket) {
             var key = kind + ":" + vmid
-            if (openConsoles[key] && !openConsoles[key].closed) {
+            if (openConsoles[key]) {
+                openConsoles[key].connectWithTicket(vncPort, ticket)
                 openConsoles[key].raise()
                 openConsoles[key].requestActivate()
                 return
@@ -1278,10 +1279,15 @@ PlasmoidItem {
                 vmid: vmid,
                 vmName: vmName || (kind + " " + vmid),
                 vncPort: vncPort,
-                vncTicket: ticket
+                vncTicket: ticket,
+                sessionKey: sessionKey,
+                kind: kind
             })
             openConsoles[key] = win
             win.closing.connect(function() { delete openConsoles[key] })
+            win.requestReconnect.connect(function() {
+                controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
+            })
         }
         function onConsoleError(node, kind, vmid, message) {
             errorMessage = "Console failed: " + message

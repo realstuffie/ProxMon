@@ -48,8 +48,8 @@ ProxmoxController::ProxmoxController(QObject *parent)
     connect(m_api, &ProxmoxClient::actionErrorFor, this, [this](int, const QString &sessionKey, const QString &actionKind, const QString &node, int vmid, const QString &action, const QString &message) {
         emit actionError(sessionKey, actionKind, node, vmid, action, message);
     });
-    connect(m_api, &ProxmoxClient::vncProxyReady, this, [this](const QString &, const QString &host, const QString &node, const QString &kind, int vmid, int vncPort, const QString &ticket) {
-        emit consoleReady(host, node, kind, vmid, QString(), vncPort, ticket);
+    connect(m_api, &ProxmoxClient::vncProxyReady, this, [this](const QString &sessionKey, const QString &host, const QString &node, const QString &kind, int vmid, int vncPort, const QString &ticket) {
+        emit consoleReady(sessionKey, host, node, kind, vmid, QString(), vncPort, ticket);
     });
     connect(m_api, &ProxmoxClient::vncProxyError, this, [this](const QString &, const QString &node, const QString &kind, int vmid, const QString &message) {
         emit consoleError(node, kind, vmid, message);

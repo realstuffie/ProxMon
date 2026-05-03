@@ -834,8 +834,7 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
     QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,
                                        m_trustedCertPem.toUtf8(), m_trustedCertPath);
 
-    // websocket=1 tells Proxmox to prepare a WebSocket-compatible VNC session
-    QByteArray body = "websocket=1";
+    QByteArray body = "";
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
     QNetworkReply *r = m_nam.post(req, body);

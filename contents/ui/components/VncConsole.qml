@@ -7,15 +7,22 @@ import "../../lib/proxmox" as ProxMon
 
 Window {
     id: consoleWindow
-    onWidthChanged: if (vncClient && vncClient.state === "connected") vncClient.resizeRemote(width - 0, height - 36)
-    onHeightChanged: if (vncClient && vncClient.state === "connected") vncClient.resizeRemote(width - 0, height - 36)
 
     property string vmName: ""
     property string nodeName: ""
     property int vmid: 0
+    property string sessionKey: ""
+    property string kind: "qemu"
     property string host: ""
     property int vncPort: 0
     property string vncTicket: ""
+    signal requestReconnect()
+    
+    function connectWithTicket(port, ticket) {
+        vncPort = port
+        vncTicket = ticket
+        vncClient.connectToVnc(host, port, ticket)
+    }
 
     title: "Console — " + vmName + " (" + nodeName + ")"
     width: 1024
@@ -27,15 +34,18 @@ Window {
     ProxMon.VncClient {
         id: vncClient
 
-        onFrameUpdated: function(image) {
-            vncCanvas.updateFrame(image)
+        onFrameUpdated: function(image, x, y, w, h) {
+            vncCanvas.updateFrame(image, x, y, w, h)
         }
 
         onStateChanged: {
             if (state === "error") {
-                statusLabel.text = "Connection error"
+                statusLabel.text = "Connection lost - reconnecting..."
+                reconnectTimer.start()
             } else if (state === "connected") {
                 statusLabel.text = ""
+                reconnectTimer.stop()
+                consoleWindow.reconnectAttempts = 0
             } else if (state === "connecting") {
                 statusLabel.text = "Connecting..."
             }
@@ -43,6 +53,20 @@ Window {
 
         onErrorOccurred: function(message) {
             statusLabel.text = message
+        }
+    }
+    property int reconnectAttempts: 0
+    Timer {
+        id: reconnectTimer
+        interval: 5000
+        repeat: false
+        onTriggered: {
+            if (consoleWindow.reconnectAttempts < 3) {
+                consoleWindow.reconnectAttempts += 1
+                requestReconnect()
+            } else {
+                statusLabel.text = "Connection lost - please reopen"
+            }
         }
     }
 
@@ -232,5 +256,6 @@ Window {
 
     onClosing: {
         vncClient.disconnect()
+        reconnectTimer.stop()
     }
 }
