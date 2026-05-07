@@ -1252,8 +1252,10 @@ PlasmoidItem {
     Connections {
         target: controller
         function onDisplayedEndpointsChanged() {
-            if (connectionMode !== "multiHost") return
             checkStateChanges()
+        }
+        function onErrorMessageChanged() {
+            if (controller.errorMessage !== "") root.errorMessage = controller.errorMessage
         }
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
