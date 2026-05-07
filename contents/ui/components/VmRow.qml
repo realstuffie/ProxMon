@@ -59,6 +59,9 @@ Rectangle {
         RowLayout {
             Layout.alignment: Qt.AlignVCenter
             spacing: 1
+            Layout.preferredWidth: 80
+            Layout.minimumWidth: 80
+            Layout.maximumWidth: 80
 
             PlasmaComponents.Label {
                 text: root.vmModel
@@ -69,6 +72,9 @@ Rectangle {
                 font.pixelSize: 10
                 opacity: 0.7
                 horizontalAlignment: Text.AlignRight
+                Layout.preferredWidth: 28
+                Layout.minimumWidth: 28
+                Layout.maximumWidth: 28
             }
 
             PlasmaComponents.Label {
@@ -90,6 +96,9 @@ Rectangle {
                 font.pixelSize: 10
                 opacity: 0.7
                 horizontalAlignment: Text.AlignLeft
+                Layout.preferredWidth: 36
+                Layout.minimumWidth: 36
+                Layout.maximumWidth: 36
                 Layout.leftMargin: 2
             }
         }
