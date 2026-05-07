@@ -895,3 +895,94 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
             r->deleteLater();
         });
 }
+
+void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
+                                    const QString &host,
+                                    int port,
+                                    const QString &tokenId,
+                                    const QString &tokenSecret,
+                                    bool ignoreSslErrors,
+                                    const QString &node,
+                                    int vmid)
+{
+    if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
+        emit ttyProxyError(sessionKey, node, vmid, QStringLiteral("Not configured"));
+        return;
+    }
+
+    // Proxmox endpoint is /termproxy (not /tty). Returns:
+    //   { port, ticket, user, upid }
+    // We need user + ticket for the websocket auth handshake.
+    const QString path = QStringLiteral("/nodes/%1/lxc/%2/termproxy")
+                             .arg(node).arg(vmid);
+
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,
+                                       m_trustedCertPem.toUtf8(), m_trustedCertPath);
+
+    QByteArray body = "";
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QNetworkReply *r = m_nam.post(req, body);
+    m_inFlight.insert(r);
+
+    if (ignoreSslErrors) {
+        QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
+            r->ignoreSslErrors();
+        });
+    }
+
+    // Pre-build the auth header now while we still have tokenId+secret in
+    // scope; the vncwebsocket upgrade needs the same one.
+    const QByteArray authHeader = QByteArray("PVEAPIToken=") + tokenId.toUtf8()
+                                  + "=" + tokenSecret.toUtf8();
+
+    QObject::connect(r, &QNetworkReply::finished, this,
+        [this, r, sessionKey, host, node, vmid, authHeader]() {
+            m_inFlight.remove(r);
+
+            const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+            const int httpStatus = httpAttr.isValid() ? httpAttr.toInt() : 0;
+            const QByteArray body = r->readAll();
+
+            auto fail = [&](const QString &msg) {
+                emit ttyProxyError(sessionKey, node, vmid,
+                                   QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+                r->deleteLater();
+            };
+
+            if (r->error() != QNetworkReply::NoError) {
+                if (r->error() == QNetworkReply::OperationCanceledError) {
+                    r->deleteLater();
+                    return;
+                }
+                fail(r->errorString());
+                return;
+            }
+
+            if (httpStatus >= 400) {
+                fail(QStringLiteral("HTTP error"));
+                return;
+            }
+
+            QJsonParseError pe;
+            const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+            if (pe.error != QJsonParseError::NoError || doc.isNull()) {
+                fail(QStringLiteral("JSON parse error: %1").arg(pe.errorString()));
+                return;
+            }
+
+            const QVariantMap data = doc.toVariant().toMap()
+                                         .value(QStringLiteral("data")).toMap();
+            const int ttyPort   = data.value(QStringLiteral("port")).toInt();
+            const QString ticket = data.value(QStringLiteral("ticket")).toString();
+            const QString user  = data.value(QStringLiteral("user")).toString();
+
+            if (ticket.isEmpty() || ttyPort == 0) {
+                fail(QStringLiteral("Invalid termproxy response"));
+                return;
+            }
+
+            emit ttyProxyReady(sessionKey, host, node, vmid, ttyPort, ticket, user, authHeader);
+            r->deleteLater();
+        });
+}

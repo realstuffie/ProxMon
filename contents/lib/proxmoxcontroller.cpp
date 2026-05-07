@@ -49,10 +49,33 @@ ProxmoxController::ProxmoxController(QObject *parent)
         emit actionError(sessionKey, actionKind, node, vmid, action, message);
     });
     connect(m_api, &ProxmoxClient::vncProxyReady, this, [this](const QString &sessionKey, const QString &host, const QString &node, const QString &kind, int vmid, int vncPort, const QString &ticket) {
-        emit consoleReady(sessionKey, host, node, kind, vmid, QString(), vncPort, ticket);
+        const QString vmKey = QStringLiteral("%1:%2:%3").arg(kind, node).arg(vmid);
+        const QString vmName = m_pendingConsoleNames.take(vmKey);
+        emit consoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, ticket);
     });
     connect(m_api, &ProxmoxClient::vncProxyError, this, [this](const QString &, const QString &node, const QString &kind, int vmid, const QString &message) {
+        m_pendingConsoleNames.remove(QStringLiteral("%1:%2:%3").arg(kind, node).arg(vmid));
         emit consoleError(node, kind, vmid, message);
+    });
+    connect(m_api, &ProxmoxClient::ttyProxyReady, this, [this](const QString &sessionKey, const QString &host, const QString &node, int vmid, int proxyPort, const QString &ticket, const QString &user, const QByteArray &authHeader) {
+        // Resolve api port + ignoreSsl + vmName: for single-host fall back to
+        // the controller-wide settings; for multi-host pull from the endpoint.
+        int apiPort = m_port;
+        bool ignoreSsl = m_ignoreSsl;
+        if (!sessionKey.isEmpty()) {
+            const QVariantMap endpoint = endpointBySession(sessionKey);
+            apiPort   = endpoint.value(QStringLiteral("port"), m_port).toInt();
+            ignoreSsl = endpoint.value(QStringLiteral("ignoreSsl"), m_ignoreSsl).toBool();
+        }
+        const QString vmKey = QStringLiteral("lxc:%1:%2").arg(node).arg(vmid);
+        const QString vmName = m_pendingConsoleNames.take(vmKey);
+        emit lxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName,
+                             proxyPort, ticket, user,
+                             QString::fromUtf8(authHeader), ignoreSsl);
+    });
+    connect(m_api, &ProxmoxClient::ttyProxyError, this, [this](const QString &, const QString &node, int vmid, const QString &message) {
+        m_pendingConsoleNames.remove(QStringLiteral("lxc:%1:%2").arg(node).arg(vmid));
+        emit consoleError(node, QStringLiteral("lxc"), vmid, message);
     });
     connect(m_api, &ProxmoxClient::pbsSnapshotsReceived, this, [this](const QString &pbsHost, const QString &, const QList<PBSSnapshot> &snapshots) {
         if (!m_pbsRefreshError.isEmpty()) {
@@ -970,16 +993,28 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
                                            secret);
         }
         if (kind == QStringLiteral("console")) {
-            m_api->requestVncProxy(QString(),
-                                   m_host,
-                                   m_port,
-                                   m_tokenId,
-                                   secret,
-                                   m_ignoreSsl,
-                                   request.value(QStringLiteral("node")).toString(),
-                                   request.value(QStringLiteral("actionKind")).toString(),
-                                   request.value(QStringLiteral("vmid")).toInt());
+            QString actionKind = request.value(QStringLiteral("actionKind")).toString();
+            QString node = request.value(QStringLiteral("node")).toString();
+            int vmid = request.value(QStringLiteral("vmid")).toInt();
+            QString vmName = request.value(QStringLiteral("vmName")).toString();
+
+            // Stash vmName so the ttyProxyReady/vncProxyReady forwarder can
+            // attach it to consoleReady (the underlying API doesn't carry it).
+            if (!vmName.isEmpty()) {
+                m_pendingConsoleNames.insert(
+                    QStringLiteral("%1:%2:%3").arg(actionKind, node).arg(vmid), vmName);
+            }
+
+        if (actionKind == "lxc") {
+            m_api->requestTtyProxy(QString(), m_host, m_port, m_tokenId, secret,
+                                  m_ignoreSsl, node, vmid);
+        } else {
+            m_api->requestVncProxy(QString(), m_host, m_port, m_tokenId, secret,
+                              m_ignoreSsl, node, actionKind, vmid);
+            }
         }
+    
+
     }, Qt::SingleShotConnection);
     connect(m_singleSecretStore, &SecretStore::error, this, [this, request](const QString &) {
         const QString kind = request.value(QStringLiteral("kind")).toString();
@@ -1077,6 +1112,38 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
                                           request.value(QStringLiteral("action")).toString(),
                                           secret);
         }
+
+        if (kind == QStringLiteral("console")) {
+            const QString actionKind = request.value(QStringLiteral("actionKind")).toString();
+            const QString node       = request.value(QStringLiteral("node")).toString();
+            const int vmid           = request.value(QStringLiteral("vmid")).toInt();
+            const QString vmName     = request.value(QStringLiteral("vmName")).toString();
+
+            if (endpoint.isEmpty() || secret.isEmpty()) {
+                emit consoleError(node, actionKind, vmid, QStringLiteral("endpoint credentials unavailable"));
+                return;
+            }
+
+            // Stash vmName so the ttyProxyReady/vncProxyReady forwarder can
+            // attach it to consoleReady (the underlying API doesn't carry it).
+            if (!vmName.isEmpty()) {
+                m_pendingConsoleNames.insert(
+                    QStringLiteral("%1:%2:%3").arg(actionKind, node).arg(vmid), vmName);
+            }
+
+            const QString epHost     = endpoint.value(QStringLiteral("host")).toString();
+            const int     epPort     = endpoint.value(QStringLiteral("port"), 8006).toInt();
+            const QString epTokenId  = endpoint.value(QStringLiteral("tokenId")).toString();
+            const bool    epIgnore   = endpoint.value(QStringLiteral("ignoreSsl")).toBool();
+
+            if (actionKind == QStringLiteral("lxc")) {
+                m_api->requestTtyProxy(sessionKey, epHost, epPort, epTokenId, secret,
+                                       epIgnore, node, vmid);
+            } else {
+                m_api->requestVncProxy(sessionKey, epHost, epPort, epTokenId, secret,
+                                       epIgnore, node, actionKind, vmid);
+            }
+        }
     }, Qt::SingleShotConnection);
     connect(m_multiSecretStore, &SecretStore::error, this, [this, request](const QString &) {
         const QString kind = request.value(QStringLiteral("kind")).toString();
@@ -1105,6 +1172,13 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
                              request.value(QStringLiteral("vmid")).toInt(),
                              request.value(QStringLiteral("action")).toString(),
                              QStringLiteral("endpoint credentials unavailable"));
+        }
+
+        if (kind == QStringLiteral("console")) {
+            emit consoleError(request.value(QStringLiteral("node")).toString(),
+                              request.value(QStringLiteral("actionKind")).toString(),
+                              request.value(QStringLiteral("vmid")).toInt(),
+                              QStringLiteral("endpoint credentials unavailable"));
         }
     }, Qt::SingleShotConnection);
     m_multiSecretStore->readSecret();

@@ -250,6 +250,21 @@ signals:
                   const QString &vmName,
                   int vncPort,
                   const QString &ticket);
+    // Separate signal for LXC: carries the auth `user` returned by termproxy
+    // so the LxcTerminal can complete the "user:ticket\n" handshake, plus the
+    // PVEAPIToken auth header (as a bare string) needed to upgrade the
+    // vncwebsocket request — Proxmox 401s otherwise.
+    void lxcConsoleReady(const QString &sessionKey,
+                         const QString &host,
+                         int apiPort,
+                         const QString &node,
+                         int vmid,
+                         const QString &vmName,
+                         int proxyPort,
+                         const QString &ticket,
+                         const QString &user,
+                         const QString &authHeader,
+                         bool ignoreSsl);
     void consoleError(const QString &node,
                   const QString &kind,
                   int vmid,
@@ -382,6 +397,11 @@ private:
     QVariant m_proxmoxData;
     QVariantList m_vmData;
     QVariantList m_lxcData;
+    // Stash for vmName between openConsole() and the matching ttyProxy/
+    // vncProxy reply. Keyed "kind:node:vmid". Populated in readSingle/
+    // MultiSecretFor's "console" branches; drained in the ttyProxyReady/
+    // vncProxyReady lambdas. Bounded by in-flight console requests.
+    QHash<QString, QString> m_pendingConsoleNames;
     QVariant m_displayedProxmoxData;
     QVariantList m_displayedVmData;
     QVariantList m_displayedLxcData;

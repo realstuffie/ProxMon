@@ -9,7 +9,7 @@ import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.plasma.core as PlasmaCore
 import "components"
 import "../lib/proxmox" as ProxMon
-import "components"
+
 
 PlasmoidItem {
     id: root
@@ -121,6 +121,14 @@ PlasmoidItem {
     Component {
         id: consoleComponent
         VncConsole {}
+    }
+    // LXC console is a C++-managed QMainWindow with QTermWidget inside;
+    // no QML wrapper. We instantiate the C++ object directly via this
+    // Component so we get a per-VM lifetime managed by QML's GC + the
+    // LxcTerminal::closed() signal.
+    Component {
+        id: lxcTerminalComponent
+        ProxMon.LxcTerminal {}
     }
     property var openConsoles: ({})
 
@@ -1288,6 +1296,37 @@ PlasmoidItem {
             win.requestReconnect.connect(function() {
                 controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
             })
+        }
+        function onLxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName, proxyPort, ticket, user, authHeader, ignoreSsl) {
+            var key = "lxc:" + vmid
+            var label = vmName || ("lxc " + vmid)
+            if (openConsoles[key]) {
+                openConsoles[key].connectWithTicket(proxyPort, ticket, user, authHeader, ignoreSsl)
+                openConsoles[key].raise()
+                return
+            }
+            var term = lxcTerminalComponent.createObject(root)
+            if (!term) {
+                console.warn("LxcTerminal createObject failed:",
+                             lxcTerminalComponent.errorString())
+                return
+            }
+            // Closure-capture session info so requestReconnect can round-trip
+            // back to controller.openConsole. (QML won't allow attaching ad-hoc
+            // properties to a C++ QObject; capture is the clean equivalent.)
+            var capturedSession = sessionKey
+            var capturedNode = node
+            var capturedVmid = vmid
+            var capturedLabel = label
+            openConsoles[key] = term
+            term.closed.connect(function() {
+                delete openConsoles[key]
+                term.destroy()
+            })
+            term.requestReconnect.connect(function() {
+                controller.openConsole(capturedSession, "lxc", capturedNode, capturedVmid, capturedLabel)
+            })
+            term.open(host, apiPort, node, vmid, label, proxyPort, ticket, user, authHeader, ignoreSsl)
         }
         function onConsoleError(node, kind, vmid, message) {
             errorMessage = "Console failed: " + message

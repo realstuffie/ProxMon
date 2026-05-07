@@ -1,8 +1,6 @@
 import QtQuick
-import QtQuick.Layouts
 import QtQuick.Window
 import org.kde.plasma.components as PlasmaComponents
-import org.kde.kirigami as Kirigami
 import "../../lib/proxmox" as ProxMon
 
 Window {
@@ -12,7 +10,7 @@ Window {
     property string nodeName: ""
     property int vmid: 0
     property string sessionKey: ""
-    property string kind: "qemu"
+    property string kind: ""
     property string host: ""
     property int vncPort: 0
     property string vncTicket: ""
@@ -69,6 +67,27 @@ Window {
             }
         }
     }
+
+    // Debounce window-resize → SetDesktopSize so we don't spam QEMU during
+    // a drag. Fires 300ms after the last width/height change with the final
+    // dimensions. Connected via Window.onWidthChanged/onHeightChanged below.
+    Timer {
+        id: resizeDebounce
+        interval: 100
+        repeat: false
+        onTriggered: {
+            if (vncClient.state === "connected"
+                && consoleWindow.width > 0 && consoleWindow.height > 0) {
+                console.log("[VNC resize] firing", consoleWindow.width, "x", consoleWindow.height)
+                vncClient.resizeRemote(consoleWindow.width, consoleWindow.height)
+            } else {
+                console.log("[VNC resize] skipped state=", vncClient.state)
+            }
+        }
+    }
+    onWidthChanged:  { console.log("[VNC resize] widthChanged", width); resizeDebounce.restart() }
+    onHeightChanged: { console.log("[VNC resize] heightChanged", height); resizeDebounce.restart() }
+    
 
     function qtKeyToKeysym(key) {
     switch(key) {
@@ -151,9 +170,59 @@ Window {
             anchors.fill: parent
 
             MouseArea {
+                id: mouseArea
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
                 hoverEnabled: true
+
+                // Throttle move-events to ~60Hz. High-polling mice fire
+                // onPositionChanged thousands of times per second; sending a
+                // VNC pointer event for each clogs the server-side queue and
+                // acts on stale positions. Strategy: send immediately if
+                // enough time has elapsed since the last send, otherwise
+                // stash the latest position and let a flush timer send it
+                // when the throttle interval expires. Press/release bypass
+                // the throttle entirely — button transitions must not be
+                // dropped or delayed.
+                property int  lastMoveSentMs: 0
+                property var  pendingMove: null
+                readonly property int moveIntervalMs: 16  // ~60Hz
+
+                Timer {
+                    id: moveFlush
+                    interval: 1
+                    repeat: false
+                    onTriggered: {
+                        if (!mouseArea.pendingMove) return
+                        if (vncClient && vncClient.state === "connected") {
+                            var m = mouseArea.pendingMove
+                            vncClient.sendPointerEvent(m.x, m.y, m.buttons)
+                            mouseArea.lastMoveSentMs = Date.now()
+                        }
+                        mouseArea.pendingMove = null
+                    }
+                }
+
+                // Map canvas (window) coords to framebuffer coords using
+                // the same aspect-preserving fit math as VncFrameView::paint.
+                // Returns null if the cursor is in the letterbox/pillarbox
+                // area outside the rendered framebuffer.
+                function mapToFrame(mx, my) {
+                    var fbW = vncClient.frameWidth
+                    var fbH = vncClient.frameHeight
+                    var cw  = vncCanvas.width
+                    var ch  = vncCanvas.height
+                    if (fbW <= 0 || fbH <= 0 || cw <= 0 || ch <= 0) return null
+                    var s = Math.min(cw / fbW, ch / fbH)
+                    var fitW = fbW * s
+                    var fitH = fbH * s
+                    var ox = (cw - fitW) / 2
+                    var oy = (ch - fitH) / 2
+                    var fx = (mx - ox) / s
+                    var fy = (my - oy) / s
+                    if (fx < 0 || fy < 0 || fx >= fbW || fy >= fbH) return null
+                    return { x: Math.round(fx), y: Math.round(fy) }
+                }
 
                 onClicked: function(mouse) {
                     vncCanvas.forceActiveFocus()
@@ -161,35 +230,48 @@ Window {
 
                 onPositionChanged: function(mouse) {
                     if (!vncClient || vncClient.state !== "connected") return
-                    var scaleX = vncClient.frameWidth / vncCanvas.width
-                    var scaleY = vncClient.frameHeight / vncCanvas.height
-                    vncClient.sendPointerEvent(
-                        Math.round(mouse.x * scaleX),
-                        Math.round(mouse.y * scaleY),
-                        mouse.buttons
-                    )
+                    var p = mapToFrame(mouse.x, mouse.y)
+                    if (!p) return
+                    var now = Date.now()
+                    var elapsed = now - lastMoveSentMs
+                    if (elapsed >= moveIntervalMs) {
+                        // Past throttle window — send straight away.
+                        vncClient.sendPointerEvent(p.x, p.y, mouse.buttons)
+                        lastMoveSentMs = now
+                        pendingMove = null
+                        moveFlush.stop()
+                    } else {
+                        // Inside throttle window — coalesce. Keep the latest
+                        // position and arm the flush timer for the remainder
+                        // of the interval. Repeated movement keeps overwriting
+                        // pendingMove until the timer fires.
+                        pendingMove = { x: p.x, y: p.y, buttons: mouse.buttons }
+                        if (!moveFlush.running) {
+                            moveFlush.interval = moveIntervalMs - elapsed
+                            moveFlush.start()
+                        }
+                    }
                 }
 
                 onPressed: function(mouse) {
                     if (!vncClient || vncClient.state !== "connected") return
-                    var scaleX = vncClient.frameWidth / vncCanvas.width
-                    var scaleY = vncClient.frameHeight / vncCanvas.height
-                    vncClient.sendPointerEvent(
-                        Math.round(mouse.x * scaleX),
-                        Math.round(mouse.y * scaleY),
-                        mouse.buttons
-                    )
+                    var p = mapToFrame(mouse.x, mouse.y)
+                    if (!p) return
+                    // Bypass throttle: button transitions must not be deferred.
+                    pendingMove = null
+                    moveFlush.stop()
+                    vncClient.sendPointerEvent(p.x, p.y, mouse.buttons)
+                    lastMoveSentMs = Date.now()
                 }
 
                 onReleased: function(mouse) {
                     if (!vncClient || vncClient.state !== "connected") return
-                    var scaleX = vncClient.frameWidth / vncCanvas.width
-                    var scaleY = vncClient.frameHeight / vncCanvas.height
-                    vncClient.sendPointerEvent(
-                        Math.round(mouse.x * scaleX),
-                        Math.round(mouse.y * scaleY),
-                        0
-                    )
+                    var p = mapToFrame(mouse.x, mouse.y)
+                    if (!p) return
+                    pendingMove = null
+                    moveFlush.stop()
+                    vncClient.sendPointerEvent(p.x, p.y, 0)
+                    lastMoveSentMs = Date.now()
                 }
             }
 
@@ -218,39 +300,10 @@ Window {
             visible: text !== ""
         }
 
-        Rectangle {
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: 36
-            color: Qt.rgba(0, 0, 0, 0.6)
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 8
-                anchors.rightMargin: 8
-
-                PlasmaComponents.Label {
-                    text: vmName + " @ " + nodeName
-                    color: "white"
-                    font.pixelSize: 12
-                    opacity: 0.8
-                }
-
-                Item { Layout.fillWidth: true }
-
-                PlasmaComponents.Button {
-                    text: "Disconnect"
-                    onClicked: {
-                        vncClient.disconnect()
-                        consoleWindow.close()
-                    }
-                }
-            }
-        }
     }
 
     Component.onCompleted: {
+        console.log("[VNC resize] VncConsole loaded, initial size", width, "x", height)
         vncClient.connectToVnc(host, vncPort, vncTicket)
     }
 

@@ -180,6 +180,50 @@ void VncClient::setFrameSize(int w, int h)
 void VncClient::resizeRemote(int width, int height)
 {
     if (!m_rfb || width <= 0 || height <= 0) return;
-    qDebug() << "[VNC resize]" << width << height;
-    SendExtDesktopSize(m_rfb, width, height);
+
+    // Construct the SetDesktopSize message ourselves rather than calling
+    // libvncclient's SendExtDesktopSize. libvncclient ≤ 0.9.15 truncates the
+    // SCREEN array (LibVNC/libvncserver issue #640; fix is in unreleased
+    // PR #617). QEMU's VNC server silently rejects the malformed message,
+    // which is why client-initiated resize "doesn't work" through Proxmox —
+    // it's not Proxmox stripping anything, it's the message never being
+    // valid in the first place.
+    //
+    // Wire format per RFB SetDesktopSize message (§7.5.x; rectangle layout
+    // for ExtendedDesktopSize is in §7.7.13). Header is 8 bytes, each SCREEN
+    // is 16 bytes, single-screen total = 24 bytes.
+    //
+    // Offset  Type  Field
+    //   0     U8    message-type = 251
+    //   1     U8    padding
+    //   2-3   U16   width                 (big-endian)
+    //   4-5   U16   height
+    //   6     U8    number-of-screens = 1
+    //   7     U8    padding
+    //   8-11  U32   SCREEN[0].id          = 0
+    //  12-13  U16   SCREEN[0].x-position  = 0
+    //  14-15  U16   SCREEN[0].y-position  = 0
+    //  16-17  U16   SCREEN[0].width
+    //  18-19  U16   SCREEN[0].height
+    //  20-23  U32   SCREEN[0].flags       = 0
+    const quint16 w = static_cast<quint16>(width);
+    const quint16 h = static_cast<quint16>(height);
+    char buf[24] = {0};
+    buf[0]  = 251;                                  // message-type
+    buf[2]  = static_cast<char>((w >> 8) & 0xFF);   // width hi
+    buf[3]  = static_cast<char>( w        & 0xFF);  // width lo
+    buf[4]  = static_cast<char>((h >> 8) & 0xFF);   // height hi
+    buf[5]  = static_cast<char>( h        & 0xFF);  // height lo
+    buf[6]  = 1;                                    // number-of-screens
+    // SCREEN[0] starts at offset 8; id, x, y default to zero.
+    buf[16] = static_cast<char>((w >> 8) & 0xFF);   // screen width hi
+    buf[17] = static_cast<char>( w        & 0xFF);  // screen width lo
+    buf[18] = static_cast<char>((h >> 8) & 0xFF);   // screen height hi
+    buf[19] = static_cast<char>( h        & 0xFF);  // screen height lo
+    // flags (offset 20..23) stays zero.
+
+    if (!WriteToRFBServer(m_rfb, buf, sizeof(buf))) {
+        qWarning() << "VncClient: WriteToRFBServer failed for SetDesktopSize"
+                   << width << "x" << height;
+    }
 }
