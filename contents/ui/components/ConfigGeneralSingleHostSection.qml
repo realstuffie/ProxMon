@@ -15,6 +15,8 @@ GridLayout {
     property alias pbsPortValue: pbsPortField.value
     property alias pbsTokenIdText: pbsTokenIdField.text
     property alias pbsIgnoreSsl: pbsIgnoreSslCheck.checked
+    property alias pbsTrustedCertPem: pbsTrustedCertPemField.text
+    property alias pbsTrustedCertPath: pbsTrustedCertPathField.text
     property alias pbsWarningDays: pbsWarningDaysField.value
     property alias pbsStaleDays: pbsStaleDaysField.value
     property int pbsRefreshInterval: 3600
@@ -181,6 +183,20 @@ GridLayout {
                 text: "Ignore SSL errors"
             }
 
+            QQC2.Label { text: "Trusted Cert PEM:" }
+            QQC2.TextArea {
+                id: pbsTrustedCertPemField
+                Layout.fillWidth: true
+                placeholderText: "Paste PEM certificate here (optional)"
+                font.family: "monospace"
+                implicitHeight: 80
+            }
+            QQC2.Label { text: "Trusted Cert Path:" }
+            QQC2.TextField {
+                id: pbsTrustedCertPathField
+                Layout.fillWidth: true
+                placeholderText: "/path/to/cert.pem (optional)"
+            }
             QQC2.Label { text: "PBS Refresh:" }
             QQC2.ComboBox {
                 id: pbsRefreshField

@@ -89,6 +89,8 @@ PlasmoidItem {
         pbsPort: root.pbsPort
         pbsTokenId: root.pbsTokenId
         pbsIgnoreSsl: root.pbsIgnoreSsl
+        pbsTrustedCertPem: root.pbsTrustedCertPem
+        pbsTrustedCertPath: root.pbsTrustedCertPath
         pbsBackupWarningDays: root.pbsBackupWarningDays
         pbsBackupStaleDays: root.pbsBackupStaleDays
         pbsRefreshInterval: root.pbsRefreshInterval
@@ -122,6 +124,8 @@ PlasmoidItem {
     property string pbsHost: Plasmoid.configuration.pbsHost || ""
     property int pbsPort: Math.max(1, Plasmoid.configuration.pbsPort || 8007)
     property string pbsTokenId: Plasmoid.configuration.pbsTokenId || ""
+    property string pbsTrustedCertPem: Plasmoid.configuration.pbsTrustedCertPem || ""
+    property string pbsTrustedCertPath: Plasmoid.configuration.pbsTrustedCertPath || ""
     property string pbsTokenSecretBuffer: ""
     property bool pbsIgnoreSsl: Plasmoid.configuration.pbsIgnoreSsl === true
     property int pbsBackupWarningDays: Math.max(1, Plasmoid.configuration.pbsBackupWarningDays || 7)

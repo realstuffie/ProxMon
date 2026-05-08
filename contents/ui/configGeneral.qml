@@ -32,6 +32,8 @@ KCM.SimpleKCM {
     property string cfg_pbsTokenSecretBuffer: ""
     property string cfg_pbsTokenSecretBufferDefault: ""
     property alias cfg_pbsIgnoreSsl: singleHostSection.pbsIgnoreSsl
+    property alias cfg_pbsTrustedCertPem: singleHostSection.pbsTrustedCertPem
+    property alias cfg_pbsTrustedCertPath: singleHostSection.pbsTrustedCertPath
     property alias cfg_pbsBackupWarningDays: singleHostSection.pbsWarningDays
     property alias cfg_pbsBackupStaleDays: singleHostSection.pbsStaleDays
     property alias cfg_pbsRefreshInterval: singleHostSection.pbsRefreshInterval
@@ -338,7 +340,7 @@ KCM.SimpleKCM {
             }
 
             QQC2.Label {
-                text: "Trusted Cert PEM:"
+                text: "Proxmox VE Trusted Cert PEM:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignTop
             }
             QQC2.TextArea {

@@ -473,7 +473,7 @@ void ProxmoxController::testPBSConnection(const QString &host,
             emit pbsTestFailed(host, QStringLiteral("Missing PBS token secret in keyring"));
             return;
         }
-        m_api->testPBSConnection(host, port, tokenId, secret, ignoreSslErrors, m_trustedCertPem.toUtf8(), m_trustedCertPath);
+        m_api->testPBSConnection(host, port, tokenId, secret, ignoreSslErrors, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
     });
     connect(store, &SecretStore::error, this, [this, store, host](const QString &message) {
         appendDebugLog(QStringLiteral("[ProxmoxController] testPBSConnection secretError host=%1 message=%2").arg(host, message));
@@ -1530,7 +1530,7 @@ void ProxmoxController::refreshPBSNow() {
                     return;
                 }
                 m_pendingPbsEndpoints = 1;
-                m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath);
+                m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
             });
             connect(store, &SecretStore::error, this, [this, store, pbsHost](const QString &message) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretError host=%1 message=%2").arg(pbsHost, message));
@@ -1582,7 +1582,7 @@ void ProxmoxController::refreshPBSNow() {
                 }
                 return;
             }
-            m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath);
+            m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
         });
         connect(store, &SecretStore::error, this, [this, store, pbsHost](const QString &message) {
             appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi secretError host=%1 message=%2").arg(pbsHost, message));
