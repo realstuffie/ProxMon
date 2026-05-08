@@ -24,6 +24,8 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(int pbsPort READ pbsPort WRITE setPbsPort NOTIFY pbsPortChanged)
     Q_PROPERTY(QString pbsTokenId READ pbsTokenId WRITE setPbsTokenId NOTIFY pbsTokenIdChanged)
     Q_PROPERTY(bool pbsIgnoreSsl READ pbsIgnoreSsl WRITE setPbsIgnoreSsl NOTIFY pbsIgnoreSslChanged)
+    Q_PROPERTY(QString pbsTrustedCertPem READ pbsTrustedCertPem WRITE setPbsTrustedCertPem NOTIFY pbsTrustedCertPemChanged)
+    Q_PROPERTY(QString pbsTrustedCertPath READ pbsTrustedCertPath WRITE setPbsTrustedCertPath NOTIFY pbsTrustedCertPathChanged)
     Q_PROPERTY(int pbsBackupWarningDays READ pbsBackupWarningDays WRITE setPbsBackupWarningDays NOTIFY pbsBackupWarningDaysChanged)
     Q_PROPERTY(int pbsBackupStaleDays READ pbsBackupStaleDays WRITE setPbsBackupStaleDays NOTIFY pbsBackupStaleDaysChanged)
     Q_PROPERTY(int pbsRefreshInterval READ pbsRefreshInterval WRITE setPbsRefreshInterval NOTIFY pbsRefreshIntervalChanged)
@@ -98,6 +100,10 @@ public:
     void setPbsTokenId(const QString &value);
 
     bool pbsIgnoreSsl() const { return m_pbsIgnoreSsl; }
+    QString pbsTrustedCertPem() const { return m_pbsTrustedCertPem; }
+    void setPbsTrustedCertPem(const QString &v) { if (m_pbsTrustedCertPem == v) return; m_pbsTrustedCertPem = v; emit pbsTrustedCertPemChanged(); }
+    QString pbsTrustedCertPath() const { return m_pbsTrustedCertPath; }
+    void setPbsTrustedCertPath(const QString &v) { if (m_pbsTrustedCertPath == v) return; m_pbsTrustedCertPath = v; emit pbsTrustedCertPathChanged(); }
     void setPbsIgnoreSsl(bool value);
 
     int pbsBackupWarningDays() const { return m_pbsBackupWarningDays; }
@@ -178,6 +184,8 @@ signals:
     void pbsPortChanged();
     void pbsTokenIdChanged();
     void pbsIgnoreSslChanged();
+    void pbsTrustedCertPemChanged();
+    void pbsTrustedCertPathChanged();
     void pbsBackupWarningDaysChanged();
     void pbsBackupStaleDaysChanged();
     void pbsRefreshIntervalChanged();
@@ -316,6 +324,8 @@ private:
     int m_pbsPort = 8007;
     QString m_pbsTokenId;
     bool m_pbsIgnoreSsl = false;
+    QString m_pbsTrustedCertPem;
+    QString m_pbsTrustedCertPath;
     int m_pbsBackupWarningDays = 7;
     int m_pbsBackupStaleDays = 14;
     int m_pbsRefreshInterval = 0;

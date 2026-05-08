@@ -60,7 +60,6 @@ PlasmoidItem {
         return txt 
     }
 
-    // ==================== CONNECTION / MODE ====================
 
     // Connection mode: "single" | "multiHost"
     property string connectionMode: Plasmoid.configuration.connectionMode || "single"
@@ -139,6 +138,7 @@ PlasmoidItem {
     property int retryAttempt: controller ? controller.retryAttempt : 0
     property int retryNextDelayMs: controller ? controller.retryNextDelayMs : 0
     property string retryStatusText: controller ? controller.retryStatusText : ""
+    property string pbsError: ""
 
     // Notification properties
     property bool enableNotifications: Plasmoid.configuration.enableNotifications !== false
@@ -288,7 +288,6 @@ PlasmoidItem {
         onTriggered: footerClickCount = 0
     }
 
-    // ==================== VISUAL TOKENS ====================
     // Keep platform colors from Kirigami, but standardize shape/opacity rhythm
     // for a flatter, Adwaita-leaning look.
     readonly property int uiRadiusS: 4
@@ -306,7 +305,6 @@ PlasmoidItem {
     readonly property real uiMutedTextOpacity: 0.68
     readonly property int uiRowHeight: 30
 
-    // ==================== UTILITY FUNCTIONS ====================
 
     // Shell-escape for executable datasource usage
     function escapeShell(str) {
@@ -410,7 +408,6 @@ PlasmoidItem {
         sendNotification("Debug logs copied")
     }
 
-    // ==================== NOTIFICATION FUNCTIONS ====================
 
     // Escape regex special chars except "*" (wildcard)
     function escapeRegexPattern(str) {
@@ -841,7 +838,6 @@ PlasmoidItem {
                                 "stopped")
     }
 
-    // ==================== NODE DATA FUNCTIONS ====================
 
     // Get VMs for a specific node (use displayed data)
     function getVmsForNode(nodeName) {
@@ -1045,7 +1041,6 @@ PlasmoidItem {
         return collapsedNodes[k2] === true
     }
 
-    // ==================== ANONYMIZATION FUNCTIONS ====================
 
     function anonymizeHost(host) {
         if (!devMode) return host
@@ -1072,7 +1067,6 @@ PlasmoidItem {
         return 100 + index
     }
 
-    // ==================== UI HELPER FUNCTIONS ====================
 
     function handleFooterClick() {
         footerClickCount++
@@ -1140,7 +1134,6 @@ PlasmoidItem {
 
         // Atomically swap displayed data when all requests finish
 
-    // ==================== API FUNCTIONS ====================
 
     // Sequencing for actions
     property int actionSeq: 0
@@ -1241,7 +1234,6 @@ PlasmoidItem {
         return count
     }
 
-    // ==================== INITIALIZATION ====================
 
     function endpointNodeKey(sessionKey, nodeName) {
         return String(sessionKey) + "::" + String(nodeName || "")
@@ -1256,6 +1248,9 @@ PlasmoidItem {
         }
         function onErrorMessageChanged() {
             if (controller.errorMessage !== "") root.errorMessage = controller.errorMessage
+        }
+        function onPbsLastErrorChanged() {
+            root.pbsError = controller.pbsLastError
         }
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
@@ -1400,7 +1395,6 @@ PlasmoidItem {
         }
     }
 
-    // ==================== DATA SOURCES ====================
 
     // DataSource for loading default settings from file
     Plasma5Support.DataSource {
@@ -1453,7 +1447,6 @@ PlasmoidItem {
         }
     }
 
-    // ==================== COMPACT REPRESENTATION ====================
 
     compactRepresentation: CompactRepresentation {
         hasCoreConfig: root.hasCoreConfig
@@ -1474,7 +1467,6 @@ PlasmoidItem {
         safeCpuPercent: root.safeCpuPercent
     }
 
-    // ==================== FULL REPRESENTATION ====================
 
     fullRepresentation: Item {
         id: fullRep
@@ -1650,6 +1642,7 @@ PlasmoidItem {
             armedLabel: root.armedLabel
             actionPermHintShown: root.actionPermHintShown
             actionPermHint: root.actionPermHint
+            pbsError: root.pbsError
             onRetry: function() { root.fetchData() }
         }
 
@@ -1875,7 +1868,6 @@ PlasmoidItem {
         }
     }
 
-    // ==================== REFRESH TIMER ====================
 
     Timer {
         interval: root.refreshInterval > 0 ? root.refreshInterval : 30000
