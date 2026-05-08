@@ -183,7 +183,7 @@ GridLayout {
                 text: "Ignore SSL errors"
             }
 
-            QQC2.Label { text: "Trusted Cert PEM:" }
+            QQC2.Label { text: "PBS Trusted Cert PEM:" }
             QQC2.TextArea {
                 id: pbsTrustedCertPemField
                 Layout.fillWidth: true
@@ -191,7 +191,7 @@ GridLayout {
                 font.family: "monospace"
                 implicitHeight: 80
             }
-            QQC2.Label { text: "Trusted Cert Path:" }
+            QQC2.Label { text: "PBS Trusted Cert Path:" }
             QQC2.TextField {
                 id: pbsTrustedCertPathField
                 Layout.fillWidth: true
