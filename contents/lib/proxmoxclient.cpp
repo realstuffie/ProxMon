@@ -43,6 +43,7 @@ void ProxmoxClient::cancelPVE() {
 
 void ProxmoxClient::cancelPBS() {
     const auto pbsReplies = m_pbsInFlight.values();
+    m_nam.clearConnectionCache();
     m_pbsInFlight.clear();
     for (QNetworkReply *r : pbsReplies) {
         if (r) r->abort();

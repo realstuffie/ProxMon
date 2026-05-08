@@ -1307,6 +1307,8 @@ PlasmoidItem {
     }
     onTrustedCertPemChanged: triggerRefreshFromConfigChange("trustedCertPem")
     onTrustedCertPathChanged: triggerRefreshFromConfigChange("trustedCertPath")
+    onPbsTrustedCertPemChanged: triggerRefreshFromConfigChange("pbsTrustedCertPem")
+    onPbsTrustedCertPathChanged: triggerRefreshFromConfigChange("pbsTrustedCertPath")
     onMultiHostSecretsJsonChanged: {
         if (connectionMode !== "multiHost") return
         if (!multiHostSecretsJson || multiHostSecretsJson.trim() === "") return

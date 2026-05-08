@@ -42,6 +42,8 @@ KCM.SimpleKCM {
     property int cfg_pbsPortDefault: 8007
     property string cfg_pbsTokenIdDefault: ""
     property bool cfg_pbsIgnoreSslDefault: false
+    property string cfg_pbsTrustedCertPemDefault: ""
+    property string cfg_pbsTrustedCertPathDefault: ""
     property int cfg_pbsBackupWarningDaysDefault: 7
     property int cfg_pbsBackupStaleDaysDefault: 14
     property int cfg_pbsRefreshIntervalDefault: 3600

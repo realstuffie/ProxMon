@@ -101,9 +101,9 @@ public:
 
     bool pbsIgnoreSsl() const { return m_pbsIgnoreSsl; }
     QString pbsTrustedCertPem() const { return m_pbsTrustedCertPem; }
-    void setPbsTrustedCertPem(const QString &v) { if (m_pbsTrustedCertPem == v) return; m_pbsTrustedCertPem = v; emit pbsTrustedCertPemChanged(); }
+    void setPbsTrustedCertPem(const QString &v) { if (m_pbsTrustedCertPem == v) return; m_pbsTrustedCertPem = v; emit pbsTrustedCertPemChanged(); QMetaObject::invokeMethod(this, &ProxmoxController::refreshPBSNow, Qt::QueuedConnection); }
     QString pbsTrustedCertPath() const { return m_pbsTrustedCertPath; }
-    void setPbsTrustedCertPath(const QString &v) { if (m_pbsTrustedCertPath == v) return; m_pbsTrustedCertPath = v; emit pbsTrustedCertPathChanged(); }
+    void setPbsTrustedCertPath(const QString &v) { if (m_pbsTrustedCertPath == v) return; m_pbsTrustedCertPath = v; emit pbsTrustedCertPathChanged(); QMetaObject::invokeMethod(this, &ProxmoxController::refreshPBSNow, Qt::QueuedConnection); }
     void setPbsIgnoreSsl(bool value);
 
     int pbsBackupWarningDays() const { return m_pbsBackupWarningDays; }
