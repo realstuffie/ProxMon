@@ -27,7 +27,9 @@ KCM.SimpleKCM {
     property string cfg_pbsTokenIdDefault: ""
     property bool cfg_pbsIgnoreSsl: false
     property bool cfg_pbsIgnoreSslDefault: false
+    property string cfg_pbsTrustedCertPem: ""
     property string cfg_pbsTrustedCertPemDefault: ""
+    property string cfg_pbsTrustedCertPath: ""
     property string cfg_pbsTrustedCertPathDefault: ""
     property int cfg_pbsBackupWarningDays: 7
     property int cfg_pbsBackupWarningDaysDefault: 7
