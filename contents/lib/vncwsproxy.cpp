@@ -17,10 +17,7 @@ VncWsProxy::~VncWsProxy()
     cleanup();
 }
 
-// ---------------------------------------------------------------------------
 // Public API
-// ---------------------------------------------------------------------------
-
 void VncWsProxy::start()
 {
     // Clean up any prior session before re-starting.
@@ -40,9 +37,7 @@ void VncWsProxy::stop()
     cleanup();
 }
 
-// ---------------------------------------------------------------------------
 // Private helpers
-// ---------------------------------------------------------------------------
 
 QUrl VncWsProxy::buildWsUrl() const
 {
@@ -84,9 +79,7 @@ void VncWsProxy::cleanup()
     }
 }
 
-// ---------------------------------------------------------------------------
 // Slots — incoming TCP connection from libvncclient
-// ---------------------------------------------------------------------------
 
 void VncWsProxy::onNewConnection()
 {
@@ -124,13 +117,17 @@ void VncWsProxy::onNewConnection()
     m_ws->open(req);
 }
 
-// ---------------------------------------------------------------------------
-// Slots — WebSocket events
-// ---------------------------------------------------------------------------
 
+// Slots — WebSocket events
 void VncWsProxy::onWsConnected()
 {
     qDebug() << "[VncWsProxy] WebSocket connected";
+    // HTTP upgrade complete — auth header and ticket were sent in the
+    // handshake request and are no longer needed. Clear and release them.
+    m_authHeader.clear();
+    m_authHeader.squeeze();
+    m_ticket.clear();
+    m_ticket.squeeze();
     // Flush any bytes libvncclient already wrote while WS was connecting.
     if (m_tcp && m_tcp->bytesAvailable() > 0) {
         onTcpReadyRead();
@@ -167,10 +164,7 @@ void VncWsProxy::onWsDisconnected()
     if (m_tcp) m_tcp->disconnectFromHost();
 }
 
-// ---------------------------------------------------------------------------
 // Slots — TCP (libvncclient) events
-// ---------------------------------------------------------------------------
-
 void VncWsProxy::onTcpReadyRead()
 {
     // TCP → WS: forward raw RFB bytes from libvncclient as binary WS frames.

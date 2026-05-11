@@ -1,18 +1,12 @@
 #include "vncframeview.h"
 
-#include <QPainter>
-#include <QMutexLocker>
+#include <QSGImageNode>
+#include <QQuickWindow>
 
 VncFrameView::VncFrameView(QQuickItem *parent)
-    : QQuickPaintedItem(parent)
+    : QQuickItem(parent)
 {
-    // Image render target instead of FramebufferObject. FBO mode caches the
-    // rendered output and during a fast drag-resize Qt briefly scales the
-    // stale FBO into the new geometry before the next paint catches up,
-    // which manifests as a momentary stretch/zoom artifact. Image-render
-    // costs slightly more CPU per paint but recreates cleanly on every
-    // geometry change.
-    setRenderTarget(QQuickPaintedItem::Image);
+    setFlag(QQuickItem::ItemHasContents, true);
     setAcceptedMouseButtons(Qt::AllButtons);
     setFlag(QQuickItem::ItemAcceptsInputMethod);
     setFocus(true);
@@ -20,62 +14,62 @@ VncFrameView::VncFrameView(QQuickItem *parent)
     setFlag(QQuickItem::ItemIsFocusScope);
 }
 
-// Compute the largest sub-rect of (0,0,width,height) that preserves the
-// framebuffer aspect ratio. Used by both paint() and partial-update mapping
-// so the two stay in sync.
+// Returns the largest sub-rect of (0,0,viewW,viewH) that fits imgW×imgH
+// with the aspect ratio preserved (letterbox / pillarbox).
 static QRectF fitRect(qreal viewW, qreal viewH, qreal imgW, qreal imgH)
 {
     if (viewW <= 0 || viewH <= 0 || imgW <= 0 || imgH <= 0)
         return QRectF();
     const qreal scale = qMin(viewW / imgW, viewH / imgH);
-    const qreal fitW = imgW * scale;
-    const qreal fitH = imgH * scale;
-    return QRectF((viewW - fitW) / 2.0, (viewH - fitH) / 2.0, fitW, fitH);
+    return QRectF((viewW - imgW * scale) / 2.0,
+                  (viewH - imgH * scale) / 2.0,
+                  imgW * scale,
+                  imgH * scale);
 }
 
-void VncFrameView::paint(QPainter *painter)
+// Called on the render thread during the sync phase (main thread blocked).
+QSGNode *VncFrameView::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
-    QMutexLocker lock(&m_mutex);
-    if (m_frame.isNull()) return;
-    const QRectF target = fitRect(width(), height(),
-                                  m_frame.width(), m_frame.height());
-    if (target.isEmpty()) return;
-
-    // Letterbox/pillarbox the unused area so the guest never appears
-    // stretched when window aspect ≠ framebuffer aspect.
-    if (target.width() < width() || target.height() < height()) {
-        painter->fillRect(QRectF(0, 0, width(), height()), Qt::black);
+    if (m_frame.isNull()) {
+        delete oldNode;
+        return nullptr;
     }
-    painter->setRenderHint(QPainter::SmoothPixmapTransform, true);
-    painter->drawImage(target, m_frame);
+
+    // createImageNode() returns the backend-native node (OpenGL/Vulkan/Metal).
+    // setOwnsTexture(true): setTexture() automatically frees the previous
+    // texture — do not delete it manually.
+    auto *node = static_cast<QSGImageNode *>(oldNode);
+    if (!node) {
+        node = window()->createImageNode();
+        node->setFiltering(QSGTexture::Linear);
+        node->setOwnsTexture(true);
+    }
+
+    if (m_dirty) {
+        node->setTexture(window()->createTextureFromImage(m_frame));
+        m_dirty = false;
+    }
+
+    node->setRect(fitRect(width(), height(), m_frame.width(), m_frame.height()));
+    return node;
+}
+
+void VncFrameView::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
+{
+    QQuickItem::geometryChange(newGeometry, oldGeometry);
+    if (!m_frame.isNull())
+        update();
+}
+
+void VncFrameView::releaseResources()
+{
+    QQuickItem::releaseResources();
 }
 
 void VncFrameView::updateFrame(const QImage &image, int x, int y, int w, int h)
 {
-    bool sizeChanged = false;
-    {
-        QMutexLocker lock(&m_mutex);
-        sizeChanged = (m_frame.size() != image.size());
-        m_frame = image;
-    }
-    // When the framebuffer's pixel dimensions change, the fit-rect math and
-    // the letterbox/pillarbox region change too. A partial update would leave
-    // stale pixels from the previous layout. Force a full repaint instead.
-    if (sizeChanged
-        || width() <= 0 || height() <= 0
-        || image.width() <= 0 || image.height() <= 0) {
-        update();
-        return;
-    }
-    const QRectF target = fitRect(width(), height(),
-                                  image.width(), image.height());
-    if (target.isEmpty()) {
-        update();
-        return;
-    }
-    const qreal scale = target.width() / image.width();   // == target.height/image.height
-    update(QRect(int(target.x() + x * scale),
-                 int(target.y() + y * scale),
-                 int(w * scale) + 2,
-                 int(h * scale) + 2));
+    Q_UNUSED(x) Q_UNUSED(y) Q_UNUSED(w) Q_UNUSED(h)
+    m_frame = image;
+    m_dirty = true;
+    update();
 }

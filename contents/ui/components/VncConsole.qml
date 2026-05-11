@@ -26,6 +26,11 @@ Window {
         // Always go through the WS proxy — restart it for reconnects.
         wsProxy.ticket     = ticket
         wsProxy.vncPort    = port
+        // Re-arm the auth header explicitly so it's present for the next
+        // WebSocket handshake. onWsConnected clears it after the upgrade
+        // completes, so the QML binding alone won't restore it if the
+        // token value hasn't changed since the last connection.
+        wsProxy.authHeader = consoleWindow.authHeader
         wsProxy.start()
     }
 
@@ -110,15 +115,12 @@ Window {
         onTriggered: {
             if (vncClient.state === "connected"
                 && consoleWindow.width > 0 && consoleWindow.height > 0) {
-                console.log("[VNC resize] firing", consoleWindow.width, "x", consoleWindow.height)
                 vncClient.resizeRemote(consoleWindow.width, consoleWindow.height)
-            } else {
-                console.log("[VNC resize] skipped state=", vncClient.state)
             }
         }
     }
-    onWidthChanged:  { console.log("[VNC resize] widthChanged", width); resizeDebounce.restart() }
-    onHeightChanged: { console.log("[VNC resize] heightChanged", height); resizeDebounce.restart() }
+    onWidthChanged:  resizeDebounce.restart()
+    onHeightChanged: resizeDebounce.restart()
 
     Rectangle {
         anchors.fill: parent
@@ -230,7 +232,6 @@ Window {
     }
 
     Component.onCompleted: {
-        console.log("[VNC resize] VncConsole loaded, initial size", width, "x", height)
         // Start the WS proxy; it emits ready(localPort) → vncClient.connectToVnc
         wsProxy.start()
     }
@@ -239,5 +240,9 @@ Window {
         reconnectTimer.stop()
         vncClient.disconnect()
         wsProxy.stop()
+        // Clear secrets from QML properties so they don't linger in the
+        // QML engine's object memory after the window is destroyed.
+        vncTicket   = ""
+        authHeader  = ""
     }
 }
