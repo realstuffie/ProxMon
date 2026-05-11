@@ -14,12 +14,19 @@ Window {
     property string host: ""
     property int vncPort: 0
     property string vncTicket: ""
+    // WebSocket proxy params — needed to connect through Proxmox's vncwebsocket endpoint
+    property int    apiPort:    8006
+    property string authHeader: ""
+    property bool   ignoreSsl:  false
     signal requestReconnect()
-    
+
     function connectWithTicket(port, ticket) {
-        vncPort = port
+        vncPort   = port
         vncTicket = ticket
-        vncClient.connectToVnc(host, port, ticket)
+        // Always go through the WS proxy — restart it for reconnects.
+        wsProxy.ticket     = ticket
+        wsProxy.vncPort    = port
+        wsProxy.start()
     }
 
     title: "Console — " + vmName + " (" + nodeName + ")"
@@ -28,6 +35,31 @@ Window {
     minimumWidth: 640
     minimumHeight: 480
     visible: true
+
+    // WebSocket-to-TCP shim: libvncclient speaks raw TCP; Proxmox only exposes
+    // a WebSocket endpoint (vncwebsocket). VncWsProxy binds a random local TCP
+    // port, accepts libvncclient's connection, and bridges bytes over a WS
+    // connection to Proxmox — all transparent to libvncclient.
+    ProxMon.VncWsProxy {
+        id: wsProxy
+        host:       consoleWindow.host
+        apiPort:    consoleWindow.apiPort
+        node:       consoleWindow.nodeName
+        kind:       consoleWindow.kind
+        vmid:       consoleWindow.vmid
+        vncPort:    consoleWindow.vncPort
+        ticket:     consoleWindow.vncTicket
+        authHeader: consoleWindow.authHeader
+        ignoreSsl:  consoleWindow.ignoreSsl
+
+        onReady: function(localPort) {
+            // Proxy is listening — hand the local port to libvncclient.
+            vncClient.connectToVnc("127.0.0.1", localPort, consoleWindow.vncTicket)
+        }
+        onErrorOccurred: function(message) {
+            statusLabel.text = "Proxy error: " + message
+        }
+    }
 
     ProxMon.VncClient {
         id: vncClient
@@ -87,80 +119,7 @@ Window {
     }
     onWidthChanged:  { console.log("[VNC resize] widthChanged", width); resizeDebounce.restart() }
     onHeightChanged: { console.log("[VNC resize] heightChanged", height); resizeDebounce.restart() }
-    
 
-    function qtKeyToKeysym(key) {
-    switch(key) {
-        case Qt.Key_Backspace:  return 0xFF08
-        case Qt.Key_Tab:        return 0xFF09
-        case Qt.Key_Return:     return 0xFF0D
-        case Qt.Key_Escape:     return 0xFF1B
-        case Qt.Key_Delete:     return 0xFFFF
-        case Qt.Key_Home:       return 0xFF50
-        case Qt.Key_Left:       return 0xFF51
-        case Qt.Key_Up:         return 0xFF52
-        case Qt.Key_Right:      return 0xFF53
-        case Qt.Key_Down:       return 0xFF54
-        case Qt.Key_End:        return 0xFF57
-        case Qt.Key_PageUp:     return 0xFF55
-        case Qt.Key_PageDown:   return 0xFF56
-        case Qt.Key_F1:         return 0xFFBE
-        case Qt.Key_F2:         return 0xFFBF
-        case Qt.Key_F3:         return 0xFFC0
-        case Qt.Key_F4:         return 0xFFC1
-        case Qt.Key_F5:         return 0xFFC2
-        case Qt.Key_F6:         return 0xFFC3
-        case Qt.Key_F7:         return 0xFFC4
-        case Qt.Key_F8:         return 0xFFC5
-        case Qt.Key_F9:         return 0xFFC6
-        case Qt.Key_F10:        return 0xFFC7
-        case Qt.Key_F11:        return 0xFFC8
-        case Qt.Key_F12:        return 0xFFC9
-        case Qt.Key_Control:    return 0xFFE3
-        case Qt.Key_Shift:      return 0xFFE1
-        case Qt.Key_Alt:        return 0xFFE9
-        case Qt.Key_Super_L:    return 0xFFEB
-        case Qt.Key_CapsLock:   return 0xFFE5
-        case Qt.Key_NumLock:    return 0xFF7F
-        case Qt.Key_ScrollLock: return 0xFF14
-        case Qt.Key_Insert:     return 0xFF63
-        case Qt.Key_Pause:      return 0xFF13
-        case Qt.Key_Print:      return 0xFF61
-        case Qt.key_exclamation: return 0x0021
-        case Qt.key_at:          return 0x0040
-        case Qt.key_number_sign: return 0x0023
-        case Qt.key_dollar:      return 0x0024
-        case Qt.key_percent:     return 0x0025
-        case Qt.key_ampersand:   return 0x0026
-        case Qt.key_apostrophe:  return 0x0027
-        case Qt.key_parenleft:   return 0x0028
-        case Qt.key_parenright:  return 0x0029
-        case Qt.key_asterisk:    return 0x002A
-        case Qt.key_plus:        return 0x002B
-        case Qt.key_comma:       return 0x002C
-        case Qt.key_minus:       return 0x002D
-        case Qt.key_period:      return 0x002E
-        case Qt.key_slash:       return 0x002F
-        case Qt.key_0:           return 0x0030
-        case Qt.key_1:           return 0x0031
-        case Qt.key_2:           return 0x0032
-        case Qt.key_3:           return 0x0033
-        case Qt.key_4:           return 0x0034
-        case Qt.key_5:           return 0x0035
-        case Qt.key_6:           return 0x0036
-        case Qt.key_7:           return 0x0037
-        case Qt.key_8:           return 0x0038
-        case Qt.key_9:           return 0x0039
-        case Qt.key_colon:       return 0x003A
-        case Qt.key_semicolon:   return 0x003B
-        case Qt.key_less:        return 0x003C
-        case Qt.key_equal:       return 0x003D
-        case Qt.key_greater:     return 0x003E
-        case Qt.key_question:    return 0x003F
-        case Qt.key_at_sign:     return 0x0040
-        default:                return key
-    }
-}
     Rectangle {
         anchors.fill: parent
         color: "#1a1a1a"
@@ -174,34 +133,6 @@ Window {
                 anchors.fill: parent
                 acceptedButtons: Qt.AllButtons
                 hoverEnabled: true
-
-                // Throttle move-events to ~60Hz. High-polling mice fire
-                // onPositionChanged thousands of times per second; sending a
-                // VNC pointer event for each clogs the server-side queue and
-                // acts on stale positions. Strategy: send immediately if
-                // enough time has elapsed since the last send, otherwise
-                // stash the latest position and let a flush timer send it
-                // when the throttle interval expires. Press/release bypass
-                // the throttle entirely — button transitions must not be
-                // dropped or delayed.
-                property int  lastMoveSentMs: 0
-                property var  pendingMove: null
-                readonly property int moveIntervalMs: 16  // ~60Hz
-
-                Timer {
-                    id: moveFlush
-                    interval: 1
-                    repeat: false
-                    onTriggered: {
-                        if (!mouseArea.pendingMove) return
-                        if (vncClient && vncClient.state === "connected") {
-                            var m = mouseArea.pendingMove
-                            vncClient.sendPointerEvent(m.x, m.y, m.buttons)
-                            mouseArea.lastMoveSentMs = Date.now()
-                        }
-                        mouseArea.pendingMove = null
-                    }
-                }
 
                 // Map canvas (window) coords to framebuffer coords using
                 // the same aspect-preserving fit math as VncFrameView::paint.
@@ -232,58 +163,54 @@ Window {
                     if (!vncClient || vncClient.state !== "connected") return
                     var p = mapToFrame(mouse.x, mouse.y)
                     if (!p) return
-                    var now = Date.now()
-                    var elapsed = now - lastMoveSentMs
-                    if (elapsed >= moveIntervalMs) {
-                        // Past throttle window — send straight away.
-                        vncClient.sendPointerEvent(p.x, p.y, mouse.buttons)
-                        lastMoveSentMs = now
-                        pendingMove = null
-                        moveFlush.stop()
-                    } else {
-                        // Inside throttle window — coalesce. Keep the latest
-                        // position and arm the flush timer for the remainder
-                        // of the interval. Repeated movement keeps overwriting
-                        // pendingMove until the timer fires.
-                        pendingMove = { x: p.x, y: p.y, buttons: mouse.buttons }
-                        if (!moveFlush.running) {
-                            moveFlush.interval = moveIntervalMs - elapsed
-                            moveFlush.start()
-                        }
-                    }
+                    // Each pointer event is a discrete WebSocket frame — no TCP
+                    // stream buffering issues, so send every event immediately.
+                    vncClient.sendPointerEvent(p.x, p.y, mouse.buttons)
                 }
 
                 onPressed: function(mouse) {
                     if (!vncClient || vncClient.state !== "connected") return
                     var p = mapToFrame(mouse.x, mouse.y)
                     if (!p) return
-                    // Bypass throttle: button transitions must not be deferred.
-                    pendingMove = null
-                    moveFlush.stop()
                     vncClient.sendPointerEvent(p.x, p.y, mouse.buttons)
-                    lastMoveSentMs = Date.now()
                 }
 
                 onReleased: function(mouse) {
                     if (!vncClient || vncClient.state !== "connected") return
                     var p = mapToFrame(mouse.x, mouse.y)
                     if (!p) return
-                    pendingMove = null
-                    moveFlush.stop()
                     vncClient.sendPointerEvent(p.x, p.y, 0)
-                    lastMoveSentMs = Date.now()
+                }
+
+                onWheel: function(wheel) {
+                    if (!vncClient || vncClient.state !== "connected") return
+                    var p = mapToFrame(wheel.x, wheel.y)
+                    if (!p) return
+                    if (wheel.angleDelta.y !== 0) {
+                        var stepsY = Math.max(1, Math.abs(Math.round(wheel.angleDelta.y / 120)))
+                        vncClient.sendWheelEvent(p.x, p.y, stepsY, wheel.angleDelta.y > 0, false)
+                    }
+                    if (wheel.angleDelta.x !== 0) {
+                        var stepsX = Math.max(1, Math.abs(Math.round(wheel.angleDelta.x / 120)))
+                        vncClient.sendWheelEvent(p.x, p.y, stepsX, wheel.angleDelta.x > 0, true)
+                    }
+                    wheel.accepted = true
                 }
             }
 
             Keys.onPressed: function(event) {
                 if (vncClient && vncClient.state === "connected") {
-                    vncClient.sendKeyEvent(event.key, event.text, 0, true)
+                    // location 3 = numpad so KP_Enter/KP_0..9/KP_+- etc. are
+                    // sent as distinct keysyms rather than their standard equivalents.
+                    var loc = (event.modifiers & Qt.KeypadModifier) ? 3 : 0
+                    vncClient.sendKeyEvent(event.key, event.text, loc, true)
                     event.accepted = true
                 }
             }
             Keys.onReleased: function(event) {
                 if (vncClient && vncClient.state === "connected") {
-                    vncClient.sendKeyEvent(event.key, event.text, 0, false)
+                    var loc = (event.modifiers & Qt.KeypadModifier) ? 3 : 0
+                    vncClient.sendKeyEvent(event.key, event.text, loc, false)
                     event.accepted = true
                 }
             }
@@ -304,11 +231,13 @@ Window {
 
     Component.onCompleted: {
         console.log("[VNC resize] VncConsole loaded, initial size", width, "x", height)
-        vncClient.connectToVnc(host, vncPort, vncTicket)
+        // Start the WS proxy; it emits ready(localPort) → vncClient.connectToVnc
+        wsProxy.start()
     }
 
     onClosing: {
-        vncClient.disconnect()
         reconnectTimer.stop()
+        vncClient.disconnect()
+        wsProxy.stop()
     }
 }

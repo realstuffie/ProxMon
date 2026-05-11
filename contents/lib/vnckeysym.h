@@ -411,6 +411,7 @@ inline QString qtKeyToDOMKey(Qt::Key key, int location)
     case Qt::Key_PageDown:   return "PageDown";
     case Qt::Key_Print:      return "PrintScreen";
     case Qt::Key_Pause:      return "Pause";
+    case Qt::Key_SysReq:     return "PrintScreen"; // SysRq shares XK_Print
     case Qt::Key_Menu:       return "ContextMenu";
     case Qt::Key_Help:       return "Help";
     case Qt::Key_F1:         return "F1";
@@ -437,16 +438,37 @@ inline QString qtKeyToDOMKey(Qt::Key key, int location)
     case Qt::Key_F22:        return "F22";
     case Qt::Key_F23:        return "F23";
     case Qt::Key_F24:        return "F24";
+    case Qt::Key_F25:        return "F25";
+    case Qt::Key_F26:        return "F26";
+    case Qt::Key_F27:        return "F27";
+    case Qt::Key_F28:        return "F28";
+    case Qt::Key_F29:        return "F29";
+    case Qt::Key_F30:        return "F30";
+    case Qt::Key_F31:        return "F31";
+    case Qt::Key_F32:        return "F32";
+    case Qt::Key_F33:        return "F33";
+    case Qt::Key_F34:        return "F34";
     case Qt::Key_F35:        return "F35";
+    // Editing / UI actions that have DOM table entries
+    case Qt::Key_Clear:      return "Clear";
+    case Qt::Key_Cancel:     return "Cancel";
+    case Qt::Key_Execute:    return "Execute";
+    case Qt::Key_Select:     return "Select";
+    case Qt::Key_Undo:       return "Undo";
+    case Qt::Key_Redo:       return "Redo";
+    case Qt::Key_Find:       return "Find";
     // Volume / media
-    case Qt::Key_VolumeDown:     return "AudioVolumeDown";
-    case Qt::Key_VolumeUp:       return "AudioVolumeUp";
-    case Qt::Key_VolumeMute:     return "AudioVolumeMute";
-    case Qt::Key_MediaPlay:      return "MediaPlay";
-    case Qt::Key_MediaStop:      return "MediaStop";
-    case Qt::Key_MediaNext:      return "MediaTrackNext";
-    case Qt::Key_MediaPrevious:  return "MediaTrackPrevious";
-    case Qt::Key_MediaRecord:    return "MediaRecord";
+    case Qt::Key_VolumeDown:              return "AudioVolumeDown";
+    case Qt::Key_VolumeUp:               return "AudioVolumeUp";
+    case Qt::Key_VolumeMute:             return "AudioVolumeMute";
+    case Qt::Key_MicMute:                return "MicrophoneVolumeMute";
+    case Qt::Key_MediaPlay:              return "MediaPlay";
+    case Qt::Key_MediaPause:             return "MediaPause";
+    case Qt::Key_MediaTogglePlayPause:   return "MediaPlay";
+    case Qt::Key_MediaStop:              return "MediaStop";
+    case Qt::Key_MediaNext:              return "MediaTrackNext";
+    case Qt::Key_MediaPrevious:          return "MediaTrackPrevious";
+    case Qt::Key_MediaRecord:            return "MediaRecord";
     // Browser
     case Qt::Key_Back:           return "BrowserBack";
     case Qt::Key_Forward:        return "BrowserForward";

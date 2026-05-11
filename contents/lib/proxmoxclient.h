@@ -160,7 +160,10 @@ signals:
                    const QString &kind,
                    int vmid,
                    int vncPort,
-                   const QString &ticket);
+                   const QString &ticket,
+                   int apiPort,
+                   const QByteArray &authHeader,
+                   bool ignoreSsl);
     void vncProxyError(const QString &sessionKey,
                    const QString &node,
                    const QString &kind,

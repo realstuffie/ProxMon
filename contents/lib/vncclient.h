@@ -3,7 +3,8 @@
 #include <QObject>
 #include <QImage>
 #include <QHash>
-#include <QTimer>
+#include <QThread>
+#include <atomic>
 
 struct _rfbClient;
 typedef struct _rfbClient rfbClient;
@@ -29,10 +30,17 @@ public:
                                    const QString &vncTicket);
     Q_INVOKABLE void disconnect();
     Q_INVOKABLE void sendKeyEvent(int qtKey, const QString &text, int location, bool pressed);
-    Q_INVOKABLE void sendPointerEvent(int x, int y, int buttonMask);
+    Q_INVOKABLE void sendPointerEvent(int x, int y, int qtButtons);
+    Q_INVOKABLE void sendWheelEvent(int x, int y, int steps, bool up, bool horizontal = false);
     Q_INVOKABLE void allKeysUp();
     Q_INVOKABLE void resizeRemote(int width, int height);
-    
+
+    // Called from the worker-thread updateCallback to mark that new pixel data
+    // arrived. The poll loop copies + emits once after HandleRFBServerMessage
+    // so all dirty-rect tiles in one server message are coalesced into a single
+    // frameUpdated signal instead of N separate copies and paints.
+    void markFrameDirty() noexcept { m_frameDirty.store(true, std::memory_order_relaxed); }
+
 signals:
     void stateChanged();
     void frameSizeChanged();
@@ -42,10 +50,13 @@ signals:
 private:
     QHash<quint32, quint32> m_keyDownList;
     void setState(const QString &state);
-    void pollLoop();
-    rfbClient *m_rfb = nullptr;
-    QString m_state = QStringLiteral("disconnected");
-    int m_frameWidth = 0;
-    int m_frameHeight = 0;
-    QTimer *m_pollTimer = nullptr;
+
+    rfbClient        *m_rfb     = nullptr;
+    QThread          *m_thread  = nullptr;  // owns rfbInitClient + poll loop
+    std::atomic<bool> m_running  { false };
+    std::atomic<bool> m_frameDirty { false };
+
+    QString m_state       = QStringLiteral("disconnected");
+    int     m_frameWidth  = 0;
+    int     m_frameHeight = 0;
 };

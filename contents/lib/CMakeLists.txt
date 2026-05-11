@@ -49,6 +49,8 @@ qt_add_library(proxmoxclientplugin SHARED
     vncclient.h
     vncframeview.cpp
     vncframeview.h
+    vncwsproxy.cpp
+    vncwsproxy.h
     lxcterminal.cpp
     lxcterminal.h
 )

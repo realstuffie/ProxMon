@@ -1273,7 +1273,7 @@ PlasmoidItem {
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
-        function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, ticket) {
+        function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, ticket, apiPort, authHeader, ignoreSsl) {
             var key = kind + ":" + vmid
             if (openConsoles[key]) {
                 openConsoles[key].connectWithTicket(vncPort, ticket)
@@ -1289,7 +1289,10 @@ PlasmoidItem {
                 vncPort: vncPort,
                 vncTicket: ticket,
                 sessionKey: sessionKey,
-                kind: kind
+                kind: kind,
+                apiPort: apiPort,
+                authHeader: authHeader,
+                ignoreSsl: ignoreSsl
             })
             openConsoles[key] = win
             win.closing.connect(function() { delete openConsoles[key] })

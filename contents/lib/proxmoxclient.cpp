@@ -846,8 +846,13 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
         });
     }
 
+    // Build auth header now while tokenId/secret are in scope; the
+    // vncwebsocket WebSocket upgrade needs it (same pattern as ttyProxy).
+    const QByteArray authHeader = QByteArray("PVEAPIToken=") + tokenId.toUtf8()
+                                  + "=" + tokenSecret.toUtf8();
+
     QObject::connect(r, &QNetworkReply::finished, this,
-        [this, r, sessionKey, host, node, kind, vmid]() {
+        [this, r, sessionKey, host, port, node, kind, vmid, authHeader, ignoreSslErrors]() {
             m_inFlight.remove(r);
 
             const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
@@ -891,7 +896,8 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
                 return;
             }
 
-            emit vncProxyReady(sessionKey, host, node, kind, vmid, vncPort, ticket);
+            emit vncProxyReady(sessionKey, host, node, kind, vmid, vncPort, ticket,
+                               port, authHeader, ignoreSslErrors);
             r->deleteLater();
         });
 }

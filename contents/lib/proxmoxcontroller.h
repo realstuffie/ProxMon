@@ -249,7 +249,10 @@ signals:
                   int vmid,
                   const QString &vmName,
                   int vncPort,
-                  const QString &ticket);
+                  const QString &ticket,
+                  int apiPort,
+                  const QString &authHeader,
+                  bool ignoreSsl);
     // Separate signal for LXC: carries the auth `user` returned by termproxy
     // so the LxcTerminal can complete the "user:ticket\n" handshake, plus the
     // PVEAPIToken auth header (as a bare string) needed to upgrade the

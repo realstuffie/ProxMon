@@ -48,10 +48,21 @@ ProxmoxController::ProxmoxController(QObject *parent)
     connect(m_api, &ProxmoxClient::actionErrorFor, this, [this](int, const QString &sessionKey, const QString &actionKind, const QString &node, int vmid, const QString &action, const QString &message) {
         emit actionError(sessionKey, actionKind, node, vmid, action, message);
     });
-    connect(m_api, &ProxmoxClient::vncProxyReady, this, [this](const QString &sessionKey, const QString &host, const QString &node, const QString &kind, int vmid, int vncPort, const QString &ticket) {
+    connect(m_api, &ProxmoxClient::vncProxyReady, this, [this](const QString &sessionKey, const QString &host, const QString &node, const QString &kind, int vmid, int vncPort, const QString &ticket, int apiPort, const QByteArray &authHeader, bool ignoreSsl) {
+        // Resolve per-session overrides (multi-host), falling back to controller-wide settings.
+        int resolvedApiPort = apiPort;
+        bool resolvedIgnoreSsl = ignoreSsl;
+        if (!sessionKey.isEmpty()) {
+            const QVariantMap endpoint = endpointBySession(sessionKey);
+            if (!endpoint.isEmpty()) {
+                resolvedApiPort    = endpoint.value(QStringLiteral("port"), apiPort).toInt();
+                resolvedIgnoreSsl  = endpoint.value(QStringLiteral("ignoreSsl"), ignoreSsl).toBool();
+            }
+        }
         const QString vmKey = QStringLiteral("%1:%2:%3").arg(kind, node).arg(vmid);
         const QString vmName = m_pendingConsoleNames.take(vmKey);
-        emit consoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, ticket);
+        emit consoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, ticket,
+                          resolvedApiPort, QString::fromUtf8(authHeader), resolvedIgnoreSsl);
     });
     connect(m_api, &ProxmoxClient::vncProxyError, this, [this](const QString &, const QString &node, const QString &kind, int vmid, const QString &message) {
         m_pendingConsoleNames.remove(QStringLiteral("%1:%2:%3").arg(kind, node).arg(vmid));
