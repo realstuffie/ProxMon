@@ -49,7 +49,6 @@ public:
                           int proxyPort,
                           const QString &ticket,
                           const QString &user,
-                          const QString &authHeader,
                           bool ignoreSslErrors);
 
     // Re-handshake against an existing window — used when the QML reconnect
@@ -57,8 +56,11 @@ public:
     Q_INVOKABLE void connectWithTicket(int proxyPort,
                                        const QString &ticket,
                                        const QString &user,
-                                       const QString &authHeader,
                                        bool ignoreSslErrors);
+
+    // Called by ProxmoxController.deliverConsoleAuth() — sets the auth header
+    // directly from C++ without passing through the QML/JS heap.
+    Q_INVOKABLE void setAuthHeaderSecure(const QByteArray &header);
 
     Q_INVOKABLE void raise();
     Q_INVOKABLE void disconnect();

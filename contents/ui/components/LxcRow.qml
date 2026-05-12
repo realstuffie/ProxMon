@@ -60,8 +60,6 @@ Rectangle {
             font.pixelSize: 11
         }
 
-        Item { Layout.fillWidth: true }
-
         RowLayout {
             Layout.alignment: Qt.AlignVCenter
             spacing: 1
@@ -70,10 +68,18 @@ Rectangle {
             Layout.maximumWidth: 80
 
             PlasmaComponents.Label {
-                text: root.ctModel
-                    ? (root.ctModel.status === "running"
-                       ? (root.ctModel.cpu * 100).toFixed(0) + "%"
-                       : root.ctModel.status)
+                visible: root.ctModel && root.ctModel.status !== "running"
+                text: root.ctModel && root.ctModel.status !== "running" ? root.ctModel.status : ""
+                font.pixelSize: 10
+                opacity: 0.7
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+            }
+
+            PlasmaComponents.Label {
+                visible: root.ctModel && root.ctModel.status === "running"
+                text: root.ctModel && root.ctModel.status === "running"
+                    ? (root.ctModel.cpu * 100).toFixed(0) + "%"
                     : ""
                 font.pixelSize: 10
                 opacity: 0.7
@@ -84,7 +90,8 @@ Rectangle {
             }
 
             PlasmaComponents.Label {
-                text: root.ctModel && root.ctModel.status === "running" ? "|" : ""
+                visible: root.ctModel && root.ctModel.status === "running"
+                text: "|"
                 font.pixelSize: 10
                 opacity: 0.7
                 horizontalAlignment: Text.AlignHCenter
@@ -96,6 +103,7 @@ Rectangle {
             }
 
             PlasmaComponents.Label {
+                visible: root.ctModel && root.ctModel.status === "running"
                 text: root.ctModel && root.ctModel.status === "running"
                     ? (root.ctModel.mem / root.bytesPerGiB).toFixed(1) + "G"
                     : ""
@@ -113,7 +121,7 @@ Rectangle {
             spacing: 4
             Layout.leftMargin: 4
             Layout.preferredWidth: 50
-            opacity: (root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0) ? 1 : 0
+            visible: root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0
 
             Rectangle {
                 width: 8
@@ -223,7 +231,9 @@ Rectangle {
                 onClicked: if (typeof root.onAction === "function") root.onAction("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name, "reboot")
             }
             Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.busy || root.ctModel.status !== "running" }
-            PlasmaComponents.ToolButton {
+        }
+
+        PlasmaComponents.ToolButton {
                 flat: true
                 icon.name: "utilities-terminal"
                 implicitWidth: root.uiActionButtonSize
@@ -242,7 +252,6 @@ Rectangle {
                 onClicked: if (typeof root.onConsole === "function") root.onConsole("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name)
             }
             Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.ctModel.status !== "running" }
-        }
 
         Item {
             Layout.preferredWidth: root.scrollbarReserve

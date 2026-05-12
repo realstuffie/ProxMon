@@ -42,7 +42,7 @@ public:
     int     vmid()       const { return m_vmid; }
     int     vncPort()    const { return m_vncPort; }
     QString ticket()     const { return m_ticket; }
-    QString authHeader() const { return m_authHeader; }
+    QString authHeader() const { return QString::fromUtf8(m_authHeader); }
     bool    ignoreSsl()  const { return m_ignoreSsl; }
 
     void setHost(const QString &v)       { if (m_host == v) return;       m_host = v;       emit hostChanged(); }
@@ -52,11 +52,12 @@ public:
     void setVmid(int v)                  { if (m_vmid == v) return;       m_vmid = v;       emit vmidChanged(); }
     void setVncPort(int v)               { if (m_vncPort == v) return;    m_vncPort = v;    emit vncPortChanged(); }
     void setTicket(const QString &v)     { if (m_ticket == v) return;     m_ticket = v;     emit ticketChanged(); }
-    void setAuthHeader(const QString &v) { if (m_authHeader == v) return; m_authHeader = v; emit authHeaderChanged(); }
+    void setAuthHeader(const QString &v) { QByteArray ba = v.toUtf8(); if (m_authHeader == ba) return; m_authHeader = ba; emit authHeaderChanged(); }
     void setIgnoreSsl(bool v)            { if (m_ignoreSsl == v) return;  m_ignoreSsl = v;  emit ignoreSslChanged(); }
 
     Q_INVOKABLE void start();
     Q_INVOKABLE void stop();
+    Q_INVOKABLE void setAuthHeaderSecure(const QByteArray &header);
 
 signals:
     void ready(int localPort);
@@ -93,7 +94,7 @@ private:
     int     m_vmid      = 0;
     int     m_vncPort   = 0;
     QString m_ticket;
-    QString m_authHeader;
+    QByteArray m_authHeader;
     bool    m_ignoreSsl = false;
 
     QTcpServer  *m_server    = nullptr;

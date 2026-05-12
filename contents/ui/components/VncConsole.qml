@@ -15,22 +15,20 @@ Window {
     property int vncPort: 0
     property string vncTicket: ""
     // WebSocket proxy params — needed to connect through Proxmox's vncwebsocket endpoint
-    property int    apiPort:    8006
-    property string authHeader: ""
-    property bool   ignoreSsl:  false
+    property int    apiPort:   8006
+    property bool   ignoreSsl: false
+    // Controller reference — used to deliver the auth header directly in C++
+    // without passing it through the QML/JS heap.
+    property var    controller: null
     signal requestReconnect()
 
     function connectWithTicket(port, ticket) {
         vncPort   = port
         vncTicket = ticket
-        // Always go through the WS proxy — restart it for reconnects.
-        wsProxy.ticket     = ticket
-        wsProxy.vncPort    = port
-        // Re-arm the auth header explicitly so it's present for the next
-        // WebSocket handshake. onWsConnected clears it after the upgrade
-        // completes, so the QML binding alone won't restore it if the
-        // token value hasn't changed since the last connection.
-        wsProxy.authHeader = consoleWindow.authHeader
+        wsProxy.ticket  = ticket
+        wsProxy.vncPort = port
+        // Deliver auth header directly from C++ registry — never touches JS heap.
+        if (controller) controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
         wsProxy.start()
     }
 
@@ -53,9 +51,8 @@ Window {
         kind:       consoleWindow.kind
         vmid:       consoleWindow.vmid
         vncPort:    consoleWindow.vncPort
-        ticket:     consoleWindow.vncTicket
-        authHeader: consoleWindow.authHeader
-        ignoreSsl:  consoleWindow.ignoreSsl
+        ticket:    consoleWindow.vncTicket
+        ignoreSsl: consoleWindow.ignoreSsl
 
         onReady: function(localPort) {
             // Proxy is listening — hand the local port to libvncclient.
@@ -233,7 +230,8 @@ Window {
     }
 
     Component.onCompleted: {
-        // Start the WS proxy; it emits ready(localPort) → vncClient.connectToVnc
+        // Deliver auth header directly from C++ registry before starting proxy.
+        if (controller) controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
         wsProxy.start()
     }
 
@@ -241,9 +239,6 @@ Window {
         reconnectTimer.stop()
         vncClient.disconnect()
         wsProxy.stop()
-        // Clear secrets from QML properties so they don't linger in the
-        // QML engine's object memory after the window is destroyed.
-        vncTicket   = ""
-        authHeader  = ""
+        vncTicket = ""
     }
 }

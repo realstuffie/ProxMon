@@ -205,6 +205,8 @@ Triple-click the footer to enable:
 
 ### Known bugs / limitations
 
+- **VncWsProxy local port race (TODO):** `VncWsProxy` binds to `127.0.0.1:0` and emits `ready(port)` before libvncclient connects. During that window another local process could connect first. The intended fix is to override `QTcpServer::incomingConnection(qintptr handle)` to call `getsockopt(SO_PEERCRED)` on the raw fd before Qt wraps it, rejecting connections from a different UID. `QTcpSocket::socketDescriptor()` returns -1 after Qt takes ownership, so the check must happen at the `incomingConnection` override level.
+
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
 
 ### Compact representation click handling

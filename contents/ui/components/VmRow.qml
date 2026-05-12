@@ -60,8 +60,6 @@ Rectangle {
             font.pixelSize: 11
         }
 
-        Item { Layout.fillWidth: true }
-
         RowLayout {
             Layout.alignment: Qt.AlignVCenter
             spacing: 1
@@ -70,10 +68,18 @@ Rectangle {
             Layout.maximumWidth: 80
 
             PlasmaComponents.Label {
-                text: root.vmModel
-                    ? (root.vmModel.status === "running"
-                       ? (root.vmModel.cpu * 100).toFixed(0) + "%"
-                       : root.vmModel.status)
+                visible: root.vmModel && root.vmModel.status !== "running"
+                text: root.vmModel && root.vmModel.status !== "running" ? root.vmModel.status : ""
+                font.pixelSize: 10
+                opacity: 0.7
+                horizontalAlignment: Text.AlignHCenter
+                Layout.fillWidth: true
+            }
+
+            PlasmaComponents.Label {
+                visible: root.vmModel && root.vmModel.status === "running"
+                text: root.vmModel && root.vmModel.status === "running"
+                    ? (root.vmModel.cpu * 100).toFixed(0) + "%"
                     : ""
                 font.pixelSize: 10
                 opacity: 0.7
@@ -84,7 +90,8 @@ Rectangle {
             }
 
             PlasmaComponents.Label {
-                text: root.vmModel && root.vmModel.status === "running" ? "|" : ""
+                visible: root.vmModel && root.vmModel.status === "running"
+                text: "|"
                 font.pixelSize: 10
                 opacity: 0.7
                 horizontalAlignment: Text.AlignHCenter
@@ -96,6 +103,7 @@ Rectangle {
             }
 
             PlasmaComponents.Label {
+                visible: root.vmModel && root.vmModel.status === "running"
                 text: root.vmModel && root.vmModel.status === "running"
                     ? (root.vmModel.mem / root.bytesPerGiB).toFixed(1) + "G"
                     : ""
@@ -113,7 +121,7 @@ Rectangle {
             spacing: 4
             Layout.leftMargin: 4
             Layout.preferredWidth: 50
-            opacity: (root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0) ? 1 : 0
+            visible: root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0
 
             Rectangle {
                 width: 8

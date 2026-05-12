@@ -166,6 +166,7 @@ public:
                                const QString &node,
                                int vmid,
                                const QString &action);
+    Q_INVOKABLE void deliverConsoleAuth(const QString &sessionKey, QObject *target);
     Q_INVOKABLE void openConsole(const QString &sessionKey,
                               const QString &kind,
                               const QString &node,
@@ -245,12 +246,10 @@ signals:
                   int vncPort,
                   const QString &ticket,
                   int apiPort,
-                  const QString &authHeader,
                   bool ignoreSsl);
     // Separate signal for LXC: carries the auth `user` returned by termproxy
-    // so the LxcTerminal can complete the "user:ticket\n" handshake, plus the
-    // PVEAPIToken auth header (as a bare string) needed to upgrade the
-    // vncwebsocket request — Proxmox 401s otherwise.
+    // so the LxcTerminal can complete the "user:ticket\n" handshake.
+    // Auth header is delivered out-of-band via deliverConsoleAuth().
     void lxcConsoleReady(const QString &sessionKey,
                          const QString &host,
                          int apiPort,
@@ -260,7 +259,6 @@ signals:
                          int proxyPort,
                          const QString &ticket,
                          const QString &user,
-                         const QString &authHeader,
                          bool ignoreSsl);
     void consoleError(const QString &node,
                   const QString &kind,
@@ -414,6 +412,7 @@ private:
     QTimer *m_pbsTimer = nullptr;
     QTimer *m_pbsDebounceTimer = nullptr;
     int m_pendingPbsSnapshotRequests = 0;
+    QHash<QString, QByteArray> m_pendingConsoleAuth;
     ProxmoxClient *m_api;
     SecretStore *m_singleSecretStore;
     SecretStore *m_multiSecretStore;

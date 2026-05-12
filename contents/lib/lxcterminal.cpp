@@ -61,7 +61,6 @@ void LxcTerminal::open(const QString &host,
                        int proxyPort,
                        const QString &ticket,
                        const QString &user,
-                       const QString &authHeader,
                        bool ignoreSslErrors)
 {
     m_host       = host;
@@ -72,8 +71,8 @@ void LxcTerminal::open(const QString &host,
     m_proxyPort  = proxyPort;
     m_ticket     = ticket;
     m_user       = user;
-    m_authHeader = authHeader.toUtf8();
     m_ignoreSsl  = ignoreSslErrors;
+    // m_authHeader is set beforehand via setAuthHeaderSecure()
 
     ensureWindow(vmName, node);
     openSocket();
@@ -82,19 +81,23 @@ void LxcTerminal::open(const QString &host,
 void LxcTerminal::connectWithTicket(int proxyPort,
                                     const QString &ticket,
                                     const QString &user,
-                                    const QString &authHeader,
                                     bool ignoreSslErrors)
 {
     m_proxyPort  = proxyPort;
     m_ticket     = ticket;
     m_user       = user;
-    m_authHeader = authHeader.toUtf8();
     m_ignoreSsl  = ignoreSslErrors;
+    // m_authHeader is set beforehand via setAuthHeaderSecure()
 
     if (!m_window) {
         ensureWindow(m_vmName, m_node);
     }
     openSocket();
+}
+
+void LxcTerminal::setAuthHeaderSecure(const QByteArray &header)
+{
+    m_authHeader = header;
 }
 
 void LxcTerminal::raise()
@@ -281,6 +284,7 @@ void LxcTerminal::openSocket()
         // Wipe the secret-derived bytes so they don't sit in memory for the
         // lifetime of the session. Reconnects re-fetch a fresh header
         // through controller.openConsole.
+        m_authHeader.fill(0);
         m_authHeader.clear();
         m_phase = Phase::Authenticating;
         if (m_ws) {
