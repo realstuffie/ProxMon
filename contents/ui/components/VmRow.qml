@@ -42,8 +42,8 @@ Rectangle {
     RowLayout {
         anchors.fill: parent
         anchors.leftMargin: 8
-        anchors.rightMargin: 8
-        spacing: 6
+        anchors.rightMargin: 2
+        spacing: 4
 
         Rectangle {
             implicitWidth: 8
