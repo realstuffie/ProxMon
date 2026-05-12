@@ -1809,6 +1809,7 @@ PlasmoidItem {
                         onConsole: function(kind, nodeName, vmid, displayName) {
                             controller.openConsole("", kind, nodeName, vmid, displayName)
                         }
+                        consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                     }
                 }
 
@@ -1862,6 +1863,7 @@ PlasmoidItem {
                         onAction: function(sessionKey, kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunActionForSession(sessionKey, kind, nodeName, vmid, displayName, action)
                         }
+                        consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                     }
                 }
 

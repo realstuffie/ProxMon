@@ -29,6 +29,7 @@ Rectangle {
     property var anonymizeVmName: null
     property var onAction: null
     property var onConsole: null
+    property bool consoleEnabled: true
 
     Layout.fillWidth: true
     Layout.preferredHeight: uiRowHeight
@@ -238,7 +239,7 @@ Rectangle {
                 icon.name: "utilities-terminal"
                 implicitWidth: root.uiActionButtonSize
                 implicitHeight: root.uiActionButtonSize
-                visible: root.vmModel && root.vmModel.status === "running"
+                visible: root.consoleEnabled && root.vmModel && root.vmModel.status === "running"
 
                 PlasmaComponents.ToolTip { text: "Open Console" }
 
@@ -251,7 +252,7 @@ Rectangle {
 
                 onClicked: if (typeof root.onConsole === "function") root.onConsole("qemu", root.nodeName, root.vmModel.vmid, root.vmModel.name)
             }
-            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.vmModel || root.vmModel.status !== "running" }
+            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: root.consoleEnabled && (!root.vmModel || root.vmModel.status !== "running") }
 
         Item {
             Layout.preferredWidth: root.scrollbarReserve

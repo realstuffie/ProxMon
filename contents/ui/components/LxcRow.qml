@@ -29,6 +29,7 @@ Rectangle {
     property var anonymizeLxcName: null
     property var onAction: null
     property var onConsole: null
+    property bool consoleEnabled: true
 
     Layout.fillWidth: true
     Layout.preferredHeight: uiRowHeight
@@ -238,7 +239,7 @@ Rectangle {
                 icon.name: "utilities-terminal"
                 implicitWidth: root.uiActionButtonSize
                 implicitHeight: root.uiActionButtonSize
-                visible: root.ctModel && root.ctModel.status === "running"
+                visible: root.consoleEnabled && root.ctModel && root.ctModel.status === "running"
 
                 PlasmaComponents.ToolTip { text: "Open Console" }
 
@@ -251,7 +252,7 @@ Rectangle {
 
                 onClicked: if (typeof root.onConsole === "function") root.onConsole("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name)
             }
-            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.ctModel.status !== "running" }
+            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: root.consoleEnabled && (!root.ctModel || root.ctModel.status !== "running") }
 
         Item {
             Layout.preferredWidth: root.scrollbarReserve

@@ -39,6 +39,7 @@ ColumnLayout {
     property var onToggleCollapsed: null
     property var onAction: null
     property var onConsole: null
+    property bool consoleEnabled: true
 
     Layout.fillWidth: true
     Layout.alignment: Qt.AlignTop
@@ -218,6 +219,7 @@ ColumnLayout {
                     anonymizeVmName: root.anonymizeVmName
                     onAction: root.onAction
                     onConsole: root.onConsole
+                    consoleEnabled: root.consoleEnabled
                 }
             }
         }
@@ -269,6 +271,7 @@ ColumnLayout {
                     anonymizeLxcName: root.anonymizeLxcName
                     onAction: root.onAction
                     onConsole: root.onConsole
+                    consoleEnabled: root.consoleEnabled
                 }
             }
         }

@@ -42,6 +42,7 @@ ColumnLayout {
     property var onToggleCollapsed: null
     property var onAction: null
     property var onConsole: null
+    property bool consoleEnabled: true
 
     Layout.fillWidth: true
     Layout.alignment: Qt.AlignTop
@@ -140,6 +141,7 @@ ColumnLayout {
             onToggleCollapsed: root.onToggleCollapsed
             onAction: root.onAction
             onConsole: root.onConsole
+            consoleEnabled: root.consoleEnabled
         }
     }
 }
