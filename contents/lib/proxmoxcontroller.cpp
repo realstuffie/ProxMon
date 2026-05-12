@@ -777,9 +777,12 @@ QString ProxmoxController::sanitizeDebugString(const QString &value) const {
     if (!m_tokenId.isEmpty()) {
         sanitized.replace(m_tokenId, QStringLiteral("REDACTED_TOKEN"));
     }
-    sanitized.replace(QRegularExpression(QStringLiteral("apiTokenSecret:[^\\s]+")), QStringLiteral("apiTokenSecret:REDACTED"));
-    sanitized.replace(QRegularExpression(QStringLiteral("([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)")), QStringLiteral("REDACTED@\\2"));
-    sanitized.replace(QRegularExpression(QStringLiteral("!([A-Za-z0-9._:-]+)")), QStringLiteral("!REDACTED"));
+    static const QRegularExpression reTokenSecret(QStringLiteral("apiTokenSecret:[^\\s]+"));
+    static const QRegularExpression reUserRealm(QStringLiteral("([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)"));
+    static const QRegularExpression reTokenId(QStringLiteral("!([A-Za-z0-9._:-]+)"));
+    sanitized.replace(reTokenSecret, QStringLiteral("apiTokenSecret:REDACTED"));
+    sanitized.replace(reUserRealm, QStringLiteral("REDACTED@\\2"));
+    sanitized.replace(reTokenId, QStringLiteral("!REDACTED"));
     return sanitized;
 }
 
@@ -794,8 +797,8 @@ void ProxmoxController::appendDebugLog(const QString &message) {
     }
     m_debugLog.push_back(line);
     constexpr int maxLines = 100;
-    if (m_debugLog.size() > maxLines) {
-        m_debugLog = m_debugLog.mid(m_debugLog.size() - maxLines);
+    while (m_debugLog.size() > maxLines) {
+        m_debugLog.removeFirst();
     }
     emit debugLogChanged();
 }

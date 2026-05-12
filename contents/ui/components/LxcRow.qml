@@ -121,7 +121,7 @@ Rectangle {
             spacing: 4
             Layout.leftMargin: 4
             Layout.preferredWidth: 50
-            visible: root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0
+            opacity: (root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0) ? 1 : 0
 
             Rectangle {
                 width: 8

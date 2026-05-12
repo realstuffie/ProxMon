@@ -599,7 +599,17 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
         return;
     }
 
-    QNetworkRequest req = buildRequest(pbsHost, port, QStringLiteral("/admin/datastore"), tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
+    // Resolve the cert once here; all per-datastore snapshot requests reuse
+    // the same bytes so loadTrustedCertificates doesn't re-read the file for
+    // each datastore.
+    const QByteArray resolvedCertPem = trustedCertPem.isEmpty() && !trustedCertPath.trimmed().isEmpty()
+        ? [&]() -> QByteArray {
+              QFile f(trustedCertPath.trimmed());
+              return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+          }()
+        : trustedCertPem;
+
+    QNetworkRequest req = buildRequest(pbsHost, port, QStringLiteral("/admin/datastore"), tokenId, tokenSecret, resolvedCertPem, QString(), m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
     req.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
 
     QNetworkReply *r = m_nam.get(req);
@@ -611,7 +621,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
         });
     }
 
-    QObject::connect(r, &QNetworkReply::finished, this, [this, r, pbsHost, port, tokenId, tokenSecret, ignoreSslErrors, trustedCertPem, trustedCertPath]() {
+    QObject::connect(r, &QNetworkReply::finished, this, [this, r, pbsHost, port, tokenId, tokenSecret, ignoreSslErrors, resolvedCertPem]() {
         m_pbsInFlight.remove(r);
 
         auto emitErr = [&](const QString &msg) {
@@ -636,8 +646,8 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
                                                            QStringLiteral("/admin/datastore/%1/snapshots").arg(QString::fromUtf8(QUrl::toPercentEncoding(datastore))),
                                                            tokenId,
                                                            tokenSecret,
-                                                           trustedCertPem,
-                                                           trustedCertPath,
+                                                           resolvedCertPem,
+                                                           QString(),
                                                            m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
                 snapshotReq.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
 
