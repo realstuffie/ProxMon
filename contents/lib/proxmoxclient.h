@@ -129,13 +129,6 @@ public:
                                         bool ignoreSslErrors,
                                         const QByteArray &trustedCertPem,
                                         const QString &trustedCertPath);
-    Q_INVOKABLE void testPBSConnection(const QString &pbsHost,
-                                       int port,
-                                       const QString &tokenId,
-                                       const QString &tokenSecret,
-                                       bool ignoreSslErrors,
-                                       const QByteArray &trustedCertPem,
-                                       const QString &trustedCertPath);
 
 signals:
     // user is the auth user returned by termproxy; sent over the
@@ -211,7 +204,6 @@ signals:
                               const QString &datastore,
                               const QList<PBSSnapshot> &snapshots);
     void pbsError(const QString &pbsHost, const QString &message);
-    void pbsConnectionOk(const QString &pbsHost);
 
 private:
     void request(const QString &path, int seq, const QString &kind, const QString &node);

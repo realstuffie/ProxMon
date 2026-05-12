@@ -91,12 +91,13 @@ Window {
         }
     }
     property int reconnectAttempts: 0
+    readonly property int maxReconnectAttempts: 3
     Timer {
         id: reconnectTimer
         interval: 5000
         repeat: false
         onTriggered: {
-            if (consoleWindow.reconnectAttempts < 3) {
+            if (consoleWindow.reconnectAttempts < maxReconnectAttempts) {
                 consoleWindow.reconnectAttempts += 1
                 requestReconnect()
             } else {

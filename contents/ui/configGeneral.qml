@@ -284,11 +284,6 @@ KCM.SimpleKCM {
             onStashPbsSecret: function(secret) {
                 cfg_pbsTokenSecretBuffer = secret
             }
-            onTestPbsConnection: function(host, port, tokenId, ignoreSslErrors) {
-                if (singleHostSection.controller) {
-                    singleHostSection.controller.testPBSConnection(host, port, tokenId, ignoreSslErrors)
-                }
-            }
         }
 
         ConfigGeneralMultiHostSection {

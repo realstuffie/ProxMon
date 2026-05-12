@@ -1,4 +1,5 @@
 #include "proxmoxclient.h"
+#include "proxmoxconsts.h"
 
 #include <QFile>
 #include <QJsonArray>
@@ -99,15 +100,15 @@ void ProxmoxClient::setTrustedCertPath(const QString &v) {
 }
 
 void ProxmoxClient::requestNodes(int seq) {
-    request(QStringLiteral("/nodes"), seq, QStringLiteral("nodes"), QString());
+    request(QStringLiteral("/nodes"), seq, ProxmoxConst::Kind::Nodes, QString());
 }
 
 void ProxmoxClient::requestQemu(const QString &node, int seq) {
-    request(QStringLiteral("/nodes/%1/qemu").arg(node), seq, QStringLiteral("qemu"), node);
+    request(QStringLiteral("/nodes/%1/qemu").arg(node), seq, ProxmoxConst::Kind::Qemu, node);
 }
 
 void ProxmoxClient::requestLxc(const QString &node, int seq) {
-    request(QStringLiteral("/nodes/%1/lxc").arg(node), seq, QStringLiteral("lxc"), node);
+    request(QStringLiteral("/nodes/%1/lxc").arg(node), seq, ProxmoxConst::Kind::Lxc, node);
 }
 
 void ProxmoxClient::setLowLatency(bool v) {
@@ -123,7 +124,7 @@ void ProxmoxClient::requestNodesFor(const QString &sessionKey,
                                     const QString &tokenSecret,
                                     bool ignoreSslErrors,
                                     int seq) {
-    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, m_trustedCertPem.toUtf8(), m_trustedCertPath, QStringLiteral("/nodes"), seq, QStringLiteral("nodes"), QString());
+    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, m_trustedCertPem.toUtf8(), m_trustedCertPath, QStringLiteral("/nodes"), seq, ProxmoxConst::Kind::Nodes, QString());
 }
 
 void ProxmoxClient::requestQemuFor(const QString &sessionKey,
@@ -134,7 +135,7 @@ void ProxmoxClient::requestQemuFor(const QString &sessionKey,
                                    bool ignoreSslErrors,
                                    const QString &node,
                                    int seq) {
-    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, m_trustedCertPem.toUtf8(), m_trustedCertPath, QStringLiteral("/nodes/%1/qemu").arg(node), seq, QStringLiteral("qemu"), node);
+    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, m_trustedCertPem.toUtf8(), m_trustedCertPath, QStringLiteral("/nodes/%1/qemu").arg(node), seq, ProxmoxConst::Kind::Qemu, node);
 }
 
 void ProxmoxClient::requestLxcFor(const QString &sessionKey,
@@ -145,15 +146,15 @@ void ProxmoxClient::requestLxcFor(const QString &sessionKey,
                                   bool ignoreSslErrors,
                                   const QString &node,
                                   int seq) {
-    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, m_trustedCertPem.toUtf8(), m_trustedCertPath, QStringLiteral("/nodes/%1/lxc").arg(node), seq, QStringLiteral("lxc"), node);
+    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, m_trustedCertPem.toUtf8(), m_trustedCertPath, QStringLiteral("/nodes/%1/lxc").arg(node), seq, ProxmoxConst::Kind::Lxc, node);
 }
 
 void ProxmoxClient::requestAction(const QString &kind, const QString &node, int vmid, const QString &action, int seq) {
-    if (kind != QStringLiteral("qemu") && kind != QStringLiteral("lxc")) {
+    if (kind != ProxmoxConst::Kind::Qemu && kind != ProxmoxConst::Kind::Lxc) {
         emit actionError(seq, kind, node, vmid, action, QStringLiteral("Invalid kind"));
         return;
     }
-    if (action != QStringLiteral("start") && action != QStringLiteral("shutdown") && action != QStringLiteral("reboot")) {
+    if (action != ProxmoxConst::VmAction::Start && action != ProxmoxConst::VmAction::Shutdown && action != ProxmoxConst::VmAction::Reboot) {
         emit actionError(seq, kind, node, vmid, action, QStringLiteral("Invalid action"));
         return;
     }
@@ -177,11 +178,11 @@ void ProxmoxClient::requestActionFor(const QString &sessionKey,
                                      int vmid,
                                      const QString &action,
                                      int seq) {
-    if (kind != QStringLiteral("qemu") && kind != QStringLiteral("lxc")) {
+    if (kind != ProxmoxConst::Kind::Qemu && kind != ProxmoxConst::Kind::Lxc) {
         emit actionErrorFor(seq, sessionKey, kind, node, vmid, action, QStringLiteral("Invalid kind"));
         return;
     }
-    if (action != QStringLiteral("start") && action != QStringLiteral("shutdown") && action != QStringLiteral("reboot")) {
+    if (action != ProxmoxConst::VmAction::Start && action != ProxmoxConst::VmAction::Shutdown && action != ProxmoxConst::VmAction::Reboot) {
         emit actionErrorFor(seq, sessionKey, kind, node, vmid, action, QStringLiteral("Invalid action"));
         return;
     }
@@ -225,7 +226,7 @@ QNetworkRequest buildRequest(const QString &host,
                              const QString &tokenSecret,
                              const QByteArray &trustedCertPem,
                              const QString &trustedCertPath,
-                             int transferTimeoutMs = 10000) {
+                             int transferTimeoutMs = ProxmoxConst::Defaults::RequestTimeoutMs) {
     const QUrl url(QStringLiteral("https://%1:%2/api2/json%3").arg(host).arg(port).arg(path));
 
     QNetworkRequest req(url);
@@ -293,7 +294,7 @@ QString extractTaskExitMessage(const QVariant &data) {
     if (!exitStatus.isEmpty()) {
         return exitStatus;
     }
-    if (status.compare(QStringLiteral("stopped"), Qt::CaseInsensitive) == 0) {
+    if (status.compare(ProxmoxConst::Status::Stopped, Qt::CaseInsensitive) == 0) {
         return QStringLiteral("Task stopped without success");
     }
     return {};
@@ -303,7 +304,7 @@ bool taskStillRunning(const QVariant &data) {
     const QVariantMap root = data.toMap();
     const QVariantMap payload = root.value(QStringLiteral("data")).toMap();
     const QString status = payload.value(QStringLiteral("status")).toString().trimmed();
-    return status.compare(QStringLiteral("running"), Qt::CaseInsensitive) == 0;
+    return status.compare(ProxmoxConst::Status::Running, Qt::CaseInsensitive) == 0;
 }
 
 } // namespace
@@ -412,7 +413,7 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
         return;
     }
 
-    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? 5000 : 10000);
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
     QNetworkReply *r = m_nam.get(req);
 
     m_inFlight.insert(r);
@@ -486,7 +487,7 @@ void ProxmoxClient::postFor(const QString &sessionKey,
         return;
     }
 
-    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? 5000 : 10000);
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
 
     QNetworkReply *r = m_nam.post(req, QByteArray());
     m_inFlight.insert(r);
@@ -598,7 +599,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
         return;
     }
 
-    QNetworkRequest req = buildRequest(pbsHost, port, QStringLiteral("/admin/datastore"), tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? 5000 : 10000);
+    QNetworkRequest req = buildRequest(pbsHost, port, QStringLiteral("/admin/datastore"), tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
     req.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
 
     QNetworkReply *r = m_nam.get(req);
@@ -637,7 +638,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
                                                            tokenSecret,
                                                            trustedCertPem,
                                                            trustedCertPath,
-                                                           m_lowLatency ? 5000 : 10000);
+                                                           m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
                 snapshotReq.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
 
                 QNetworkReply *snapshotReply = m_nam.get(snapshotReq);
@@ -686,44 +687,6 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
     });
 }
 
-void ProxmoxClient::testPBSConnection(const QString &pbsHost,
-                                      int port,
-                                      const QString &tokenId,
-                                      const QString &tokenSecret,
-                                      bool ignoreSslErrors,
-                                      const QByteArray &trustedCertPem,
-                                      const QString &trustedCertPath) {
-    if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] testPBSConnection host=%1 port=%2 tokenIdEmpty=%3 secretEmpty=%4 ignoreSsl=%5")
-        .arg(pbsHost, QString::number(port), tokenId.isEmpty() ? QStringLiteral("true") : QStringLiteral("false"), tokenSecret.isEmpty() ? QStringLiteral("true") : QStringLiteral("false"), ignoreSslErrors ? QStringLiteral("true") : QStringLiteral("false"));
-    if (pbsHost.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
-        emit pbsError(pbsHost, QStringLiteral("Not configured"));
-        return;
-    }
-
-    QNetworkRequest req = buildRequest(pbsHost, port, QStringLiteral("/version"), tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? 5000 : 10000);
-    req.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
-
-    QNetworkReply *r = m_nam.get(req);
-    m_pbsInFlight.insert(r);
-    if (ignoreSslErrors) {
-        QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
-            r->ignoreSslErrors();
-        });
-    }
-
-    QObject::connect(r, &QNetworkReply::finished, this, [this, r, pbsHost]() {
-        m_pbsInFlight.remove(r);
-        auto emitErr = [&](const QString &msg) {
-            if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] testPBSConnection error host=%1 message=%2").arg(pbsHost, msg);
-            emit pbsError(pbsHost, msg);
-        };
-        auto emitOk = [&](const QVariant &) {
-            if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] testPBSConnection ok host=%1").arg(pbsHost);
-            emit pbsConnectionOk(pbsHost);
-        };
-        handleFinishedReply(r, 0, QStringLiteral("pbs-version"), QString(), QString(), emitErr, emitOk);
-    });
-}
 
 void ProxmoxClient::pollTaskStatus(const QString &sessionKey,
                                    const QString &host,
@@ -749,7 +712,7 @@ void ProxmoxClient::pollTaskStatus(const QString &sessionKey,
     }
 
     const QString path = QStringLiteral("/nodes/%1/tasks/%2/status").arg(node, upid);
-    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? 5000 : 10000);
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, trustedCertPem, trustedCertPath, m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
     QNetworkReply *r = m_nam.get(req);
     m_inFlight.insert(r);
 

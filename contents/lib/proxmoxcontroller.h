@@ -160,10 +160,6 @@ public:
     Q_INVOKABLE void storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void storeMultiHostPBSSecret(const QString &host, const QString &secret);
     Q_INVOKABLE void fetchData();
-    Q_INVOKABLE void testPBSConnection(const QString &host,
-                                       int port,
-                                       const QString &tokenId,
-                                       bool ignoreSslErrors);
     Q_INVOKABLE void cancelRefresh();
     Q_INVOKABLE bool runAction(const QString &sessionKey,
                                const QString &kind,
@@ -239,8 +235,6 @@ signals:
                      int vmid,
                      const QString &action,
                      const QString &message);
-    void pbsTestSucceeded(const QString &pbsHost);
-    void pbsTestFailed(const QString &pbsHost, const QString &message);
 
     void consoleReady(const QString &sessionKey,
                   const QString &host,
@@ -347,6 +341,7 @@ private:
     QString keyFor(const QString &host, int port, const QString &tokenId) const;
     QVariantMap parseKeyEntry(const QString &key) const;
     QVariantList parseKeyEntries(const QStringList &keys) const;
+    bool isBackupExcluded(int vmid, const QString &tags) const;
 
     QString m_connectionMode = QStringLiteral("single");
     QString m_host;
@@ -395,7 +390,6 @@ private:
     int m_retryNextDelayMs = 0;
     QString m_retryStatusText;
     QString m_pbsRefreshError;
-    bool m_pbsTestInProgress = false;
     int m_pendingPbsEndpoints = 0;
     QVariant m_proxmoxData;
     QVariantList m_vmData;

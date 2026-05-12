@@ -20,6 +20,11 @@ Rectangle {
     property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property real uiWindowOpacity: 1.0
     property int scrollbarReserve: 0
+    property int uiActionButtonSize: 22
+    property int uiBusyIndicatorSize: 16
+    property real uiButtonHoverOpacity: 0.08
+    property real uiButtonHoverDangerOpacity: 0.18
+    readonly property real bytesPerGiB: 1073741824.0
     property var anonymizeVmId: null
     property var anonymizeLxcName: null
     property var onAction: null
@@ -92,7 +97,7 @@ Rectangle {
 
             PlasmaComponents.Label {
                 text: root.ctModel && root.ctModel.status === "running"
-                    ? (root.ctModel.mem / 1073741824).toFixed(1) + "G"
+                    ? (root.ctModel.mem / root.bytesPerGiB).toFixed(1) + "G"
                     : ""
                 font.pixelSize: 10
                 opacity: 0.7
@@ -149,8 +154,8 @@ Rectangle {
             PlasmaComponents.BusyIndicator {
                 visible: root.busy
                 running: root.busy
-                implicitWidth: 16
-                implicitHeight: 16
+                implicitWidth: root.uiBusyIndicatorSize
+                implicitHeight: root.uiBusyIndicatorSize
             }
 
             PlasmaComponents.ToolButton {
@@ -158,8 +163,8 @@ Rectangle {
                 icon.name: (root.armedActionKey === ("lxc:" + root.nodeName + ":" + root.ctModel.vmid + ":start") && root.armedTimerRunning)
                     ? "dialog-ok"
                     : "media-playback-start"
-                implicitWidth: 22
-                implicitHeight: 22
+                implicitWidth: root.uiActionButtonSize
+                implicitHeight: root.uiActionButtonSize
                 visible: root.ctModel && !root.busy && root.ctModel.status !== "running"
 
                 PlasmaComponents.ToolTip { text: "Start" }
@@ -167,21 +172,21 @@ Rectangle {
                 background: Rectangle {
                     radius: 4
                     color: parent.hovered
-                        ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                        ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, root.uiButtonHoverOpacity)
                         : "transparent"
                 }
 
                 onClicked: if (typeof root.onAction === "function") root.onAction("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name, "start")
             }
-            Item { implicitWidth: 22; implicitHeight: 22; visible: !root.ctModel || root.busy || root.ctModel.status === "running" }
+            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.busy || root.ctModel.status === "running" }
 
             PlasmaComponents.ToolButton {
                 flat: true
                 icon.name: (root.armedActionKey === ("lxc:" + root.nodeName + ":" + root.ctModel.vmid + ":shutdown") && root.armedTimerRunning)
                     ? "dialog-ok"
                     : "system-shutdown"
-                implicitWidth: 22
-                implicitHeight: 22
+                implicitWidth: root.uiActionButtonSize
+                implicitHeight: root.uiActionButtonSize
                 visible: root.ctModel && !root.busy && root.ctModel.status === "running"
 
                 PlasmaComponents.ToolTip { text: "Shutdown" }
@@ -189,21 +194,21 @@ Rectangle {
                 background: Rectangle {
                     radius: 4
                     color: parent.hovered
-                        ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
+                        ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, root.uiButtonHoverDangerOpacity)
                         : "transparent"
                 }
 
                 onClicked: if (typeof root.onAction === "function") root.onAction("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name, "shutdown")
             }
-            Item { implicitWidth: 22; implicitHeight: 22; visible: !root.ctModel || root.busy || root.ctModel.status !== "running" }
+            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.busy || root.ctModel.status !== "running" }
 
             PlasmaComponents.ToolButton {
                 flat: true
                 icon.name: (root.armedActionKey === ("lxc:" + root.nodeName + ":" + root.ctModel.vmid + ":reboot") && root.armedTimerRunning)
                     ? "dialog-ok"
                     : "system-reboot"
-                implicitWidth: 22
-                implicitHeight: 22
+                implicitWidth: root.uiActionButtonSize
+                implicitHeight: root.uiActionButtonSize
                 visible: root.ctModel && !root.busy && root.ctModel.status === "running"
 
                 PlasmaComponents.ToolTip { text: "Reboot" }
@@ -211,18 +216,18 @@ Rectangle {
                 background: Rectangle {
                     radius: 4
                     color: parent.hovered
-                        ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
+                        ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, root.uiButtonHoverDangerOpacity)
                         : "transparent"
                 }
 
                 onClicked: if (typeof root.onAction === "function") root.onAction("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name, "reboot")
             }
-            Item { implicitWidth: 22; implicitHeight: 22; visible: !root.ctModel || root.busy || root.ctModel.status !== "running" }
+            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.busy || root.ctModel.status !== "running" }
             PlasmaComponents.ToolButton {
                 flat: true
                 icon.name: "utilities-terminal"
-                implicitWidth: 22
-                implicitHeight: 22
+                implicitWidth: root.uiActionButtonSize
+                implicitHeight: root.uiActionButtonSize
                 visible: root.ctModel && root.ctModel.status === "running"
 
                 PlasmaComponents.ToolTip { text: "Open Console" }
@@ -230,13 +235,13 @@ Rectangle {
                 background: Rectangle {
                     radius: 4
                     color: parent.hovered
-                        ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                        ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, root.uiButtonHoverOpacity)
                         : "transparent"
                 }
 
                 onClicked: if (typeof root.onConsole === "function") root.onConsole("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name)
             }
-            Item { implicitWidth: 22; implicitHeight: 22; visible: !root.ctModel || root.ctModel.status !== "running" }
+            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.ctModel.status !== "running" }
         }
 
         Item {
