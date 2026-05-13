@@ -194,6 +194,7 @@ Triple-click the footer to enable:
 **Cause:** KDE Plasma's Energy Saving feature blanks the display after a period of inactivity. Because the VM has no physical monitor attached, no hardware signal ever wakes it. This affects any full desktop environment running inside a VM that has display power management enabled.
 
 **Fix (on the guest):**
+
 - System Settings → Power Management → Energy Saving → set screen blanking and display power management to **Never**
 - This is a per-user KDE setting; apply it for any user account that runs the desktop session
 
@@ -205,7 +206,11 @@ Triple-click the footer to enable:
 
 ### Known bugs / limitations
 
-- **VncWsProxy local port race (TODO):** `VncWsProxy` binds to `127.0.0.1:0` and emits `ready(port)` before libvncclient connects. During that window another local process could connect first. The intended fix is to override `QTcpServer::incomingConnection(qintptr handle)` to call `getsockopt(SO_PEERCRED)` on the raw fd before Qt wraps it, rejecting connections from a different UID. `QTcpSocket::socketDescriptor()` returns -1 after Qt takes ownership, so the check must happen at the `incomingConnection` override level.
+- **VncWsProxy local port race (known limitation, intentionally not fixed):** `VncWsProxy` binds to `127.0.0.1:0` and emits `ready(port)` before libvncclient calls `connect()`. During that window another local process can grab the slot.
+
+Residual threat is DoS only. The Proxmox VNC ticket lives in this process and is never echoed to the loopback client, so an attacker grabbing the slot cannot read it. The PVE auth header is sent outbound on the WebSocket and is never echoed either. Without the ticket the attacker fails the RFB auth handshake, the WS server tears down, and the user gets an error and retries. No data or credentials leak.
+
+`SO_PEERCRED` is **not** a viable check here — it is documented for AF_UNIX only, and on AF_INET returns `ENOPROTOOPT` on Linux (0/0/0 on some older kernels).
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
 
