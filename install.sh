@@ -69,25 +69,35 @@ install_deps_best_effort() {
     pm="apt-get"
     pm_update="apt-get update"
     pm_install="apt-get install -y"
-    pkgs_build="cmake make g++ pkg-config qt6-base-dev qt6-declarative-dev libsecret-1-dev"
+    # libvncclient-dev: VNC console; qt6-websockets-dev + libqtermwidget6*-dev: LXC console.
+    # libutf8proc-dev: pulled in transitively by qtermwidget6's headers.
+    # libqtermwidget6 dev package is version-suffixed on some Ubuntu releases
+    # (libqtermwidget6-2-dev), unsuffixed on others (libqtermwidget6-dev) —
+    # both names are listed; install_pkgs_best_effort tolerates a missing one.
+    # libvncserver-dev ships both libvncserver and libvncclient headers/pc files on Debian/Ubuntu.
+    pkgs_build="cmake make g++ pkg-config qt6-base-dev qt6-declarative-dev qt6-websockets-dev libsecret-1-dev libvncserver-dev libutf8proc-dev qtermwidget6-data"
+    pkgs_qtermwidget="libqtermwidget6-2-dev libqtermwidget6-dev"
     pkgs_ecm="extra-cmake-modules"
     pkgs_kpackage="libkf6package-bin"
   elif command -v zypper >/dev/null 2>&1; then
     pm="zypper"
     pm_update="zypper refresh"
     pm_install="zypper install -y"
-    pkgs_build="cmake make gcc-c++ pkg-config qt6-base-devel qt6-declarative-devel"
+    pkgs_build="cmake make gcc-c++ pkg-config qt6-base-devel qt6-declarative-devel qt6-websockets-devel libvncserver-devel utf8proc-devel"
+    pkgs_qtermwidget="qtermwidget-qt6-devel"
     pkgs_ecm="extra-cmake-modules"
   elif command -v dnf >/dev/null 2>&1; then
     pm="dnf"
     pm_install="dnf install -y"
     pm_provider_prefix="*/"
-    pkgs_build="cmake make gcc-c++ pkgconf-pkg-config qt6-qtbase-devel qt6-qtdeclarative-devel"
+    pkgs_build="cmake make gcc-c++ pkgconf-pkg-config qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwebsockets-devel libvncserver-devel utf8proc-devel"
+    pkgs_qtermwidget="qtermwidget-qt6-devel"
     pkgs_ecm="extra-cmake-modules"
   elif command -v pacman >/dev/null 2>&1; then
     pm="pacman"
     pm_install="pacman -Sy --noconfirm --needed"
-    pkgs_build="cmake make gcc pkgconf qt6-base qt6-declarative"
+    pkgs_build="cmake make gcc pkgconf qt6-base qt6-declarative qt6-websockets libvncserver libutf8proc"
+    pkgs_qtermwidget="qtermwidget"
     pkgs_ecm="extra-cmake-modules"
   else
     printf '%s\n' "No supported package manager detected (apt-get/zypper/dnf/pacman). Skipping auto deps." >&2
@@ -124,6 +134,23 @@ install_deps_best_effort() {
 
   # Install ECM
   install_pkgs_best_effort "$pkgs_ecm"
+
+  # qtermwidget6 dev package: try each candidate name in turn (apt versions
+  # the dev pkg as libqtermwidget6-2-dev on Ubuntu 26+, libqtermwidget6-dev
+  # elsewhere). Stop at the first one that's actually present in the index.
+  if [ -n "${pkgs_qtermwidget:-}" ]; then
+    for candidate in $pkgs_qtermwidget; do
+      if [ "$pm" = "apt-get" ]; then
+        if apt-cache show "$candidate" >/dev/null 2>&1; then
+          install_pkgs_best_effort "$candidate"
+          break
+        fi
+      else
+        # zypper/dnf/pacman: just try; install_pkgs_best_effort tolerates failure
+        install_pkgs_best_effort "$candidate" && break
+      fi
+    done
+  fi
 
   # Install kpackage tool (apt has a direct package name, zypper/dnf use provider lookup)
   if [ -n "${pkgs_kpackage:-}" ]; then

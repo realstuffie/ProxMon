@@ -320,16 +320,6 @@ ColumnLayout {
                         implicitHeight: 1
                     }
 
-                    QQC2.Button {
-                        Layout.columnSpan: 2
-                        text: "Test PBS Connection"
-                        onClicked: {
-                            var arr = root.ensureMultiHostsLen(5)
-                            var entryNow = arr[idx]
-                            if (!root.controller) return
-                            root.controller.testPBSConnection(entryNow.pbsHost || "", entryNow.pbsPort || 8007, entryNow.pbsTokenId || "", entryNow.pbsIgnoreSsl === true)
-                        }
-                    }
                 }
             }
         }

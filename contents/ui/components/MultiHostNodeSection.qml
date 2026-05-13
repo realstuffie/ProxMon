@@ -38,6 +38,8 @@ ColumnLayout {
     property string armedActionSessionKey: ""
     property var onToggleCollapsed: null
     property var onAction: null
+    property var onConsole: null
+    property bool consoleEnabled: true
 
     Layout.fillWidth: true
     Layout.alignment: Qt.AlignTop
@@ -218,7 +220,12 @@ ColumnLayout {
                     anonymizeVmName: root.anonymizeVmName
                     onAction: function(kind, nodeName, vmid, displayName, action) {
                         if (typeof root.onAction === "function") root.onAction(root.sessionKey, kind, nodeName, vmid, displayName, action)
+
                     }
+                    onConsole: function(kind, nodeName, vmid, displayName) {
+                        if (typeof root.onConsole === "function") root.onConsole(root.sessionKey, kind, nodeName, vmid, displayName)
+                    }
+                    consoleEnabled: root.consoleEnabled
                 }
             }
         }
@@ -273,6 +280,10 @@ ColumnLayout {
                     onAction: function(kind, nodeName, vmid, displayName, action) {
                         if (typeof root.onAction === "function") root.onAction(root.sessionKey, kind, nodeName, vmid, displayName, action)
                     }
+                    onConsole: function(kind, nodeName, vmid, displayName) {
+                        if (typeof root.onConsole === "function") root.onConsole(root.sessionKey, kind, nodeName, vmid, displayName)
+                    }
+                    consoleEnabled: root.consoleEnabled
                 }
             }
         }

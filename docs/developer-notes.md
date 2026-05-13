@@ -187,7 +187,25 @@ Triple-click the footer to enable:
 - Anonymized data (for screenshots)
 - Test notification button
 
+### VNC console — black screen on guest VMs running a full desktop (e.g. Kubuntu)
+
+**Symptom:** The VNC console goes black and appears unresponsive. The screen is also black in Proxmox's own noVNC console, ruling out a bug in this widget's VNC client.
+
+**Cause:** KDE Plasma's Energy Saving feature blanks the display after a period of inactivity. Because the VM has no physical monitor attached, no hardware signal ever wakes it. This affects any full desktop environment running inside a VM that has display power management enabled.
+
+**Fix (on the guest):**
+- System Settings → Power Management → Energy Saving → set screen blanking and display power management to **Never**
+- This is a per-user KDE setting; apply it for any user account that runs the desktop session
+
+**Screen lock (SDDM) is not affected** — if the KDE screen locker fires, it renders the SDDM lock screen through VNC, which remains visible and interactive. Only Energy Saving (blank/off) causes the unrecoverable black screen.
+
+**Note:** This applies to any VM running a KDE desktop (Kubuntu, KDE Neon, openSUSE KDE, etc.). Other desktop environments have equivalent settings under different names (GNOME: Settings → Power, XFCE: Power Manager).
+
+---
+
 ### Known bugs / limitations
+
+- **VncWsProxy local port race (TODO):** `VncWsProxy` binds to `127.0.0.1:0` and emits `ready(port)` before libvncclient connects. During that window another local process could connect first. The intended fix is to override `QTcpServer::incomingConnection(qintptr handle)` to call `getsockopt(SO_PEERCRED)` on the raw fd before Qt wraps it, rejecting connections from a different UID. `QTcpSocket::socketDescriptor()` returns -1 after Qt takes ownership, so the check must happen at the `incomingConnection` override level.
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
 

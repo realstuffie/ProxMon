@@ -10,6 +10,7 @@ import org.kde.plasma.core as PlasmaCore
 import "components"
 import "../lib/proxmox" as ProxMon
 
+
 PlasmoidItem {
     id: root
 
@@ -117,6 +118,19 @@ PlasmoidItem {
             }
         }
     }
+    Component {
+        id: consoleComponent
+        VncConsole {}
+    }
+    // LXC console is a C++-managed QMainWindow with QTermWidget inside;
+    // no QML wrapper. We instantiate the C++ object directly via this
+    // Component so we get a per-VM lifetime managed by QML's GC + the
+    // LxcTerminal::closed() signal.
+    Component {
+        id: lxcTerminalComponent
+        ProxMon.LxcTerminal {}
+    }
+    property var openConsoles: ({})
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl === true
@@ -1259,6 +1273,72 @@ PlasmoidItem {
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
+        function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, ticket, apiPort, ignoreSsl) {
+            var key = kind + ":" + vmid
+            if (openConsoles[key]) {
+                // Auth header for reconnect is already stashed in controller registry.
+                openConsoles[key].connectWithTicket(vncPort, ticket)
+                openConsoles[key].raise()
+                openConsoles[key].requestActivate()
+                return
+            }
+            var win = consoleComponent.createObject(root, {
+                controller: controller,
+                host: host,
+                nodeName: node,
+                vmid: vmid,
+                vmName: vmName || (kind + " " + vmid),
+                vncPort: vncPort,
+                vncTicket: ticket,
+                sessionKey: sessionKey,
+                kind: kind,
+                apiPort: apiPort,
+                ignoreSsl: ignoreSsl
+            })
+            openConsoles[key] = win
+            win.closing.connect(function() { delete openConsoles[key] })
+            win.requestReconnect.connect(function() {
+                controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
+            })
+        }
+        function onLxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName, proxyPort, ticket, user, ignoreSsl) {
+            var key = "lxc:" + vmid
+            var label = vmName || ("lxc " + vmid)
+            if (openConsoles[key]) {
+                // Deliver fresh auth header directly from C++ registry.
+                controller.deliverConsoleAuth(sessionKey, openConsoles[key])
+                openConsoles[key].connectWithTicket(proxyPort, ticket, user, ignoreSsl)
+                openConsoles[key].raise()
+                return
+            }
+            var term = lxcTerminalComponent.createObject(root)
+            if (!term) {
+                console.warn("LxcTerminal createObject failed:",
+                             lxcTerminalComponent.errorString())
+                return
+            }
+            // Closure-capture session info so requestReconnect can round-trip
+            // back to controller.openConsole. (QML won't allow attaching ad-hoc
+            // properties to a C++ QObject; capture is the clean equivalent.)
+            var capturedSession = sessionKey
+            var capturedNode = node
+            var capturedVmid = vmid
+            var capturedLabel = label
+            openConsoles[key] = term
+            term.closed.connect(function() {
+                delete openConsoles[key]
+                term.destroy()
+            })
+            term.requestReconnect.connect(function() {
+                controller.openConsole(capturedSession, "lxc", capturedNode, capturedVmid, capturedLabel)
+            })
+            // Deliver auth header directly from C++ registry before open().
+            controller.deliverConsoleAuth(sessionKey, term)
+            term.open(host, apiPort, node, vmid, label, proxyPort, ticket, user, ignoreSsl)
+        }
+        function onConsoleError(node, kind, vmid, message) {
+            errorMessage = "Console failed: " + message
+        }
         function onActionError(sessionKey, actionKind, node, vmid, action, message) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
             errorMessage = message || ("Action failed: " + action)
@@ -1476,9 +1556,9 @@ PlasmoidItem {
 
     fullRepresentation: Item {
         id: fullRep
-        Layout.preferredWidth: 380
+        Layout.preferredWidth: 420
         Layout.preferredHeight: Math.min(calculatedHeight, 500)
-        Layout.minimumWidth: 350
+        Layout.minimumWidth: 380
         Layout.minimumHeight: 200
         Layout.maximumHeight: 600
 
@@ -1726,6 +1806,10 @@ PlasmoidItem {
                         onAction: function(kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunAction(kind, nodeName, vmid, displayName, action)
                         }
+                        onConsole: function(kind, nodeName, vmid, displayName) {
+                            controller.openConsole("", kind, nodeName, vmid, displayName)
+                        }
+                        consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                     }
                 }
 
@@ -1773,9 +1857,13 @@ PlasmoidItem {
                         onToggleCollapsed: function(nodeName, sessionKey) {
                             root.toggleNodeCollapsed(nodeName, sessionKey)
                         }
+                        onConsole: function(sessionKey, kind, nodeName, vmid, displayName) {
+                            controller.openConsole(sessionKey, kind, nodeName, vmid, displayName)
+                        }
                         onAction: function(sessionKey, kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunActionForSession(sessionKey, kind, nodeName, vmid, displayName, action)
                         }
+                        consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                     }
                 }
 
