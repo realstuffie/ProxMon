@@ -192,6 +192,18 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.6.0
+
+- **VNC console** — Launch an in-widget VNC session for VMs directly from the expanded view
+- **LXC terminal** — Embedded terminal emulator for LXC containers via QTermWidget
+- Power action and console buttons on VM/CT rows with tooltip polish
+- Multi-host endpoint and node section UI improvements
+- Compact representation updated to reflect console/terminal availability
+- Behaviour config additions for new console/terminal options
+- Refactored proxmox client and controller internals (proxmoxconsts.h extraction)
+- Install script updates for new native dependencies (libvncclient, qtermwidget6)
+- Added LICENSES/ directory for third-party dependency attribution
+
 ### v0.5.1
 
 - PBS integration: optional Proxmox Backup Server support per endpoint
