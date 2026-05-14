@@ -10,11 +10,16 @@
 // vncwebsocket WebSocket endpoint.
 //
 // Usage from QML:
-//   1. Set host/apiPort/node/kind/vmid/vncPort/ticket/authHeader/ignoreSsl
+//   1. Set host/apiPort/node/kind/vmid/vncPort/ticket/ignoreSsl
 //   2. Call start() — emits ready(localPort) once the local TCP server is up
 //   3. In onReady: vncClient.connectToVnc("127.0.0.1", localPort, ticket)
 //   4. libvncclient connects → proxy opens WS to Proxmox → bytes flow both ways
 //   5. Call stop() when the VNC session ends (or on error)
+//
+// The auth header is NOT a Q_PROPERTY by design — it must be delivered from
+// C++ via setAuthHeaderSecure(QByteArray) so the credential never lives as a
+// QString in the QML/JS heap. ProxmoxController::deliverConsoleAuth() is the
+// only intended caller.
 //
 // The proxy handles exactly one client connection (one VNC session per instance).
 
@@ -28,7 +33,6 @@ class VncWsProxy : public QObject {
     Q_PROPERTY(int     vmid        READ vmid        WRITE setVmid        NOTIFY vmidChanged)
     Q_PROPERTY(int     vncPort     READ vncPort     WRITE setVncPort     NOTIFY vncPortChanged)
     Q_PROPERTY(QString ticket      READ ticket      WRITE setTicket      NOTIFY ticketChanged)
-    Q_PROPERTY(QString authHeader  READ authHeader  WRITE setAuthHeader  NOTIFY authHeaderChanged)
     Q_PROPERTY(bool    ignoreSsl   READ ignoreSsl   WRITE setIgnoreSsl   NOTIFY ignoreSslChanged)
 
 public:
@@ -42,7 +46,6 @@ public:
     int     vmid()       const { return m_vmid; }
     int     vncPort()    const { return m_vncPort; }
     QString ticket()     const { return m_ticket; }
-    QString authHeader() const { return QString::fromUtf8(m_authHeader); }
     bool    ignoreSsl()  const { return m_ignoreSsl; }
 
     void setHost(const QString &v)       { if (m_host == v) return;       m_host = v;       emit hostChanged(); }
@@ -52,7 +55,6 @@ public:
     void setVmid(int v)                  { if (m_vmid == v) return;       m_vmid = v;       emit vmidChanged(); }
     void setVncPort(int v)               { if (m_vncPort == v) return;    m_vncPort = v;    emit vncPortChanged(); }
     void setTicket(const QString &v)     { if (m_ticket == v) return;     m_ticket = v;     emit ticketChanged(); }
-    void setAuthHeader(const QString &v) { QByteArray ba = v.toUtf8(); if (m_authHeader == ba) return; m_authHeader = ba; emit authHeaderChanged(); }
     void setIgnoreSsl(bool v)            { if (m_ignoreSsl == v) return;  m_ignoreSsl = v;  emit ignoreSslChanged(); }
 
     Q_INVOKABLE void start();
@@ -70,7 +72,6 @@ signals:
     void vmidChanged();
     void vncPortChanged();
     void ticketChanged();
-    void authHeaderChanged();
     void ignoreSslChanged();
 
 private slots:
