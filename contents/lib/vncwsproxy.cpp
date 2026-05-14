@@ -114,13 +114,6 @@ void VncWsProxy::onNewConnection()
     // Do NOT set Sec-WebSocket-Protocol: Proxmox doesn't advertise "binary"
     // in its 101 response, which causes Qt to reject the handshake.
     QNetworkRequest req(buildWsUrl());
-    QUrl redacted = req.url();
-    QUrlQuery q(redacted);
-    if (q.hasQueryItem(QStringLiteral("vncticket")))
-        q.removeQueryItem(QStringLiteral("vncticket"));
-    redacted.setQuery(q);
-    qDebug() << "[VncWsProxy] opening WS" << redacted.toString()
-             << "| auth header set:" << !m_authHeader.isEmpty();
     if (!m_authHeader.isEmpty()) {
         req.setRawHeader("Authorization", m_authHeader);
     }
@@ -131,7 +124,6 @@ void VncWsProxy::onNewConnection()
 // Slots — WebSocket events
 void VncWsProxy::onWsConnected()
 {
-    qDebug() << "[VncWsProxy] WebSocket connected";
     // HTTP upgrade complete — auth header and ticket were sent in the
     // handshake request and are no longer needed. Clear and release them.
     m_authHeader.fill(0);
@@ -169,7 +161,6 @@ void VncWsProxy::onWsSslErrors(const QList<QSslError> &errors)
 
 void VncWsProxy::onWsDisconnected()
 {
-    qDebug() << "[VncWsProxy] WebSocket disconnected";
     // Close the TCP side so libvncclient sees EOF.
     if (m_tcp) m_tcp->disconnectFromHost();
 }
@@ -187,6 +178,5 @@ void VncWsProxy::onTcpReadyRead()
 
 void VncWsProxy::onTcpDisconnected()
 {
-    qDebug() << "[VncWsProxy] TCP client disconnected";
     if (m_ws) m_ws->close();
 }
