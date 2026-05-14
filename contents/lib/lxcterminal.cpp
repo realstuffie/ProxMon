@@ -59,7 +59,6 @@ void LxcTerminal::open(const QString &host,
                        int vmid,
                        const QString &vmName,
                        int proxyPort,
-                       const QString &ticket,
                        const QString &user,
                        bool ignoreSslErrors)
 {
@@ -69,25 +68,24 @@ void LxcTerminal::open(const QString &host,
     m_vmid       = vmid;
     m_vmName     = vmName;
     m_proxyPort  = proxyPort;
-    m_ticket     = ticket;
     m_user       = user;
     m_ignoreSsl  = ignoreSslErrors;
-    // m_authHeader is set beforehand via setAuthHeaderSecure()
+    // m_authHeader and m_ticket are set beforehand via setAuthHeaderSecure()
+    // and setTicketSecure() respectively.
 
     ensureWindow(vmName, node);
     openSocket();
 }
 
 void LxcTerminal::connectWithTicket(int proxyPort,
-                                    const QString &ticket,
                                     const QString &user,
                                     bool ignoreSslErrors)
 {
     m_proxyPort  = proxyPort;
-    m_ticket     = ticket;
     m_user       = user;
     m_ignoreSsl  = ignoreSslErrors;
-    // m_authHeader is set beforehand via setAuthHeaderSecure()
+    // m_authHeader and m_ticket are set beforehand via setAuthHeaderSecure()
+    // and setTicketSecure() respectively.
 
     if (!m_window) {
         ensureWindow(m_vmName, m_node);
@@ -98,6 +96,11 @@ void LxcTerminal::connectWithTicket(int proxyPort,
 void LxcTerminal::setAuthHeaderSecure(const QByteArray &header)
 {
     m_authHeader = header;
+}
+
+void LxcTerminal::setTicketSecure(const QByteArray &ticket)
+{
+    m_ticket = ticket;
 }
 
 void LxcTerminal::raise()
@@ -236,7 +239,7 @@ void LxcTerminal::destroyWindow()
 void LxcTerminal::openSocket()
 {
     if (m_host.isEmpty() || m_ticket.isEmpty() || m_user.isEmpty()) {
-        emit errorOccurred(QStringLiteral("Missing host/ticket/user for LXC terminal"));
+        emit errorOccurred(QStringLiteral("Missing host/ticket/user for LXC terminal"));  // m_ticket is QByteArray; isEmpty() correct
         setState(QStringLiteral("error"));
         return;
     }
@@ -262,8 +265,9 @@ void LxcTerminal::openSocket()
 
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("port"), QString::number(m_proxyPort));
+    // m_ticket is QByteArray; percent-encoded output is ASCII-safe so fromLatin1 is correct.
     q.addQueryItem(QStringLiteral("vncticket"),
-                   QString::fromUtf8(QUrl::toPercentEncoding(m_ticket)));
+                   QString::fromLatin1(m_ticket.toPercentEncoding()));
     url.setQuery(q);
 
     m_ws = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
@@ -288,7 +292,13 @@ void LxcTerminal::openSocket()
         m_authHeader.clear();
         m_phase = Phase::Authenticating;
         if (m_ws) {
-            m_ws->sendTextMessage(m_user + QLatin1Char(':') + m_ticket + QLatin1Char('\n'));
+            // Assemble the auth line as a QByteArray so m_ticket never
+            // becomes a QString. Burn both the temp and m_ticket after send.
+            QByteArray ba = m_user.toUtf8() + ':' + m_ticket + '\n';
+            m_ws->sendTextMessage(QString::fromUtf8(ba));
+            ba.fill(0);
+            m_ticket.fill(0);
+            m_ticket.clear();
         }
     });
 

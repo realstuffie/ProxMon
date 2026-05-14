@@ -41,26 +41,29 @@ public:
 
     // Show the window and start the connection. Safe to call again to
     // reconnect with fresh termproxy params on the same window instance.
+    // The ticket must be delivered beforehand via setTicketSecure().
     Q_INVOKABLE void open(const QString &host,
                           int apiPort,
                           const QString &node,
                           int vmid,
                           const QString &vmName,
                           int proxyPort,
-                          const QString &ticket,
                           const QString &user,
                           bool ignoreSslErrors);
 
     // Re-handshake against an existing window — used when the QML reconnect
-    // timer fires and termproxy returns a fresh port/ticket pair.
+    // timer fires and termproxy returns a fresh port pair.
+    // The ticket must be delivered beforehand via setTicketSecure().
     Q_INVOKABLE void connectWithTicket(int proxyPort,
-                                       const QString &ticket,
                                        const QString &user,
                                        bool ignoreSslErrors);
 
     // Called by ProxmoxController.deliverConsoleAuth() — sets the auth header
     // directly from C++ without passing through the QML/JS heap.
     Q_INVOKABLE void setAuthHeaderSecure(const QByteArray &header);
+    // Called by ProxmoxController.deliverConsoleTicket() — sets the ticket
+    // directly from C++ without passing through the QML/JS heap.
+    Q_INVOKABLE void setTicketSecure(const QByteArray &ticket);
 
     Q_INVOKABLE void raise();
     Q_INVOKABLE void disconnect();
@@ -111,9 +114,9 @@ protected:
     QString m_node;
     int     m_vmid = 0;
     QString m_vmName;
-    int     m_proxyPort = 0;
-    QString m_ticket;
-    QString m_user;
+    int        m_proxyPort = 0;
+    QByteArray m_ticket;
+    QString    m_user;
     QByteArray m_authHeader;
     bool    m_ignoreSsl = false;
 

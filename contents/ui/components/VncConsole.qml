@@ -13,7 +13,6 @@ Window {
     property string kind: ""
     property string host: ""
     property int vncPort: 0
-    property string vncTicket: ""
     // WebSocket proxy params — needed to connect through Proxmox's vncwebsocket endpoint
     property int    apiPort:   8006
     property bool   ignoreSsl: false
@@ -22,13 +21,14 @@ Window {
     property var    controller: null
     signal requestReconnect()
 
-    function connectWithTicket(port, ticket) {
-        vncPort   = port
-        vncTicket = ticket
-        wsProxy.ticket  = ticket
+    function connectWithTicket(port) {
+        vncPort         = port
         wsProxy.vncPort = port
-        // Deliver auth header directly from C++ registry — never touches JS heap.
-        if (controller) controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
+        // Deliver auth header and ticket from C++ registry — never touches JS heap.
+        if (controller) {
+            controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
+            controller.deliverConsoleTicket(consoleWindow.sessionKey, wsProxy, vncClient)
+        }
         wsProxy.start()
     }
 
@@ -51,12 +51,12 @@ Window {
         kind:       consoleWindow.kind
         vmid:       consoleWindow.vmid
         vncPort:    consoleWindow.vncPort
-        ticket:    consoleWindow.vncTicket
         ignoreSsl: consoleWindow.ignoreSsl
 
         onReady: function(localPort) {
             // Proxy is listening — hand the local port to libvncclient.
-            vncClient.connectToVnc("127.0.0.1", localPort, consoleWindow.vncTicket)
+            // Ticket was already delivered via deliverConsoleTicket before start().
+            vncClient.connectToVnc("127.0.0.1", localPort)
         }
         onErrorOccurred: function(message) {
             statusLabel.text = "Proxy error: " + message
@@ -230,8 +230,11 @@ Window {
     }
 
     Component.onCompleted: {
-        // Deliver auth header directly from C++ registry before starting proxy.
-        if (controller) controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
+        // Deliver auth header and ticket from C++ registry before starting proxy.
+        if (controller) {
+            controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
+            controller.deliverConsoleTicket(consoleWindow.sessionKey, wsProxy, vncClient)
+        }
         wsProxy.start()
     }
 
@@ -239,6 +242,5 @@ Window {
         reconnectTimer.stop()
         vncClient.disconnect()
         wsProxy.stop()
-        vncTicket = ""
     }
 }

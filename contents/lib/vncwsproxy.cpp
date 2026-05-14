@@ -42,6 +42,11 @@ void VncWsProxy::setAuthHeaderSecure(const QByteArray &header)
     m_authHeader = header;
 }
 
+void VncWsProxy::setTicketSecure(const QByteArray &ticket)
+{
+    m_ticket = ticket;
+}
+
 // Private helpers
 
 QUrl VncWsProxy::buildWsUrl() const
@@ -59,8 +64,9 @@ QUrl VncWsProxy::buildWsUrl() const
     q.addQueryItem(QStringLiteral("port"),       QString::number(m_vncPort));
     // Percent-encode the ticket so that base64 '+' characters aren't
     // misread as spaces by Proxmox's form-URL decoder (same fix as LxcTerminal).
+    // m_ticket is a QByteArray; percent-encoded output is ASCII-safe so fromLatin1 is correct.
     q.addQueryItem(QStringLiteral("vncticket"),
-                   QString::fromUtf8(QUrl::toPercentEncoding(m_ticket)));
+                   QString::fromLatin1(m_ticket.toPercentEncoding()));
     url.setQuery(q);
     return url;
 }
@@ -125,11 +131,11 @@ void VncWsProxy::onNewConnection()
 void VncWsProxy::onWsConnected()
 {
     // HTTP upgrade complete — auth header and ticket were sent in the
-    // handshake request and are no longer needed. Clear and release them.
+    // handshake request and are no longer needed. Zero then clear both.
     m_authHeader.fill(0);
     m_authHeader.clear();
+    m_ticket.fill(0);
     m_ticket.clear();
-    m_ticket.squeeze();
     // Flush any bytes libvncclient already wrote while WS was connecting.
     if (m_tcp && m_tcp->bytesAvailable() > 0) {
         onTcpReadyRead();

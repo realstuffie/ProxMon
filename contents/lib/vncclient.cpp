@@ -46,12 +46,17 @@ VncClient::VncClient(QObject *parent)
 {
 }
 
+void VncClient::setTicketSecure(const QByteArray &ticket)
+{
+    m_ticket = ticket;
+}
+
 VncClient::~VncClient()
 {
     disconnect();
 }
 
-void VncClient::connectToVnc(const QString &host, int port, const QString &vncTicket)
+void VncClient::connectToVnc(const QString &host, int port)
 {
     if (m_rfb || m_thread)
         disconnect();
@@ -67,11 +72,16 @@ void VncClient::connectToVnc(const QString &host, int port, const QString &vncTi
     m_rfb->serverPort           = port;
 
     // Password callback — ticket stored in client-data slot 1.
+    // m_ticket is burned immediately after strdup so it doesn't linger in
+    // the QByteArray heap; the C-side copy in slot 1 is zeroed after the
+    // handshake completes in the worker thread below.
     m_rfb->GetPassword = [](rfbClient *client) -> char* {
         char *t = static_cast<char *>(rfbClientGetClientData(client, (void*)1));
         return t ? strdup(t) : strdup("");
     };
-    rfbClientSetClientData(m_rfb, (void*)1, strdup(vncTicket.toUtf8().constData()));
+    rfbClientSetClientData(m_rfb, (void*)1, strdup(m_ticket.constData()));
+    m_ticket.fill(0);
+    m_ticket.clear();
 
     m_rfb->appData.encodingsString = "tight zrle hextile raw";
 

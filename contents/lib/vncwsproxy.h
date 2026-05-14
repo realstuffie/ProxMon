@@ -10,16 +10,19 @@
 // vncwebsocket WebSocket endpoint.
 //
 // Usage from QML:
-//   1. Set host/apiPort/node/kind/vmid/vncPort/ticket/ignoreSsl
-//   2. Call start() — emits ready(localPort) once the local TCP server is up
-//   3. In onReady: vncClient.connectToVnc("127.0.0.1", localPort, ticket)
-//   4. libvncclient connects → proxy opens WS to Proxmox → bytes flow both ways
-//   5. Call stop() when the VNC session ends (or on error)
+//   1. Set host/apiPort/node/kind/vmid/vncPort/ignoreSsl
+//   2. Call controller.deliverConsoleAuth(sessionKey, wsProxy) and
+//      controller.deliverConsoleTicket(sessionKey, wsProxy, vncClient)
+//   3. Call start() — emits ready(localPort) once the local TCP server is up
+//   4. In onReady: vncClient.connectToVnc("127.0.0.1", localPort)
+//   5. libvncclient connects → proxy opens WS to Proxmox → bytes flow both ways
+//   6. Call stop() when the VNC session ends (or on error)
 //
-// The auth header is NOT a Q_PROPERTY by design — it must be delivered from
-// C++ via setAuthHeaderSecure(QByteArray) so the credential never lives as a
-// QString in the QML/JS heap. ProxmoxController::deliverConsoleAuth() is the
-// only intended caller.
+// Neither the auth header nor the VNC ticket are Q_PROPERTYs by design — both
+// are delivered from C++ via setAuthHeaderSecure / setTicketSecure so the
+// credentials never live as QStrings in the QML/JS heap.
+// ProxmoxController::deliverConsoleAuth / deliverConsoleTicket are the only
+// intended callers.
 //
 // The proxy handles exactly one client connection (one VNC session per instance).
 
@@ -32,7 +35,6 @@ class VncWsProxy : public QObject {
     Q_PROPERTY(QString kind        READ kind        WRITE setKind        NOTIFY kindChanged)
     Q_PROPERTY(int     vmid        READ vmid        WRITE setVmid        NOTIFY vmidChanged)
     Q_PROPERTY(int     vncPort     READ vncPort     WRITE setVncPort     NOTIFY vncPortChanged)
-    Q_PROPERTY(QString ticket      READ ticket      WRITE setTicket      NOTIFY ticketChanged)
     Q_PROPERTY(bool    ignoreSsl   READ ignoreSsl   WRITE setIgnoreSsl   NOTIFY ignoreSslChanged)
 
 public:
@@ -45,7 +47,6 @@ public:
     QString kind()       const { return m_kind; }
     int     vmid()       const { return m_vmid; }
     int     vncPort()    const { return m_vncPort; }
-    QString ticket()     const { return m_ticket; }
     bool    ignoreSsl()  const { return m_ignoreSsl; }
 
     void setHost(const QString &v)       { if (m_host == v) return;       m_host = v;       emit hostChanged(); }
@@ -54,12 +55,12 @@ public:
     void setKind(const QString &v)       { if (m_kind == v) return;       m_kind = v;       emit kindChanged(); }
     void setVmid(int v)                  { if (m_vmid == v) return;       m_vmid = v;       emit vmidChanged(); }
     void setVncPort(int v)               { if (m_vncPort == v) return;    m_vncPort = v;    emit vncPortChanged(); }
-    void setTicket(const QString &v)     { if (m_ticket == v) return;     m_ticket = v;     emit ticketChanged(); }
     void setIgnoreSsl(bool v)            { if (m_ignoreSsl == v) return;  m_ignoreSsl = v;  emit ignoreSslChanged(); }
 
     Q_INVOKABLE void start();
     Q_INVOKABLE void stop();
     Q_INVOKABLE void setAuthHeaderSecure(const QByteArray &header);
+    Q_INVOKABLE void setTicketSecure(const QByteArray &ticket);
 
 signals:
     void ready(int localPort);
@@ -71,7 +72,6 @@ signals:
     void kindChanged();
     void vmidChanged();
     void vncPortChanged();
-    void ticketChanged();
     void ignoreSslChanged();
 
 private slots:
@@ -93,8 +93,8 @@ private:
     QString m_node;
     QString m_kind;
     int     m_vmid      = 0;
-    int     m_vncPort   = 0;
-    QString m_ticket;
+    int        m_vncPort   = 0;
+    QByteArray m_ticket;
     QByteArray m_authHeader;
     bool    m_ignoreSsl = false;
 

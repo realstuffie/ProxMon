@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QHash>
+#include <QMap>
 #include <QTimer>
 #include <QVariant>
 
@@ -167,6 +168,9 @@ public:
                                int vmid,
                                const QString &action);
     Q_INVOKABLE void deliverConsoleAuth(const QString &sessionKey, QObject *target);
+    Q_INVOKABLE void deliverConsoleTicket(const QString &sessionKey,
+                                          QObject *primary,
+                                          QObject *secondary = nullptr);
     Q_INVOKABLE void openConsole(const QString &sessionKey,
                               const QString &kind,
                               const QString &node,
@@ -244,7 +248,6 @@ signals:
                   int vmid,
                   const QString &vmName,
                   int vncPort,
-                  const QString &ticket,
                   int apiPort,
                   bool ignoreSsl);
     // Separate signal for LXC: carries the auth `user` returned by termproxy
@@ -257,7 +260,6 @@ signals:
                          int vmid,
                          const QString &vmName,
                          int proxyPort,
-                         const QString &ticket,
                          const QString &user,
                          bool ignoreSsl);
     void consoleError(const QString &node,
@@ -413,6 +415,7 @@ private:
     QTimer *m_pbsDebounceTimer = nullptr;
     int m_pendingPbsSnapshotRequests = 0;
     QHash<QString, QByteArray> m_pendingConsoleAuth;
+    QMap<QString, QByteArray>  m_pendingConsoleTicket;
     ProxmoxClient *m_api;
     SecretStore *m_singleSecretStore;
     SecretStore *m_multiSecretStore;

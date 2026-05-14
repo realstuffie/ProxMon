@@ -62,8 +62,9 @@ ProxmoxController::ProxmoxController(QObject *parent)
         }
         const QString vmKey = QStringLiteral("%1:%2:%3").arg(kind, node).arg(vmid);
         const QString vmName = m_pendingConsoleNames.take(vmKey);
-        m_pendingConsoleAuth[sessionKey] = authHeader;
-        emit consoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, ticket,
+        m_pendingConsoleAuth[sessionKey]  = authHeader;
+        m_pendingConsoleTicket[sessionKey] = ticket.toUtf8();
+        emit consoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort,
                           resolvedApiPort, resolvedIgnoreSsl);
     });
     connect(m_api, &ProxmoxClient::vncProxyError, this, [this](const QString &, const QString &node, const QString &kind, int vmid, const QString &message) {
@@ -82,9 +83,10 @@ ProxmoxController::ProxmoxController(QObject *parent)
         }
         const QString vmKey = QStringLiteral("lxc:%1:%2").arg(node).arg(vmid);
         const QString vmName = m_pendingConsoleNames.take(vmKey);
-        m_pendingConsoleAuth[sessionKey] = authHeader;
+        m_pendingConsoleAuth[sessionKey]  = authHeader;
+        m_pendingConsoleTicket[sessionKey] = ticket.toUtf8();
         emit lxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName,
-                             proxyPort, ticket, user, ignoreSsl);
+                             proxyPort, user, ignoreSsl);
     });
     connect(m_api, &ProxmoxClient::ttyProxyError, this, [this](const QString &, const QString &node, int vmid, const QString &message) {
         m_pendingConsoleNames.remove(QStringLiteral("lxc:%1:%2").arg(node).arg(vmid));
@@ -602,6 +604,26 @@ void ProxmoxController::deliverConsoleAuth(const QString &sessionKey, QObject *t
                               Qt::DirectConnection,
                               Q_ARG(QByteArray, header));
     header.fill(0);
+}
+
+void ProxmoxController::deliverConsoleTicket(const QString &sessionKey,
+                                              QObject *primary,
+                                              QObject *secondary)
+{
+    auto it = m_pendingConsoleTicket.find(sessionKey);
+    if (it == m_pendingConsoleTicket.end() || !primary) return;
+    QByteArray ticket = it.value();
+    it.value().fill(0);
+    m_pendingConsoleTicket.erase(it);
+    QMetaObject::invokeMethod(primary, "setTicketSecure",
+                              Qt::DirectConnection,
+                              Q_ARG(QByteArray, ticket));
+    if (secondary) {
+        QMetaObject::invokeMethod(secondary, "setTicketSecure",
+                                  Qt::DirectConnection,
+                                  Q_ARG(QByteArray, ticket));
+    }
+    ticket.fill(0);
 }
 
 void ProxmoxController::openConsole(const QString &sessionKey,

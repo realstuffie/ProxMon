@@ -25,9 +25,8 @@ public:
     int frameWidth() const { return m_frameWidth; }
     int frameHeight() const { return m_frameHeight; }
 
-    Q_INVOKABLE void connectToVnc(const QString &host,
-                                   int port,
-                                   const QString &vncTicket);
+    Q_INVOKABLE void connectToVnc(const QString &host, int port);
+    Q_INVOKABLE void setTicketSecure(const QByteArray &ticket);
     Q_INVOKABLE void disconnect();
     Q_INVOKABLE void sendKeyEvent(int qtKey, const QString &text, int location, bool pressed);
     Q_INVOKABLE void sendPointerEvent(int x, int y, int qtButtons);
@@ -56,6 +55,7 @@ private:
     std::atomic<bool> m_running  { false };
     std::atomic<bool> m_frameDirty { false };
 
+    QByteArray m_ticket;
     QString m_state       = QStringLiteral("disconnected");
     int     m_frameWidth  = 0;
     int     m_frameHeight = 0;

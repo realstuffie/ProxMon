@@ -1273,11 +1273,11 @@ PlasmoidItem {
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
-        function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, ticket, apiPort, ignoreSsl) {
+        function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, apiPort, ignoreSsl) {
             var key = kind + ":" + vmid
             if (openConsoles[key]) {
-                // Auth header for reconnect is already stashed in controller registry.
-                openConsoles[key].connectWithTicket(vncPort, ticket)
+                // Auth header and ticket for reconnect are stashed in controller registry.
+                openConsoles[key].connectWithTicket(vncPort)
                 openConsoles[key].raise()
                 openConsoles[key].requestActivate()
                 return
@@ -1289,7 +1289,6 @@ PlasmoidItem {
                 vmid: vmid,
                 vmName: vmName || (kind + " " + vmid),
                 vncPort: vncPort,
-                vncTicket: ticket,
                 sessionKey: sessionKey,
                 kind: kind,
                 apiPort: apiPort,
@@ -1301,13 +1300,14 @@ PlasmoidItem {
                 controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
             })
         }
-        function onLxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName, proxyPort, ticket, user, ignoreSsl) {
+        function onLxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl) {
             var key = "lxc:" + vmid
             var label = vmName || ("lxc " + vmid)
             if (openConsoles[key]) {
-                // Deliver fresh auth header directly from C++ registry.
+                // Deliver fresh auth header and ticket from C++ registry.
                 controller.deliverConsoleAuth(sessionKey, openConsoles[key])
-                openConsoles[key].connectWithTicket(proxyPort, ticket, user, ignoreSsl)
+                controller.deliverConsoleTicket(sessionKey, openConsoles[key])
+                openConsoles[key].connectWithTicket(proxyPort, user, ignoreSsl)
                 openConsoles[key].raise()
                 return
             }
@@ -1332,9 +1332,10 @@ PlasmoidItem {
             term.requestReconnect.connect(function() {
                 controller.openConsole(capturedSession, "lxc", capturedNode, capturedVmid, capturedLabel)
             })
-            // Deliver auth header directly from C++ registry before open().
+            // Deliver auth header and ticket from C++ registry before open().
             controller.deliverConsoleAuth(sessionKey, term)
-            term.open(host, apiPort, node, vmid, label, proxyPort, ticket, user, ignoreSsl)
+            controller.deliverConsoleTicket(sessionKey, term)
+            term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl)
         }
         function onConsoleError(node, kind, vmid, message) {
             errorMessage = "Console failed: " + message
