@@ -50,6 +50,8 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
 
+- **VNC console — resize down not honoured**: shrinking the console window sends a VNC `SetDesktopSize` request, but QEMU's VNC server does not honour shrink requests regardless of the video backend. The display will scale to fit the smaller window (letterboxed) while the remote framebuffer stays at the previous resolution. Resize up works correctly. A workaround using the QEMU guest agent is planned.
+
 ## Installation
 
 ```bash
