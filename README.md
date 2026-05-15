@@ -4,18 +4,18 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ## Features
 
-- **Real-time monitoring** — Node status (CPU, Memory, Uptime)
-- **VM & Container tracking** — All VMs and LXC containers with status
-- **PBS Backup status** -  Inline PBS backup results within each VM/CT row
-- **Multi-node cluster support**
+- **Real-time monitoring** — Node status (CPU, memory, uptime) with VM and LXC container tracking
+- **VNC console** — GPU-accelerated in-widget VNC sessions for VMs with full keyboard, mouse, and scroll input
+- **LXC terminal** — Native terminal emulator for containers with automatic resize
+- **PBS backup status** — Inline backup results per VM/CT with configurable warning and stale thresholds
+- **Multi-host support** — Monitor up to 5 Proxmox endpoints simultaneously
+- **Power commands** — Start, stop, and restart VMs and containers
 - **Desktop notifications** — State change alerts with rate limiting and filters
-- **Power commands** — Start, Stop, Restart VMs/CTs
-- **Secure** — API token authentication, trusted SSL certificate PEM/file support, and local keychain integration
-- **Custom appearance controls** — Override running, stopped, and node colors with live preview
-- **Tint + opacity tuning** — Adjust card tint strength and expanded window opacity
+- **Secure** — API token auth, keychain integration, and trusted SSL certificate PEM/file support
+- **Appearance controls** — Custom running, stopped, and node colors with live preview, card tint, and window opacity
 - **Flexible compact label** — Show average CPU, running workloads, error state, or last update time in the panel
-- **Theme integration** — Adapts to your Plasma theme and lets you fall back to theme defaults anytime
-- **Developer mode** — Triple-click footer for verbose logging (logging is strictly santized before output)
+- **Theme integration** — Adapts to your Plasma theme with per-color fallback to theme defaults
+- **Developer mode** — Triple-click footer for verbose logging
 
 ## Screenshots
 
@@ -49,6 +49,8 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 ### Known bugs / limitations
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
+
+- **VNC console — resize down not honoured**: shrinking the console window sends a VNC `SetDesktopSize` request, but QEMU's VNC server does not honour shrink requests regardless of the video backend. The display will scale to fit the smaller window (letterboxed) while the remote framebuffer stays at the previous resolution. Resize up works correctly. A workaround using the QEMU guest agent is planned.
 
 ## Installation
 
@@ -192,6 +194,15 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.6.0
+
+- VNC console for VMs — GPU-accelerated rendering, full keyboard/mouse/scroll, dynamic resize, auto-reconnect
+- LXC terminal — native terminal emulator with automatic resize and wake support for silent containers
+- Credentials handled securely in C++ — tickets and auth headers never exposed to QML
+- Multi-host trusted cert toggle — shared or per-endpoint
+- Various config and stability fixes
+- Bump bundled QtKeychain
+
 ### v0.5.1
 
 - PBS integration: optional Proxmox Backup Server support per endpoint
@@ -239,3 +250,6 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 - [Proxmox VE](https://www.proxmox.com/) - Virtualization platform
 - [KDE Plasma](https://kde.org/plasma-desktop/) - Desktop environment
+- [noVNC](https://github.com/novnc/noVNC) — DOM key table ported from `core/input/domkeytable.js`, licensed under MPL 2.0
+- [QTermWidget](https://github.com/lxqt/qtermwidget) — LXC terminal emulator widget, licensed under LGPL-2.0+
+- [LibVNCClient](https://github.com/LibVNC/libvncserver) — VNC client support, licensed under LGPL-2.1

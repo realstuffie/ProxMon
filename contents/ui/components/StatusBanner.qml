@@ -15,6 +15,7 @@ ColumnLayout {
     property string armedLabel: ""
     property bool actionPermHintShown: false
     property string actionPermHint: ""
+    property string pbsError: ""
     property var onRetry: null
 
     function friendlyErrorHint(msg) {
@@ -174,6 +175,34 @@ ColumnLayout {
             icon.name: "view-refresh"
             Layout.alignment: Qt.AlignHCenter
             onClicked: if (typeof onRetry === "function") onRetry()
+        }
+    }
+
+    ColumnLayout {
+        Layout.fillWidth: true
+        Layout.margins: 10
+        visible: pbsError !== "" && configured
+        spacing: 8
+        RowLayout {
+            spacing: 8
+            Layout.alignment: Qt.AlignHCenter
+            Kirigami.Icon {
+                source: "dialog-warning"
+                implicitWidth: 22
+                implicitHeight: 22
+            }
+            PlasmaComponents.Label {
+                text: "PBS Error"
+                font.bold: true
+                color: Kirigami.Theme.neutralTextColor
+            }
+        }
+        PlasmaComponents.Label {
+            text: pbsError
+            color: Kirigami.Theme.neutralTextColor
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
         }
     }
 }

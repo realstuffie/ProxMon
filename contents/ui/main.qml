@@ -10,6 +10,7 @@ import org.kde.plasma.core as PlasmaCore
 import "components"
 import "../lib/proxmox" as ProxMon
 
+
 PlasmoidItem {
     id: root
 
@@ -60,10 +61,10 @@ PlasmoidItem {
         return txt 
     }
 
-    // ==================== CONNECTION / MODE ====================
 
     // Connection mode: "single" | "multiHost"
     property string connectionMode: Plasmoid.configuration.connectionMode || "single"
+    property bool multiHostSharedCert: Plasmoid.configuration.multiHostSharedCert !== false
 
     // Single-host connection properties
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
@@ -85,11 +86,14 @@ PlasmoidItem {
         trustedCertPem: root.trustedCertPem
         trustedCertPath: root.trustedCertPath
         multiHostsJson: root.multiHostsJson
+        multiHostSharedCert: root.multiHostSharedCert
         pbsEnabled: root.pbsEnabled
         pbsHost: root.pbsHost
         pbsPort: root.pbsPort
         pbsTokenId: root.pbsTokenId
         pbsIgnoreSsl: root.pbsIgnoreSsl
+        pbsTrustedCertPem: root.pbsTrustedCertPem
+        pbsTrustedCertPath: root.pbsTrustedCertPath
         pbsBackupWarningDays: root.pbsBackupWarningDays
         pbsBackupStaleDays: root.pbsBackupStaleDays
         pbsRefreshInterval: root.pbsRefreshInterval
@@ -116,6 +120,19 @@ PlasmoidItem {
             }
         }
     }
+    Component {
+        id: consoleComponent
+        VncConsole {}
+    }
+    // LXC console is a C++-managed QMainWindow with QTermWidget inside;
+    // no QML wrapper. We instantiate the C++ object directly via this
+    // Component so we get a per-VM lifetime managed by QML's GC + the
+    // LxcTerminal::closed() signal.
+    Component {
+        id: lxcTerminalComponent
+        ProxMon.LxcTerminal {}
+    }
+    property var openConsoles: ({})
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl === true
@@ -123,6 +140,8 @@ PlasmoidItem {
     property string pbsHost: Plasmoid.configuration.pbsHost || ""
     property int pbsPort: Math.max(1, Plasmoid.configuration.pbsPort || 8007)
     property string pbsTokenId: Plasmoid.configuration.pbsTokenId || ""
+    property string pbsTrustedCertPem: Plasmoid.configuration.pbsTrustedCertPem || ""
+    property string pbsTrustedCertPath: Plasmoid.configuration.pbsTrustedCertPath || ""
     property string pbsTokenSecretBuffer: ""
     property bool pbsIgnoreSsl: Plasmoid.configuration.pbsIgnoreSsl === true
     property int pbsBackupWarningDays: Math.max(1, Plasmoid.configuration.pbsBackupWarningDays || 7)
@@ -139,6 +158,7 @@ PlasmoidItem {
     property int retryAttempt: controller ? controller.retryAttempt : 0
     property int retryNextDelayMs: controller ? controller.retryNextDelayMs : 0
     property string retryStatusText: controller ? controller.retryStatusText : ""
+    property string pbsError: ""
 
     // Notification properties
     property bool enableNotifications: Plasmoid.configuration.enableNotifications !== false
@@ -288,7 +308,6 @@ PlasmoidItem {
         onTriggered: footerClickCount = 0
     }
 
-    // ==================== VISUAL TOKENS ====================
     // Keep platform colors from Kirigami, but standardize shape/opacity rhythm
     // for a flatter, Adwaita-leaning look.
     readonly property int uiRadiusS: 4
@@ -306,7 +325,6 @@ PlasmoidItem {
     readonly property real uiMutedTextOpacity: 0.68
     readonly property int uiRowHeight: 30
 
-    // ==================== UTILITY FUNCTIONS ====================
 
     // Shell-escape for executable datasource usage
     function escapeShell(str) {
@@ -410,7 +428,6 @@ PlasmoidItem {
         sendNotification("Debug logs copied")
     }
 
-    // ==================== NOTIFICATION FUNCTIONS ====================
 
     // Escape regex special chars except "*" (wildcard)
     function escapeRegexPattern(str) {
@@ -841,7 +858,6 @@ PlasmoidItem {
                                 "stopped")
     }
 
-    // ==================== NODE DATA FUNCTIONS ====================
 
     // Get VMs for a specific node (use displayed data)
     function getVmsForNode(nodeName) {
@@ -1045,7 +1061,6 @@ PlasmoidItem {
         return collapsedNodes[k2] === true
     }
 
-    // ==================== ANONYMIZATION FUNCTIONS ====================
 
     function anonymizeHost(host) {
         if (!devMode) return host
@@ -1072,7 +1087,6 @@ PlasmoidItem {
         return 100 + index
     }
 
-    // ==================== UI HELPER FUNCTIONS ====================
 
     function handleFooterClick() {
         footerClickCount++
@@ -1140,7 +1154,6 @@ PlasmoidItem {
 
         // Atomically swap displayed data when all requests finish
 
-    // ==================== API FUNCTIONS ====================
 
     // Sequencing for actions
     property int actionSeq: 0
@@ -1241,7 +1254,6 @@ PlasmoidItem {
         return count
     }
 
-    // ==================== INITIALIZATION ====================
 
     function endpointNodeKey(sessionKey, nodeName) {
         return String(sessionKey) + "::" + String(nodeName || "")
@@ -1257,8 +1269,78 @@ PlasmoidItem {
         function onErrorMessageChanged() {
             if (controller.errorMessage !== "") root.errorMessage = controller.errorMessage
         }
+        function onPbsLastErrorChanged() {
+            root.pbsError = controller.pbsLastError
+        }
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
+        }
+        function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, apiPort, ignoreSsl) {
+            var key = kind + ":" + vmid
+            if (openConsoles[key]) {
+                // Auth header and ticket for reconnect are stashed in controller registry.
+                openConsoles[key].connectWithTicket(vncPort)
+                openConsoles[key].raise()
+                openConsoles[key].requestActivate()
+                return
+            }
+            var win = consoleComponent.createObject(root, {
+                controller: controller,
+                host: host,
+                nodeName: node,
+                vmid: vmid,
+                vmName: vmName || (kind + " " + vmid),
+                vncPort: vncPort,
+                sessionKey: sessionKey,
+                kind: kind,
+                apiPort: apiPort,
+                ignoreSsl: ignoreSsl
+            })
+            openConsoles[key] = win
+            win.closing.connect(function() { delete openConsoles[key] })
+            win.requestReconnect.connect(function() {
+                controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
+            })
+        }
+        function onLxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl) {
+            var key = "lxc:" + vmid
+            var label = vmName || ("lxc " + vmid)
+            if (openConsoles[key]) {
+                // Deliver fresh auth header and ticket from C++ registry.
+                controller.deliverConsoleAuth(sessionKey, openConsoles[key])
+                controller.deliverConsoleTicket(sessionKey, openConsoles[key])
+                openConsoles[key].connectWithTicket(proxyPort, user, ignoreSsl)
+                openConsoles[key].raise()
+                return
+            }
+            var term = lxcTerminalComponent.createObject(root)
+            if (!term) {
+                console.warn("LxcTerminal createObject failed:",
+                             lxcTerminalComponent.errorString())
+                return
+            }
+            // Closure-capture session info so requestReconnect can round-trip
+            // back to controller.openConsole. (QML won't allow attaching ad-hoc
+            // properties to a C++ QObject; capture is the clean equivalent.)
+            var capturedSession = sessionKey
+            var capturedNode = node
+            var capturedVmid = vmid
+            var capturedLabel = label
+            openConsoles[key] = term
+            term.closed.connect(function() {
+                delete openConsoles[key]
+                term.destroy()
+            })
+            term.requestReconnect.connect(function() {
+                controller.openConsole(capturedSession, "lxc", capturedNode, capturedVmid, capturedLabel)
+            })
+            // Deliver auth header and ticket from C++ registry before open().
+            controller.deliverConsoleAuth(sessionKey, term)
+            controller.deliverConsoleTicket(sessionKey, term)
+            term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl)
+        }
+        function onConsoleError(node, kind, vmid, message) {
+            errorMessage = "Console failed: " + message
         }
         function onActionError(sessionKey, actionKind, node, vmid, action, message) {
             setActionBusy(node, actionKind, vmid, false, sessionKey)
@@ -1308,6 +1390,8 @@ PlasmoidItem {
     }
     onTrustedCertPemChanged: triggerRefreshFromConfigChange("trustedCertPem")
     onTrustedCertPathChanged: triggerRefreshFromConfigChange("trustedCertPath")
+    onPbsTrustedCertPemChanged: triggerRefreshFromConfigChange("pbsTrustedCertPem")
+    onPbsTrustedCertPathChanged: triggerRefreshFromConfigChange("pbsTrustedCertPath")
     onMultiHostSecretsJsonChanged: {
         if (connectionMode !== "multiHost") return
         if (!multiHostSecretsJson || multiHostSecretsJson.trim() === "") return
@@ -1344,6 +1428,8 @@ PlasmoidItem {
             Plasmoid.configuration.multiHostSecretsJson = "{}"
         }
     }
+    onMultiHostSharedCertChanged: triggerRefreshFromConfigChange("multiHostSharedCert")
+
     onMultiHostsJsonChanged: {
         controllerPendingResolvedRefresh = true
         if (connectionMode === "multiHost") triggerSecretResolveFromConfigChange()
@@ -1400,7 +1486,6 @@ PlasmoidItem {
         }
     }
 
-    // ==================== DATA SOURCES ====================
 
     // DataSource for loading default settings from file
     Plasma5Support.DataSource {
@@ -1453,7 +1538,6 @@ PlasmoidItem {
         }
     }
 
-    // ==================== COMPACT REPRESENTATION ====================
 
     compactRepresentation: CompactRepresentation {
         hasCoreConfig: root.hasCoreConfig
@@ -1474,13 +1558,12 @@ PlasmoidItem {
         safeCpuPercent: root.safeCpuPercent
     }
 
-    // ==================== FULL REPRESENTATION ====================
 
     fullRepresentation: Item {
         id: fullRep
-        Layout.preferredWidth: 380
+        Layout.preferredWidth: 420
         Layout.preferredHeight: Math.min(calculatedHeight, 500)
-        Layout.minimumWidth: 350
+        Layout.minimumWidth: 380
         Layout.minimumHeight: 200
         Layout.maximumHeight: 600
 
@@ -1650,6 +1733,7 @@ PlasmoidItem {
             armedLabel: root.armedLabel
             actionPermHintShown: root.actionPermHintShown
             actionPermHint: root.actionPermHint
+            pbsError: root.pbsError
             onRetry: function() { root.fetchData() }
         }
 
@@ -1727,6 +1811,10 @@ PlasmoidItem {
                         onAction: function(kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunAction(kind, nodeName, vmid, displayName, action)
                         }
+                        onConsole: function(kind, nodeName, vmid, displayName) {
+                            controller.openConsole("", kind, nodeName, vmid, displayName)
+                        }
+                        consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                     }
                 }
 
@@ -1774,9 +1862,13 @@ PlasmoidItem {
                         onToggleCollapsed: function(nodeName, sessionKey) {
                             root.toggleNodeCollapsed(nodeName, sessionKey)
                         }
+                        onConsole: function(sessionKey, kind, nodeName, vmid, displayName) {
+                            controller.openConsole(sessionKey, kind, nodeName, vmid, displayName)
+                        }
                         onAction: function(sessionKey, kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunActionForSession(sessionKey, kind, nodeName, vmid, displayName, action)
                         }
+                        consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                     }
                 }
 
@@ -1875,7 +1967,6 @@ PlasmoidItem {
         }
     }
 
-    // ==================== REFRESH TIMER ====================
 
     Timer {
         interval: root.refreshInterval > 0 ? root.refreshInterval : 30000

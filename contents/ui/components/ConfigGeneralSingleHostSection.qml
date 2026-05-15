@@ -10,18 +10,23 @@ GridLayout {
     property alias tokenIdText: tokenIdField.text
     property alias tokenSecretText: tokenSecretField.text
     property var controller: null
+    property string trustedCertPem: ""
+    property string trustedCertPath: ""
     property alias pbsEnabled: pbsEnabledCheck.checked
     property alias pbsHostText: pbsHostField.text
     property alias pbsPortValue: pbsPortField.value
     property alias pbsTokenIdText: pbsTokenIdField.text
     property alias pbsIgnoreSsl: pbsIgnoreSslCheck.checked
+    property alias pbsTrustedCertPem: pbsTrustedCertPemField.text
+    property alias pbsTrustedCertPath: pbsTrustedCertPathField.text
     property alias pbsWarningDays: pbsWarningDaysField.value
     property alias pbsStaleDays: pbsStaleDaysField.value
     property int pbsRefreshInterval: 3600
     signal stashSecret(string secret)
     signal forgetSecret()
     signal stashPbsSecret(string secret)
-    signal testPbsConnection(string host, int port, string tokenId, bool ignoreSslErrors)
+    signal pveCertPemEdited(string value)
+    signal pveCertPathEdited(string value)
 
     columns: 2
     columnSpacing: 15
@@ -98,6 +103,37 @@ GridLayout {
 
             QQC2.ToolTip.visible: hovered
             QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
+        }
+    }
+
+    QQC2.Label {
+        text: "Trusted Proxmox VE PEM:"
+        Layout.alignment: Qt.AlignRight | Qt.AlignTop
+    }
+    QQC2.TextArea {
+        id: pveTrustedCertPemArea
+        Layout.fillWidth: true
+        Layout.preferredHeight: 90
+        text: root.trustedCertPem
+        placeholderText: "Paste PEM certificate here. If set, this takes precedence over cert file path."
+        wrapMode: TextEdit.Wrap
+        font.family: "monospace"
+        onTextChanged: {
+            if (root.trustedCertPem !== text) root.pveCertPemEdited(text)
+        }
+    }
+
+    QQC2.Label {
+        text: "Trusted Proxmox VE File:"
+        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+    }
+    QQC2.TextField {
+        id: pveTrustedCertPathField2
+        Layout.fillWidth: true
+        text: root.trustedCertPath
+        placeholderText: "/etc/pve/pve-root-ca.pem"
+        onTextChanged: {
+            if (root.trustedCertPath !== text) root.pveCertPathEdited(text)
         }
     }
 
@@ -181,6 +217,20 @@ GridLayout {
                 text: "Ignore SSL errors"
             }
 
+            QQC2.Label { text: "PBS Trusted Cert PEM:" }
+            QQC2.TextArea {
+                id: pbsTrustedCertPemField
+                Layout.fillWidth: true
+                placeholderText: "Paste PEM certificate here (optional)"
+                font.family: "monospace"
+                implicitHeight: 80
+            }
+            QQC2.Label { text: "PBS Trusted Cert Path:" }
+            QQC2.TextField {
+                id: pbsTrustedCertPathField
+                Layout.fillWidth: true
+                placeholderText: "/path/to/cert.pem (optional)"
+            }
             QQC2.Label { text: "PBS Refresh:" }
             QQC2.ComboBox {
                 id: pbsRefreshField
@@ -222,10 +272,6 @@ GridLayout {
             }
         }
 
-        QQC2.Button {
-            text: "Test PBS Connection"
-            onClicked: root.testPbsConnection(pbsHostField.text, pbsPortField.value, pbsTokenIdField.text, pbsIgnoreSslCheck.checked)
-        }
     }
 
 }

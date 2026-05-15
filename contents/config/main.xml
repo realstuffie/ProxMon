@@ -45,6 +45,12 @@
         <entry name="pbsIgnoreSsl" type="Bool">
             <default>false</default>
         </entry>
+        <entry name="pbsTrustedCertPem" type="String">
+            <default></default>
+        </entry>
+        <entry name="pbsTrustedCertPath" type="String">
+            <default></default>
+        </entry>
         <entry name="pbsBackupWarningDays" type="Int">
             <default>7</default>
         </entry>
@@ -58,6 +64,9 @@
         <!-- Connection Mode -->
         <entry name="connectionMode" type="String">
             <default>single</default>
+        </entry>
+        <entry name="multiHostSharedCert" type="Bool">
+            <default>true</default>
         </entry>
         <!-- JSON array: [{name,host,port,tokenId}] (secrets stored in keyring) -->
         <entry name="multiHostsJson" type="String">
@@ -77,6 +86,9 @@
         </entry>
 
         <!-- Behavior Settings -->
+        <entry name="consoleEnabled" type="Bool">
+            <default>true</default>
+        </entry>
         <entry name="defaultSorting" type="String">
             <default>status</default>
         </entry>

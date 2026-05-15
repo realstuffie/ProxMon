@@ -70,6 +70,7 @@ Item {
     }
 
     TapHandler {
+        enabled: !Plasmoid.editMode
         acceptedButtons: Qt.LeftButton
         gesturePolicy: TapHandler.ReleaseWithinBounds
         onTapped: root.expanded = !root.expanded

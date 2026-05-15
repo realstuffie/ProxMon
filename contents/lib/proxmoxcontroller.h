@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QHash>
+#include <QMap>
 #include <QTimer>
 #include <QVariant>
 
@@ -19,11 +20,14 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString trustedCertPem READ trustedCertPem WRITE setTrustedCertPem NOTIFY trustedCertPemChanged)
     Q_PROPERTY(QString trustedCertPath READ trustedCertPath WRITE setTrustedCertPath NOTIFY trustedCertPathChanged)
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
+    Q_PROPERTY(bool multiHostSharedCert READ multiHostSharedCert WRITE setMultiHostSharedCert NOTIFY multiHostSharedCertChanged)
     Q_PROPERTY(bool pbsEnabled READ pbsEnabled WRITE setPbsEnabled NOTIFY pbsEnabledChanged)
     Q_PROPERTY(QString pbsHost READ pbsHost WRITE setPbsHost NOTIFY pbsHostChanged)
     Q_PROPERTY(int pbsPort READ pbsPort WRITE setPbsPort NOTIFY pbsPortChanged)
     Q_PROPERTY(QString pbsTokenId READ pbsTokenId WRITE setPbsTokenId NOTIFY pbsTokenIdChanged)
     Q_PROPERTY(bool pbsIgnoreSsl READ pbsIgnoreSsl WRITE setPbsIgnoreSsl NOTIFY pbsIgnoreSslChanged)
+    Q_PROPERTY(QString pbsTrustedCertPem READ pbsTrustedCertPem WRITE setPbsTrustedCertPem NOTIFY pbsTrustedCertPemChanged)
+    Q_PROPERTY(QString pbsTrustedCertPath READ pbsTrustedCertPath WRITE setPbsTrustedCertPath NOTIFY pbsTrustedCertPathChanged)
     Q_PROPERTY(int pbsBackupWarningDays READ pbsBackupWarningDays WRITE setPbsBackupWarningDays NOTIFY pbsBackupWarningDaysChanged)
     Q_PROPERTY(int pbsBackupStaleDays READ pbsBackupStaleDays WRITE setPbsBackupStaleDays NOTIFY pbsBackupStaleDaysChanged)
     Q_PROPERTY(int pbsRefreshInterval READ pbsRefreshInterval WRITE setPbsRefreshInterval NOTIFY pbsRefreshIntervalChanged)
@@ -85,6 +89,9 @@ public:
     QString multiHostsJson() const { return m_multiHostsJson; }
     void setMultiHostsJson(const QString &value);
 
+    bool multiHostSharedCert() const { return m_multiHostSharedCert; }
+    void setMultiHostSharedCert(bool v) { if (m_multiHostSharedCert == v) return; m_multiHostSharedCert = v; emit multiHostSharedCertChanged(); }
+
     bool pbsEnabled() const { return m_pbsEnabled; }
     void setPbsEnabled(bool value);
 
@@ -98,6 +105,10 @@ public:
     void setPbsTokenId(const QString &value);
 
     bool pbsIgnoreSsl() const { return m_pbsIgnoreSsl; }
+    QString pbsTrustedCertPem() const { return m_pbsTrustedCertPem; }
+    void setPbsTrustedCertPem(const QString &v) { if (m_pbsTrustedCertPem == v) return; m_pbsTrustedCertPem = v; emit pbsTrustedCertPemChanged(); QMetaObject::invokeMethod(this, &ProxmoxController::refreshPBSNow, Qt::QueuedConnection); }
+    QString pbsTrustedCertPath() const { return m_pbsTrustedCertPath; }
+    void setPbsTrustedCertPath(const QString &v) { if (m_pbsTrustedCertPath == v) return; m_pbsTrustedCertPath = v; emit pbsTrustedCertPathChanged(); QMetaObject::invokeMethod(this, &ProxmoxController::refreshPBSNow, Qt::QueuedConnection); }
     void setPbsIgnoreSsl(bool value);
 
     int pbsBackupWarningDays() const { return m_pbsBackupWarningDays; }
@@ -154,16 +165,21 @@ public:
     Q_INVOKABLE void storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void storeMultiHostPBSSecret(const QString &host, const QString &secret);
     Q_INVOKABLE void fetchData();
-    Q_INVOKABLE void testPBSConnection(const QString &host,
-                                       int port,
-                                       const QString &tokenId,
-                                       bool ignoreSslErrors);
     Q_INVOKABLE void cancelRefresh();
     Q_INVOKABLE bool runAction(const QString &sessionKey,
                                const QString &kind,
                                const QString &node,
                                int vmid,
                                const QString &action);
+    Q_INVOKABLE void deliverConsoleAuth(const QString &sessionKey, QObject *target);
+    Q_INVOKABLE void deliverConsoleTicket(const QString &sessionKey,
+                                          QObject *primary,
+                                          QObject *secondary = nullptr);
+    Q_INVOKABLE void openConsole(const QString &sessionKey,
+                              const QString &kind,
+                              const QString &node,
+                              int vmid,
+                              const QString &vmName);
 
 signals:
     void connectionModeChanged();
@@ -173,11 +189,14 @@ signals:
     void trustedCertPemChanged();
     void trustedCertPathChanged();
     void multiHostsJsonChanged();
+    void multiHostSharedCertChanged();
     void pbsEnabledChanged();
     void pbsHostChanged();
     void pbsPortChanged();
     void pbsTokenIdChanged();
     void pbsIgnoreSslChanged();
+    void pbsTrustedCertPemChanged();
+    void pbsTrustedCertPathChanged();
     void pbsBackupWarningDaysChanged();
     void pbsBackupStaleDaysChanged();
     void pbsRefreshIntervalChanged();
@@ -226,8 +245,32 @@ signals:
                      int vmid,
                      const QString &action,
                      const QString &message);
-    void pbsTestSucceeded(const QString &pbsHost);
-    void pbsTestFailed(const QString &pbsHost, const QString &message);
+
+    void consoleReady(const QString &sessionKey,
+                  const QString &host,
+                  const QString &node,
+                  const QString &kind,
+                  int vmid,
+                  const QString &vmName,
+                  int vncPort,
+                  int apiPort,
+                  bool ignoreSsl);
+    // Separate signal for LXC: carries the auth `user` returned by termproxy
+    // so the LxcTerminal can complete the "user:ticket\n" handshake.
+    // Auth header is delivered out-of-band via deliverConsoleAuth().
+    void lxcConsoleReady(const QString &sessionKey,
+                         const QString &host,
+                         int apiPort,
+                         const QString &node,
+                         int vmid,
+                         const QString &vmName,
+                         int proxyPort,
+                         const QString &user,
+                         bool ignoreSsl);
+    void consoleError(const QString &node,
+                  const QString &kind,
+                  int vmid,
+                  const QString &message);
 
 private:
     void setSecretState(const QString &value);
@@ -303,6 +346,7 @@ private:
     QString keyFor(const QString &host, int port, const QString &tokenId) const;
     QVariantMap parseKeyEntry(const QString &key) const;
     QVariantList parseKeyEntries(const QStringList &keys) const;
+    bool isBackupExcluded(int vmid, const QString &tags) const;
 
     QString m_connectionMode = QStringLiteral("single");
     QString m_host;
@@ -311,11 +355,14 @@ private:
     QString m_trustedCertPem;
     QString m_trustedCertPath;
     QString m_multiHostsJson = QStringLiteral("[]");
+    bool m_multiHostSharedCert = true;
     bool m_pbsEnabled = false;
     QString m_pbsHost;
     int m_pbsPort = 8007;
     QString m_pbsTokenId;
     bool m_pbsIgnoreSsl = false;
+    QString m_pbsTrustedCertPem;
+    QString m_pbsTrustedCertPath;
     int m_pbsBackupWarningDays = 7;
     int m_pbsBackupStaleDays = 14;
     int m_pbsRefreshInterval = 0;
@@ -349,11 +396,15 @@ private:
     int m_retryNextDelayMs = 0;
     QString m_retryStatusText;
     QString m_pbsRefreshError;
-    bool m_pbsTestInProgress = false;
     int m_pendingPbsEndpoints = 0;
     QVariant m_proxmoxData;
     QVariantList m_vmData;
     QVariantList m_lxcData;
+    // Stash for vmName between openConsole() and the matching ttyProxy/
+    // vncProxy reply. Keyed "kind:node:vmid". Populated in readSingle/
+    // MultiSecretFor's "console" branches; drained in the ttyProxyReady/
+    // vncProxyReady lambdas. Bounded by in-flight console requests.
+    QHash<QString, QString> m_pendingConsoleNames;
     QVariant m_displayedProxmoxData;
     QVariantList m_displayedVmData;
     QVariantList m_displayedLxcData;
@@ -369,6 +420,8 @@ private:
     QTimer *m_pbsTimer = nullptr;
     QTimer *m_pbsDebounceTimer = nullptr;
     int m_pendingPbsSnapshotRequests = 0;
+    QHash<QString, QByteArray> m_pendingConsoleAuth;
+    QMap<QString, QByteArray>  m_pendingConsoleTicket;
     ProxmoxClient *m_api;
     SecretStore *m_singleSecretStore;
     SecretStore *m_multiSecretStore;

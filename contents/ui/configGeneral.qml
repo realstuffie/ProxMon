@@ -32,6 +32,8 @@ KCM.SimpleKCM {
     property string cfg_pbsTokenSecretBuffer: ""
     property string cfg_pbsTokenSecretBufferDefault: ""
     property alias cfg_pbsIgnoreSsl: singleHostSection.pbsIgnoreSsl
+    property alias cfg_pbsTrustedCertPem: singleHostSection.pbsTrustedCertPem
+    property alias cfg_pbsTrustedCertPath: singleHostSection.pbsTrustedCertPath
     property alias cfg_pbsBackupWarningDays: singleHostSection.pbsWarningDays
     property alias cfg_pbsBackupStaleDays: singleHostSection.pbsStaleDays
     property alias cfg_pbsRefreshInterval: singleHostSection.pbsRefreshInterval
@@ -40,6 +42,8 @@ KCM.SimpleKCM {
     property int cfg_pbsPortDefault: 8007
     property string cfg_pbsTokenIdDefault: ""
     property bool cfg_pbsIgnoreSslDefault: false
+    property string cfg_pbsTrustedCertPemDefault: ""
+    property string cfg_pbsTrustedCertPathDefault: ""
     property int cfg_pbsBackupWarningDaysDefault: 7
     property int cfg_pbsBackupStaleDaysDefault: 14
     property int cfg_pbsRefreshIntervalDefault: 3600
@@ -58,10 +62,14 @@ KCM.SimpleKCM {
     property string cfg_multiHostsJson: "[]"
     property string cfg_multiHostSecretsJson: "{}"
     property string cfg_multiHostSecretsJsonDefault: "{}"
+    property bool cfg_multiHostSharedCert: true
+    property bool cfg_multiHostSharedCertDefault: true
 
     // Behavior-tab cfg_* keys are also injected into every KCM page by Plasma.
     // Declare inert placeholders here so configGeneral.qml accepts the initial
     // property set instead of warning about missing properties.
+    property bool cfg_consoleEnabled: true
+    property bool cfg_consoleEnabledDefault: true
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
     property string cfg_compactMode: "cpu"
@@ -270,6 +278,8 @@ KCM.SimpleKCM {
             id: singleHostSection
             Layout.fillWidth: true
             visible: (root.cfg_connectionMode || "single") === "single"
+            trustedCertPem: root.cfg_trustedCertPem
+            trustedCertPath: root.cfg_trustedCertPath
             controller: typeof kcm !== "undefined" && kcm.controller ? kcm.controller : null
             onStashSecret: function(secret) {
                 cfg_apiTokenSecret = secret
@@ -280,11 +290,8 @@ KCM.SimpleKCM {
             onStashPbsSecret: function(secret) {
                 cfg_pbsTokenSecretBuffer = secret
             }
-            onTestPbsConnection: function(host, port, tokenId, ignoreSslErrors) {
-                if (singleHostSection.controller) {
-                    singleHostSection.controller.testPBSConnection(host, port, tokenId, ignoreSslErrors)
-                }
-            }
+            onPveCertPemEdited: function(value) { root.cfg_trustedCertPem = value }
+            onPveCertPathEdited: function(value) { root.cfg_trustedCertPath = value }
         }
 
         ConfigGeneralMultiHostSection {
@@ -292,6 +299,7 @@ KCM.SimpleKCM {
             visible: (root.cfg_connectionMode || "single") === "multiHost"
             trustedCertPem: root.cfg_trustedCertPem
             trustedCertPath: root.cfg_trustedCertPath
+            multiHostSharedCert: root.cfg_multiHostSharedCert
             ensureMultiHostsLen: root.ensureMultiHostsLen
             saveMultiHosts: root.saveMultiHosts
             multiHostSecretKey: root.multiHostSecretKey
@@ -300,6 +308,9 @@ KCM.SimpleKCM {
             onUpdateSecretsJson: function(value) {
                 root.cfg_multiHostSecretsJson = value
             }
+            onPveCertPemEdited: function(value) { root.cfg_trustedCertPem = value }
+            onPveCertPathEdited: function(value) { root.cfg_trustedCertPath = value }
+            onMultiHostSharedCertToggled: function(value) { root.cfg_multiHostSharedCert = value }
         }
 
         GridLayout {
@@ -335,30 +346,6 @@ KCM.SimpleKCM {
                 id: ignoreSslCheck
                 checked: true
                 text: "Ignore SSL certificate errors"
-            }
-
-            QQC2.Label {
-                text: "Trusted Cert PEM:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignTop
-            }
-            QQC2.TextArea {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 90
-                text: root.cfg_trustedCertPem
-                placeholderText: "Paste PEM certificate here. If set, this takes precedence over file path."
-                wrapMode: TextEdit.Wrap
-                onTextChanged: root.cfg_trustedCertPem = text
-            }
-
-            QQC2.Label {
-                text: "Trusted Cert File:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            QQC2.TextField {
-                Layout.fillWidth: true
-                text: root.cfg_trustedCertPath
-                placeholderText: "/etc/pve/pve-root-ca.pem"
-                onTextChanged: root.cfg_trustedCertPath = text
             }
 
             QQC2.Label {

@@ -26,6 +26,10 @@ KCM.SimpleKCM {
     property string cfg_pbsTokenIdDefault: ""
     property bool cfg_pbsIgnoreSsl: false
     property bool cfg_pbsIgnoreSslDefault: false
+    property string cfg_pbsTrustedCertPem: ""
+    property string cfg_pbsTrustedCertPemDefault: ""
+    property string cfg_pbsTrustedCertPath: ""
+    property string cfg_pbsTrustedCertPathDefault: ""
     property int cfg_pbsBackupWarningDays: 7
     property int cfg_pbsBackupWarningDaysDefault: 7
     property int cfg_pbsBackupStaleDays: 14
@@ -54,6 +58,10 @@ KCM.SimpleKCM {
     property string cfg_multiHostsJsonDefault: "[]"
     property string cfg_multiHostSecretsJson: "{}"
     property string cfg_multiHostSecretsJsonDefault: "{}"
+    property bool cfg_multiHostSharedCert: true
+    property bool cfg_multiHostSharedCertDefault: true
+    property bool cfg_consoleEnabled: true
+    property bool cfg_consoleEnabledDefault: true
     property bool cfg_autoRetry: true
     property bool cfg_autoRetryDefault: true
     property int cfg_retryStartSeconds: 5

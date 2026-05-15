@@ -67,6 +67,8 @@ public:
                                      const QString &tokenId,
                                      const QString &tokenSecret,
                                      bool ignoreSslErrors,
+                                     const QByteArray &trustedCertPem,
+                                     const QString &trustedCertPath,
                                      int seq);
     Q_INVOKABLE void requestQemuFor(const QString &sessionKey,
                                     const QString &host,
@@ -74,6 +76,8 @@ public:
                                     const QString &tokenId,
                                     const QString &tokenSecret,
                                     bool ignoreSslErrors,
+                                    const QByteArray &trustedCertPem,
+                                    const QString &trustedCertPath,
                                     const QString &node,
                                     int seq);
     Q_INVOKABLE void requestLxcFor(const QString &sessionKey,
@@ -82,6 +86,8 @@ public:
                                    const QString &tokenId,
                                    const QString &tokenSecret,
                                    bool ignoreSslErrors,
+                                   const QByteArray &trustedCertPem,
+                                   const QString &trustedCertPath,
                                    const QString &node,
                                    int seq);
 
@@ -93,11 +99,32 @@ public:
                                       const QString &tokenId,
                                       const QString &tokenSecret,
                                       bool ignoreSslErrors,
+                                      const QByteArray &trustedCertPem,
+                                      const QString &trustedCertPath,
                                       const QString &kind,
                                       const QString &node,
                                       int vmid,
                                       const QString &action,
                                       int seq);
+
+    Q_INVOKABLE void requestVncProxy(const QString &sessionKey,
+                                  const QString &host,
+                                  int port,
+                                  const QString &tokenId,
+                                  const QString &tokenSecret,
+                                  bool ignoreSslErrors,
+                                  const QString &node,
+                                  const QString &kind,
+                                  int vmid);
+    
+    Q_INVOKABLE void requestTtyProxy(const QString &sessionKey,
+                                 const QString &host,
+                                 int port,
+                                 const QString &tokenId,
+                                 const QString &tokenSecret,
+                                 bool ignoreSslErrors,
+                                 const QString &node,
+                                 int vmid);
 
     // Abort any in-flight network requests (useful when refreshing or timing out).
     Q_INVOKABLE void cancelAll();
@@ -110,15 +137,15 @@ public:
                                         bool ignoreSslErrors,
                                         const QByteArray &trustedCertPem,
                                         const QString &trustedCertPath);
-    Q_INVOKABLE void testPBSConnection(const QString &pbsHost,
-                                       int port,
-                                       const QString &tokenId,
-                                       const QString &tokenSecret,
-                                       bool ignoreSslErrors,
-                                       const QByteArray &trustedCertPem,
-                                       const QString &trustedCertPath);
 
 signals:
+    // user is the auth user returned by termproxy; sent over the
+    // websocket as "user:ticket\n" before bidirectional traffic begins.
+    // authHeader is the full "PVEAPIToken=USER@REALM!TOKENID=SECRET" string
+    // we used to obtain the termproxy ticket — Proxmox requires the same
+    // header on the subsequent vncwebsocket upgrade or it 401s.
+    void ttyProxyReady(const QString &sessionKey, const QString &host, const QString &node, int vmid, int port, const QString &ticket, const QString &user, const QByteArray &authHeader);
+    void ttyProxyError(const QString &sessionKey, const QString &node, int vmid, const QString &error);
     void hostChanged();
     void portChanged();
     void tokenIdChanged();
@@ -128,6 +155,21 @@ signals:
     void trustedCertPemChanged();
     void trustedCertPathChanged();
     void lowLatencyChanged();
+    void vncProxyReady(const QString &sessionKey,
+                   const QString &host,
+                   const QString &node,
+                   const QString &kind,
+                   int vmid,
+                   int vncPort,
+                   const QString &ticket,
+                   int apiPort,
+                   const QByteArray &authHeader,
+                   bool ignoreSsl);
+    void vncProxyError(const QString &sessionKey,
+                   const QString &node,
+                   const QString &kind,
+                   int vmid,
+                   const QString &message);
 
     // kind: "nodes" | "qemu" | "lxc"
     void reply(int seq, const QString &kind, const QString &node, const QVariant &data);
@@ -170,7 +212,6 @@ signals:
                               const QString &datastore,
                               const QList<PBSSnapshot> &snapshots);
     void pbsError(const QString &pbsHost, const QString &message);
-    void pbsConnectionOk(const QString &pbsHost);
 
 private:
     void request(const QString &path, int seq, const QString &kind, const QString &node);
