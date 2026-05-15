@@ -253,3 +253,4 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 - [noVNC](https://github.com/novnc/noVNC) — DOM key table ported from `core/input/domkeytable.js`, licensed under MPL 2.0
 - [QTermWidget](https://github.com/lxqt/qtermwidget) — LXC terminal emulator widget, licensed under LGPL-2.0+
 - [LibVNCClient](https://github.com/LibVNC/libvncserver) — VNC client support, licensed under LGPL-2.1
+- [QtKeychain](https://github.com/frankosterfeld/qtkeychain) — secure credential storage, licensed under MIT
