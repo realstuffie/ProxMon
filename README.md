@@ -4,18 +4,18 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ## Features
 
-- **Real-time monitoring** — Node status (CPU, Memory, Uptime)
-- **VM & Container tracking** — All VMs and LXC containers with status
-- **PBS Backup status** -  Inline PBS backup results within each VM/CT row
-- **Multi-node cluster support**
+- **Real-time monitoring** — Node status (CPU, memory, uptime) with VM and LXC container tracking
+- **VNC console** — GPU-accelerated in-widget VNC sessions for VMs with full keyboard, mouse, and scroll input
+- **LXC terminal** — Native terminal emulator for containers with automatic resize
+- **PBS backup status** — Inline backup results per VM/CT with configurable warning and stale thresholds
+- **Multi-host support** — Monitor up to 5 Proxmox endpoints simultaneously
+- **Power commands** — Start, stop, and restart VMs and containers
 - **Desktop notifications** — State change alerts with rate limiting and filters
-- **Power commands** — Start, Stop, Restart VMs/CTs
-- **Secure** — API token authentication, trusted SSL certificate PEM/file support, and local keychain integration
-- **Custom appearance controls** — Override running, stopped, and node colors with live preview
-- **Tint + opacity tuning** — Adjust card tint strength and expanded window opacity
+- **Secure** — API token auth, keychain integration, and trusted SSL certificate PEM/file support
+- **Appearance controls** — Custom running, stopped, and node colors with live preview, card tint, and window opacity
 - **Flexible compact label** — Show average CPU, running workloads, error state, or last update time in the panel
-- **Theme integration** — Adapts to your Plasma theme and lets you fall back to theme defaults anytime
-- **Developer mode** — Triple-click footer for verbose logging (logging is strictly santized before output)
+- **Theme integration** — Adapts to your Plasma theme with per-color fallback to theme defaults
+- **Developer mode** — Triple-click footer for verbose logging
 
 ## Screenshots
 
