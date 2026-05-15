@@ -36,15 +36,15 @@ All burns follow `fill(0)` then `clear()` — in that order. `clear()` alone dro
 
 Burn points:
 
-| Holder | What | When |
-|---|---|---|
-| `VncWsProxy::m_ticket` | VNC ticket | `onWsConnected` — HTTP upgrade complete, ticket already in WS URL |
-| `VncWsProxy::m_authHeader` | Auth header | `onWsConnected` — same point |
-| `VncClient::m_ticket` | VNC ticket | Immediately after `strdup` into libvncclient client-data slot 1 |
-| libvncclient slot 1 | C-string copy | Worker thread, after `rfbInitClient` handshake completes |
-| `LxcTerminal::m_ticket` | Ticket | Immediately after `sendTextMessage` of the `user:ticket\n` auth line |
-| `LxcTerminal::m_authHeader` | Auth header | `onWsConnected` — HTTP upgrade complete |
-| `ProxmoxController` maps | Both | `deliver*` methods — `fill(0)` in-map, erase, then `fill(0)` on local copy after delivery |
+| Holder                       | What          | When                                                                    |
+|------------------------------|---------------|-------------------------------------------------------------------------|
+| `VncWsProxy::m_ticket`       | VNC ticket    | `onWsConnected` — HTTP upgrade complete, ticket already in WS URL       |
+| `VncWsProxy::m_authHeader`   | Auth header   | `onWsConnected` — same point                                            |
+| `VncClient::m_ticket`        | VNC ticket    | Immediately after `strdup` into libvncclient client-data slot 1         |
+| libvncclient slot 1          | C-string copy | Worker thread, after `rfbInitClient` handshake completes                |
+| `LxcTerminal::m_ticket`      | Ticket        | Immediately after `sendTextMessage` of the `user:ticket\n` auth line   |
+| `LxcTerminal::m_authHeader`  | Auth header   | WS `connected` lambda — HTTP upgrade complete                           |
+| `ProxmoxController` maps     | Both          | `deliver*` — `fill(0)` in-map, erase, then `fill(0)` on local copy     |
 
 Note on Qt CoW: `QByteArray` uses implicit sharing. `it.value().fill(0)` in the deliver methods detaches the map's copy into a new zeroed block, leaving the local variable holding the real data. The local variable's final `fill(0)` then zeroes that. This is intentional — targets receive the real bytes; map and local copies are zeroed.
 
