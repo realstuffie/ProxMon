@@ -194,15 +194,16 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ### v0.6.0
 
-- **VNC console** — Launch an in-widget VNC session for VMs directly from the expanded view
-- **LXC terminal** — Embedded terminal emulator for LXC containers via QTermWidget
-- Power action and console buttons on VM/CT rows with tooltip polish
-- Multi-host endpoint and node section UI improvements
-- Compact representation updated to reflect console/terminal availability
-- Behaviour config additions for new console/terminal options
-- Refactored proxmox client and controller internals (proxmoxconsts.h extraction)
-- Install script updates for new native dependencies (libvncclient, qtermwidget6)
-- Added LICENSES/ directory for third-party dependency attribution
+- **VNC console** — GPU-accelerated VNC sessions for VMs via a WebSocket-to-TCP bridge (VncWsProxy + libvncclient), with aspect-preserving frame rendering, full keyboard/mouse/scroll input, and automatic reconnect
+- **LXC terminal** — Native terminal emulator for containers via QTermWidget, with Proxmox terminal protocol support, automatic pty resize, and wake-CR for silent-getty containers
+- **Credential security hardening** — VNC tickets and auth headers are now delivered directly C++→C++ via a pending registry pattern; neither credential ever appears as a Q_PROPERTY or JS string on the QML/V4 heap
+- Console and terminal launch buttons on VM/CT rows with consistent tooltip polish
+- `consoleEnabled` toggle in Behaviour settings (default: on) to suppress console/terminal buttons per-user
+- GPU-accelerated frame rendering via `QSGImageNode` replacing `QQuickPaintedItem`
+- `ARCHITECTURE.md` documenting credential security model, VNC proxy design, LXC terminal window ownership, resize strategy, and session key model
+- `LICENSES/` directory with attribution for LibVNCClient (LGPL-2.1), QTermWidget (LGPL-2.0), and QtKeychain (MIT)
+- `install.sh` updated for new native dependencies (`libvncclient`, `qtermwidget6`)
+- CMakeLists.txt updated to link Qt6WebSockets, libvncclient, qtermwidget6
 
 ### v0.5.1
 
