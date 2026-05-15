@@ -3,8 +3,11 @@
 #include <QObject>
 #include <QImage>
 #include <QHash>
+#include <QMutex>
+#include <QQueue>
 #include <QThread>
 #include <atomic>
+#include <functional>
 
 struct _rfbClient;
 typedef struct _rfbClient rfbClient;
@@ -49,11 +52,15 @@ signals:
 private:
     QHash<quint32, quint32> m_keyDownList;
     void setState(const QString &state);
+    void postCmd(std::function<void(rfbClient*)> fn);
 
     rfbClient        *m_rfb     = nullptr;
     QThread          *m_thread  = nullptr;  // owns rfbInitClient + poll loop
     std::atomic<bool> m_running  { false };
     std::atomic<bool> m_frameDirty { false };
+
+    QMutex m_cmdMutex;
+    QQueue<std::function<void(rfbClient*)>> m_cmdQueue;
 
     QByteArray m_ticket;
     QString m_state       = QStringLiteral("disconnected");

@@ -23,6 +23,10 @@ static rfbBool resizeCallback(rfbClient *client)
     client->format.greenMax     = 0xff;
     client->format.blueMax      = 0xff;
 
+    // Request a full frame at the new dimensions immediately — without this
+    // the server waits for the client to ask before sending any pixels.
+    SendFramebufferUpdateRequest(client, 0, 0, w, h, FALSE);
+
     QMetaObject::invokeMethod(self, [self, w, h]() {
         self->setFrameSize(w, h);
     }, Qt::QueuedConnection);
@@ -81,7 +85,11 @@ void VncClient::connectToVnc(const QString &host, int port)
     m_ticket.fill(0);
     m_ticket.clear();
 
-    m_rfb->appData.encodingsString = "tight zrle hextile raw";
+    // "desktopsize" advertises rfbEncodingDesktopSize (-223) so the server knows
+    // the client supports both server- and client-initiated resize (SetDesktopSize
+    // type 251). Without this, QEMU may close the connection on resize rather
+    // than sending an inline DesktopResize pseudo-encoding ack.
+    m_rfb->appData.encodingsString = "tight zrle hextile raw desktopsize";
 
     // RFB session runs on a worker thread — rfbInitClient blocks on I/O.
     // Qt-facing work is marshalled back via QueuedConnection. See docs/ARCHITECTURE.md.
@@ -121,17 +129,34 @@ void VncClient::connectToVnc(const QString &host, int port)
         QMetaObject::invokeMethod(this, [this]() {
             if (m_state == QStringLiteral("disconnected")) return;
             setState(QStringLiteral("connected"));
-            // Release any modifier keys the server may think are held.
-            SendKeyEvent(m_rfb, 0xFFE1, FALSE); // Shift
-            SendKeyEvent(m_rfb, 0xFFE3, FALSE); // Ctrl
-            SendKeyEvent(m_rfb, 0xFFE9, FALSE); // Alt
-            SendKeyEvent(m_rfb, 0xFFE5, FALSE); // CapsLock
         }, Qt::QueuedConnection);
+
+        // Release any modifier keys the server may think are held.
+        // Posted via the command queue so the writes stay on this thread
+        // alongside the poll loop — not on the main thread.
+        postCmd([](rfbClient *rfb) {
+            SendKeyEvent(rfb, 0xFFE1, FALSE); // Shift
+            SendKeyEvent(rfb, 0xFFE3, FALSE); // Ctrl
+            SendKeyEvent(rfb, 0xFFE9, FALSE); // Alt
+            SendKeyEvent(rfb, 0xFFE5, FALSE); // CapsLock
+        });
 
         // Poll loop. WaitForMessage timeout is 16 ms so disconnect() is
         // noticed within one interval.
         while (m_running.load()) {
-            int result = WaitForMessage(rfb, 16'000); // µs
+            // Drain pending commands (key/pointer/resize) before waiting for
+            // server data. All rfbClient writes stay on this thread.
+            {
+                QQueue<std::function<void(rfbClient*)>> pending;
+                {
+                    QMutexLocker lk(&m_cmdMutex);
+                    pending.swap(m_cmdQueue);
+                }
+                for (auto &cmd : pending)
+                    cmd(rfb);
+            }
+
+            int result = WaitForMessage(rfb, 5'000); // µs — 5 ms keeps disconnect detection fast while reducing post-resize lag
             if (!m_running.load()) break;
             if (result < 0) {
                 QMetaObject::invokeMethod(this, [this]() {
@@ -190,6 +215,11 @@ void VncClient::disconnect()
         m_rfb = nullptr;
     }
 
+    {
+        QMutexLocker lk(&m_cmdMutex);
+        m_cmdQueue.clear();
+    }
+
     setState(QStringLiteral("disconnected"));
 }
 
@@ -205,15 +235,20 @@ void VncClient::sendKeyEvent(int qtKey, const QString &text, int location, bool 
         if (!m_keyDownList.contains(trackKey)) return;
         keysym = m_keyDownList.take(trackKey);
     }
-    SendKeyEvent(m_rfb, keysym, pressed ? TRUE : FALSE);
+    postCmd([keysym, pressed](rfbClient *rfb) {
+        SendKeyEvent(rfb, keysym, pressed ? TRUE : FALSE);
+    });
 }
 
 void VncClient::allKeysUp()
 {
     if (!m_rfb) return;
-    for (auto keysym : m_keyDownList)
-        SendKeyEvent(m_rfb, keysym, FALSE);
+    const QList<quint32> keysyms = m_keyDownList.values();
     m_keyDownList.clear();
+    postCmd([keysyms](rfbClient *rfb) {
+        for (auto keysym : keysyms)
+            SendKeyEvent(rfb, keysym, FALSE);
+    });
 }
 
 void VncClient::sendPointerEvent(int x, int y, int qtButtons)
@@ -227,7 +262,9 @@ void VncClient::sendPointerEvent(int x, int y, int qtButtons)
     if (qtButtons & 0x04) vncMask |= (1 << 1);
     if (qtButtons & 0x08) vncMask |= (1 << 7);
     if (qtButtons & 0x10) vncMask |= (1 << 8);
-    SendPointerEvent(m_rfb, x, y, vncMask);
+    postCmd([x, y, vncMask](rfbClient *rfb) {
+        SendPointerEvent(rfb, x, y, vncMask);
+    });
 }
 
 void VncClient::sendWheelEvent(int x, int y, int steps, bool up, bool horizontal)
@@ -236,10 +273,12 @@ void VncClient::sendWheelEvent(int x, int y, int steps, bool up, bool horizontal
     // VNC scroll: up=bit3, down=bit4, left=bit5, right=bit6
     int btn = horizontal ? (up ? (1 << 5) : (1 << 6))
                          : (up ? (1 << 3) : (1 << 4));
-    for (int i = 0; i < steps; i++) {
-        SendPointerEvent(m_rfb, x, y, btn);
-        SendPointerEvent(m_rfb, x, y, 0);
-    }
+    postCmd([x, y, steps, btn](rfbClient *rfb) {
+        for (int i = 0; i < steps; i++) {
+            SendPointerEvent(rfb, x, y, btn);
+            SendPointerEvent(rfb, x, y, 0);
+        }
+    });
 }
 
 void VncClient::setState(const QString &state)
@@ -247,6 +286,12 @@ void VncClient::setState(const QString &state)
     if (m_state == state) return;
     m_state = state;
     emit stateChanged();
+}
+
+void VncClient::postCmd(std::function<void(rfbClient*)> fn)
+{
+    QMutexLocker lk(&m_cmdMutex);
+    m_cmdQueue.enqueue(std::move(fn));
 }
 
 void VncClient::setFrameSize(int w, int h)
@@ -261,21 +306,23 @@ void VncClient::resizeRemote(int width, int height)
     if (!m_rfb || width <= 0 || height <= 0) return;
 
     // Hand-crafted SetDesktopSize (251) — libvncclient ≤ 0.9.15 truncates the SCREEN array (LibVNC #640).
-    // 8-byte header + 1 × 16-byte SCREEN = 24 bytes.
-    const quint16 w = static_cast<quint16>(width);
-    const quint16 h = static_cast<quint16>(height);
-    char buf[24] = {0};
-    buf[0]  = 251;
-    buf[2]  = static_cast<char>((w >> 8) & 0xFF);
-    buf[3]  = static_cast<char>( w        & 0xFF);
-    buf[4]  = static_cast<char>((h >> 8) & 0xFF);
-    buf[5]  = static_cast<char>( h        & 0xFF);
-    buf[6]  = 1;
-    buf[16] = static_cast<char>((w >> 8) & 0xFF);
-    buf[17] = static_cast<char>( w        & 0xFF);
-    buf[18] = static_cast<char>((h >> 8) & 0xFF);
-    buf[19] = static_cast<char>( h        & 0xFF);
-
-    if (!WriteToRFBServer(m_rfb, buf, sizeof(buf)))
-        qWarning() << "VncClient: SetDesktopSize write failed" << width << "x" << height;
+    // 8-byte header + 1 × 16-byte SCREEN = 24 bytes. Posted to the worker thread
+    // so the write never races with HandleRFBServerMessage.
+    postCmd([width, height](rfbClient *rfb) {
+        const quint16 w = static_cast<quint16>(width);
+        const quint16 h = static_cast<quint16>(height);
+        char buf[24] = {0};
+        buf[0]  = 251;
+        buf[2]  = static_cast<char>((w >> 8) & 0xFF);
+        buf[3]  = static_cast<char>( w        & 0xFF);
+        buf[4]  = static_cast<char>((h >> 8) & 0xFF);
+        buf[5]  = static_cast<char>( h        & 0xFF);
+        buf[6]  = 1;
+        buf[16] = static_cast<char>((w >> 8) & 0xFF);
+        buf[17] = static_cast<char>( w        & 0xFF);
+        buf[18] = static_cast<char>((h >> 8) & 0xFF);
+        buf[19] = static_cast<char>( h        & 0xFF);
+        if (!WriteToRFBServer(rfb, buf, sizeof(buf)))
+            qWarning() << "VncClient: SetDesktopSize write failed" << width << "x" << height;
+    });
 }
