@@ -6,25 +6,9 @@
 #include <QWebSocket>
 #include <QUrl>
 
-// VncWsProxy bridges a raw-TCP libvncclient connection to the Proxmox
-// vncwebsocket WebSocket endpoint.
-//
-// Usage from QML:
-//   1. Set host/apiPort/node/kind/vmid/vncPort/ignoreSsl
-//   2. Call controller.deliverConsoleAuth(sessionKey, wsProxy) and
-//      controller.deliverConsoleTicket(sessionKey, wsProxy, vncClient)
-//   3. Call start() — emits ready(localPort) once the local TCP server is up
-//   4. In onReady: vncClient.connectToVnc("127.0.0.1", localPort)
-//   5. libvncclient connects → proxy opens WS to Proxmox → bytes flow both ways
-//   6. Call stop() when the VNC session ends (or on error)
-//
-// Neither the auth header nor the VNC ticket are Q_PROPERTYs by design — both
-// are delivered from C++ via setAuthHeaderSecure / setTicketSecure so the
-// credentials never live as QStrings in the QML/JS heap.
-// ProxmoxController::deliverConsoleAuth / deliverConsoleTicket are the only
-// intended callers.
-//
-// The proxy handles exactly one client connection (one VNC session per instance).
+// Bridges a raw-TCP libvncclient connection to the Proxmox vncwebsocket endpoint.
+// Credentials are delivered via setAuthHeaderSecure / setTicketSecure — never Q_PROPERTYs.
+// Handles exactly one client connection per instance. See docs/ARCHITECTURE.md.
 
 class VncWsProxy : public QObject {
     Q_OBJECT

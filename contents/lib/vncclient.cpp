@@ -71,10 +71,8 @@ void VncClient::connectToVnc(const QString &host, int port)
     m_rfb->serverHost           = strdup(host.toUtf8().constData());
     m_rfb->serverPort           = port;
 
-    // Password callback — ticket stored in client-data slot 1.
-    // m_ticket is burned immediately after strdup so it doesn't linger in
-    // the QByteArray heap; the C-side copy in slot 1 is zeroed after the
-    // handshake completes in the worker thread below.
+    // Ticket stored in client-data slot 1; burned here after strdup.
+    // C-side copy is zeroed by the worker thread after handshake.
     m_rfb->GetPassword = [](rfbClient *client) -> char* {
         char *t = static_cast<char *>(rfbClientGetClientData(client, (void*)1));
         return t ? strdup(t) : strdup("");
@@ -85,12 +83,8 @@ void VncClient::connectToVnc(const QString &host, int port)
 
     m_rfb->appData.encodingsString = "tight zrle hextile raw";
 
-    // The entire RFB session runs on a worker thread:
-    // rfbInitClient() and HandleRFBServerMessage() both block on socket I/O,
-    // which would deadlock Qt's event loop (VncWsProxy needs it for WebSocket
-    // delivery). All Qt-facing work is marshalled back via QueuedConnection.
-    // Concurrent socket writes from the main thread (key/pointer/resize events)
-    // are safe at the kernel level alongside the worker thread's reads.
+    // RFB session runs on a worker thread — rfbInitClient blocks on I/O.
+    // Qt-facing work is marshalled back via QueuedConnection. See docs/ARCHITECTURE.md.
     m_running.store(true);
     m_thread = QThread::create([this]() {
         rfbClient *rfb = m_rfb;
@@ -158,10 +152,7 @@ void VncClient::connectToVnc(const QString &host, int port)
                     }, Qt::QueuedConnection);
                     break;
                 }
-                // Emit one frame per server message, coalescing all dirty-rect
-                // tiles. libvncclient leaves the alpha byte as 0x00; converting
-                // to ARGB32_Premultiplied ORs in 0xFF000000 so the GPU texture
-                // is fully opaque.
+                // One coalesced frame signal per server message.
                 if (m_frameDirty.exchange(false, std::memory_order_relaxed)
                         && rfb->frameBuffer) {
                     QImage frame(rfb->frameBuffer,
@@ -269,9 +260,8 @@ void VncClient::resizeRemote(int width, int height)
 {
     if (!m_rfb || width <= 0 || height <= 0) return;
 
-    // Hand-craft SetDesktopSize (251) — libvncclient ≤ 0.9.15 truncates the
-    // SCREEN array (LibVNC #640), causing QEMU to silently reject it.
-    // Wire format: 8-byte header + 1 × 16-byte SCREEN = 24 bytes total.
+    // Hand-crafted SetDesktopSize (251) — libvncclient ≤ 0.9.15 truncates the SCREEN array (LibVNC #640).
+    // 8-byte header + 1 × 16-byte SCREEN = 24 bytes.
     const quint16 w = static_cast<quint16>(width);
     const quint16 h = static_cast<quint16>(height);
     char buf[24] = {0};

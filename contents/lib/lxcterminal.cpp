@@ -282,17 +282,11 @@ void LxcTerminal::openSocket()
     }
 
     QObject::connect(m_ws, &QWebSocket::connected, this, [this]() {
-        // 101 Switching Protocols has completed — HTTP-layer auth is done
-        // and the Authorization header is no longer consulted by anything.
-        // Wipe the secret-derived bytes so they don't sit in memory for the
-        // lifetime of the session. Reconnects re-fetch a fresh header
-        // through controller.openConsole.
+        // Upgrade complete — burn auth header, send user:ticket\n, burn ticket.
         m_authHeader.fill(0);
         m_authHeader.clear();
         m_phase = Phase::Authenticating;
         if (m_ws) {
-            // Assemble the auth line as a QByteArray so m_ticket never
-            // becomes a QString. Burn both the temp and m_ticket after send.
             QByteArray ba = m_user.toUtf8() + ':' + m_ticket + '\n';
             m_ws->sendTextMessage(QString::fromUtf8(ba));
             ba.fill(0);
@@ -323,9 +317,7 @@ void LxcTerminal::openSocket()
 
     QNetworkRequest req(url);
     if (!m_authHeader.isEmpty()) {
-        // Same Authorization header used for the termproxy POST. Without it
-        // Proxmox returns 401 with a WWW-Authenticate challenge that QWebSocket
-        // refuses to negotiate, manifesting as "Unsupported WWW-Authenticate".
+        // Required — Proxmox returns 401 without it.
         req.setRawHeader("Authorization", m_authHeader);
     }
     m_ws->open(req);
@@ -399,28 +391,14 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
         }
         m_authBuffer.clear();
 
-        // Initial-resize strategy mirrors Proxmox's xterm.js wrapper.
-        //
-        // (a) Fire immediately with whatever QTermWidget reports. If layout
-        //     hasn't completed, sendCurrentResize() falls back to 81x25 —
-        //     deliberately non-default so the server-side ioctl produces
-        //     a real winsize delta and SIGWINCH fires. Triggers bash's
-        //     readline to redraw its prompt for free.
-        // (b) Re-send 120ms later, by which time QTermWidget has had a
-        //     paint pass. This pushes the *actual* visible grid size,
-        //     correcting (a)'s placeholder.
-        // (c) For containers that emit nothing on attach regardless of
-        //     SIGWINCH (raw getty waiting for input, etc.), keep a 500ms
-        //     conditional CR as the final wake.
+        // Two-pass resize: immediate (may be 81×25 placeholder) then 120ms
+        // after layout settles. 500ms wake CR for silent-getty containers.
+        // See docs/ARCHITECTURE.md for rationale.
         QTimer::singleShot(0,   this, [this]() { sendCurrentResize(); });
         QTimer::singleShot(120, this, [this]() { sendCurrentResize(); });
 
         m_postAuthBytes = 0;
         QTimer::singleShot(500, this, [this]() {
-            // Threshold of 24 bytes: a typical prompt is "user@host:~$ "
-            // plus a CR/LF prefix — comfortably above 24. The 6-byte clear-
-            // screen + cursor-home sequences some containers emit on attach
-            // sit well below it, so we still fire the wake on those.
             const int threshold = 24;
             if (m_phase == Phase::Connected && m_ws && m_postAuthBytes < threshold) {
                 m_ws->sendTextMessage(QStringLiteral("0:1:\r"));
@@ -455,16 +433,9 @@ void LxcTerminal::sendCurrentResize()
     if (!m_ws || m_phase != Phase::Connected || !m_term) return;
     int columns = m_term->screenColumnsCount();
     int lines   = m_term->screenLinesCount();
-    // QTermWidget can return 0 before its first layout pass. Don't fall
-    // back to 80x24 — that *equals* vncterm's compiled-in default, so the
-    // ioctl(TIOCSWINSZ) is a no-op, no SIGWINCH fires, and the remote
-    // shell never redraws its prompt. Use 81x25 instead: deliberately
-    // non-default, guaranteed to produce a real size delta on the server.
-    // A follow-up resize (scheduled separately) corrects to the real grid
-    // once layout settles.
+    // Fall back to 81×25 (not 80×24) so the ioctl produces a real delta and SIGWINCH fires.
     if (columns <= 0) columns = 81;
     if (lines   <= 0) lines   = 25;
-    // Proxmox vncwebsocket resize frame format: "1:cols:rows:"
     const QString frame = QStringLiteral("1:%1:%2:").arg(columns).arg(lines);
     m_ws->sendTextMessage(frame);
 }
@@ -472,9 +443,7 @@ void LxcTerminal::sendCurrentResize()
 bool LxcTerminal::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == m_term && event->type() == QEvent::Resize) {
-        // Coalesce rapid resize events (drag) into a single trailing send.
-        // The grid count isn't updated synchronously with the QResizeEvent,
-        // so defer to the next event-loop tick.
+        // Defer — grid count isn't updated synchronously with QResizeEvent.
         QTimer::singleShot(0, this, [this]() { sendCurrentResize(); });
     }
     return QObject::eventFilter(watched, event);

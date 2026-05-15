@@ -9,25 +9,10 @@ class QWebSocket;
 class QMainWindow;
 class QTermWidget;
 
-// LxcTerminal: combined protocol layer + window manager for Proxmox LXC
-// console sessions.
-//
-// Why not a pure protocol class like VncClient? VncClient renders into a
-// QQuickPaintedItem (VncFrameView) hosted inside a QML Window. QTermWidget
-// is a QWidget — it can't be embedded into a QML scene cleanly. So this
-// class owns its own top-level QMainWindow with a QTermWidget child, and
-// QML interacts only via Q_INVOKABLE methods + signals.
-//
-// Connection sequence:
-//   1) Caller obtains (port, ticket, user) from POST /lxc/{vmid}/termproxy.
-//   2) open(...) shows the window and opens a QWebSocket to
-//      wss://host:8006/api2/json/nodes/{node}/lxc/{vmid}/vncwebsocket
-//      ?port=PORT&vncticket=TICKET
-//   3) On WS connect we send "user:ticket\n" as auth.
-//   4) Server replies "OK\n", then bidirectional terminal traffic:
-//        server -> client: raw text/binary frames -> QTermWidget::sendText
-//        client -> server: QTermWidget::sendData signal -> "0:LEN:DATA" frame
-//   5) Resize: QTermWidget::terminalSizeChanged -> "1:cols:rows:" frame.
+// Protocol layer + window manager for Proxmox LXC console sessions.
+// Owns a QMainWindow+QTermWidget (QWidget can't embed in QML).
+// Credentials delivered via setAuthHeaderSecure / setTicketSecure.
+// See docs/ARCHITECTURE.md for protocol and design rationale.
 class LxcTerminal : public QObject {
     Q_OBJECT
 
