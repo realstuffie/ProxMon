@@ -239,7 +239,7 @@ void LxcTerminal::destroyWindow()
 void LxcTerminal::openSocket()
 {
     if (m_host.isEmpty() || m_ticket.isEmpty() || m_user.isEmpty()) {
-        emit errorOccurred(QStringLiteral("Missing host/ticket/user for LXC terminal"));  // m_ticket is QByteArray; isEmpty() correct
+        emit errorOccurred(QStringLiteral("Missing host/ticket/user for LXC terminal"));
         setState(QStringLiteral("error"));
         return;
     }
@@ -265,7 +265,6 @@ void LxcTerminal::openSocket()
 
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("port"), QString::number(m_proxyPort));
-    // m_ticket is QByteArray; percent-encoded output is ASCII-safe so fromLatin1 is correct.
     q.addQueryItem(QStringLiteral("vncticket"),
                    QString::fromLatin1(m_ticket.toPercentEncoding()));
     url.setQuery(q);
