@@ -192,6 +192,18 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.6.0
+
+- **VNC console** — Launch an in-widget VNC session for VMs directly from the expanded view
+- **LXC terminal** — Embedded terminal emulator for LXC containers via QTermWidget
+- Power action and console buttons on VM/CT rows with tooltip polish
+- Multi-host endpoint and node section UI improvements
+- Compact representation updated to reflect console/terminal availability
+- Behaviour config additions for new console/terminal options
+- Refactored proxmox client and controller internals (proxmoxconsts.h extraction)
+- Install script updates for new native dependencies (libvncclient, qtermwidget6)
+- Added LICENSES/ directory for third-party dependency attribution
+
 ### v0.5.1
 
 - PBS integration: optional Proxmox Backup Server support per endpoint
@@ -239,3 +251,6 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 - [Proxmox VE](https://www.proxmox.com/) - Virtualization platform
 - [KDE Plasma](https://kde.org/plasma-desktop/) - Desktop environment
+- [noVNC](https://github.com/novnc/noVNC) — DOM key table ported from `core/input/domkeytable.js`, licensed under MPL 2.0
+- [QTermWidget](https://github.com/lxqt/qtermwidget) — LXC terminal emulator widget, licensed under LGPL-2.0+
+- [LibVNCClient](https://github.com/LibVNC/libvncserver) — VNC client support, licensed under LGPL-2.1

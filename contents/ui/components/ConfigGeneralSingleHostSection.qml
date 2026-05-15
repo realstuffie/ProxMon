@@ -23,7 +23,6 @@ GridLayout {
     signal stashSecret(string secret)
     signal forgetSecret()
     signal stashPbsSecret(string secret)
-    signal testPbsConnection(string host, int port, string tokenId, bool ignoreSslErrors)
 
     columns: 2
     columnSpacing: 15
@@ -238,10 +237,6 @@ GridLayout {
             }
         }
 
-        QQC2.Button {
-            text: "Test PBS Connection"
-            onClicked: root.testPbsConnection(pbsHostField.text, pbsPortField.value, pbsTokenIdField.text, pbsIgnoreSslCheck.checked)
-        }
     }
 
 }

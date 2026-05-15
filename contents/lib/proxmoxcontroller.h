@@ -2,6 +2,7 @@
 
 #include <QObject>
 #include <QHash>
+#include <QMap>
 #include <QTimer>
 #include <QVariant>
 
@@ -160,16 +161,21 @@ public:
     Q_INVOKABLE void storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void storeMultiHostPBSSecret(const QString &host, const QString &secret);
     Q_INVOKABLE void fetchData();
-    Q_INVOKABLE void testPBSConnection(const QString &host,
-                                       int port,
-                                       const QString &tokenId,
-                                       bool ignoreSslErrors);
     Q_INVOKABLE void cancelRefresh();
     Q_INVOKABLE bool runAction(const QString &sessionKey,
                                const QString &kind,
                                const QString &node,
                                int vmid,
                                const QString &action);
+    Q_INVOKABLE void deliverConsoleAuth(const QString &sessionKey, QObject *target);
+    Q_INVOKABLE void deliverConsoleTicket(const QString &sessionKey,
+                                          QObject *primary,
+                                          QObject *secondary = nullptr);
+    Q_INVOKABLE void openConsole(const QString &sessionKey,
+                              const QString &kind,
+                              const QString &node,
+                              int vmid,
+                              const QString &vmName);
 
 signals:
     void connectionModeChanged();
@@ -234,8 +240,32 @@ signals:
                      int vmid,
                      const QString &action,
                      const QString &message);
-    void pbsTestSucceeded(const QString &pbsHost);
-    void pbsTestFailed(const QString &pbsHost, const QString &message);
+
+    void consoleReady(const QString &sessionKey,
+                  const QString &host,
+                  const QString &node,
+                  const QString &kind,
+                  int vmid,
+                  const QString &vmName,
+                  int vncPort,
+                  int apiPort,
+                  bool ignoreSsl);
+    // Separate signal for LXC: carries the auth `user` returned by termproxy
+    // so the LxcTerminal can complete the "user:ticket\n" handshake.
+    // Auth header is delivered out-of-band via deliverConsoleAuth().
+    void lxcConsoleReady(const QString &sessionKey,
+                         const QString &host,
+                         int apiPort,
+                         const QString &node,
+                         int vmid,
+                         const QString &vmName,
+                         int proxyPort,
+                         const QString &user,
+                         bool ignoreSsl);
+    void consoleError(const QString &node,
+                  const QString &kind,
+                  int vmid,
+                  const QString &message);
 
 private:
     void setSecretState(const QString &value);
@@ -311,6 +341,7 @@ private:
     QString keyFor(const QString &host, int port, const QString &tokenId) const;
     QVariantMap parseKeyEntry(const QString &key) const;
     QVariantList parseKeyEntries(const QStringList &keys) const;
+    bool isBackupExcluded(int vmid, const QString &tags) const;
 
     QString m_connectionMode = QStringLiteral("single");
     QString m_host;
@@ -359,11 +390,15 @@ private:
     int m_retryNextDelayMs = 0;
     QString m_retryStatusText;
     QString m_pbsRefreshError;
-    bool m_pbsTestInProgress = false;
     int m_pendingPbsEndpoints = 0;
     QVariant m_proxmoxData;
     QVariantList m_vmData;
     QVariantList m_lxcData;
+    // Stash for vmName between openConsole() and the matching ttyProxy/
+    // vncProxy reply. Keyed "kind:node:vmid". Populated in readSingle/
+    // MultiSecretFor's "console" branches; drained in the ttyProxyReady/
+    // vncProxyReady lambdas. Bounded by in-flight console requests.
+    QHash<QString, QString> m_pendingConsoleNames;
     QVariant m_displayedProxmoxData;
     QVariantList m_displayedVmData;
     QVariantList m_displayedLxcData;
@@ -379,6 +414,8 @@ private:
     QTimer *m_pbsTimer = nullptr;
     QTimer *m_pbsDebounceTimer = nullptr;
     int m_pendingPbsSnapshotRequests = 0;
+    QHash<QString, QByteArray> m_pendingConsoleAuth;
+    QMap<QString, QByteArray>  m_pendingConsoleTicket;
     ProxmoxClient *m_api;
     SecretStore *m_singleSecretStore;
     SecretStore *m_multiSecretStore;

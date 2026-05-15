@@ -83,6 +83,9 @@
         </entry>
 
         <!-- Behavior Settings -->
+        <entry name="consoleEnabled" type="Bool">
+            <default>true</default>
+        </entry>
         <entry name="defaultSorting" type="String">
             <default>status</default>
         </entry>

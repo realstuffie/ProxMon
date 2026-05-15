@@ -112,6 +112,10 @@ KCM.SimpleKCM {
     property alias cfg_redactNotifyIdentities: redactNotifyIdentitiesCheck.checked
     property bool cfg_redactNotifyIdentitiesDefault: true
 
+    // Console toggle
+    property alias cfg_consoleEnabled: consoleEnabledCheck.checked
+    property bool cfg_consoleEnabledDefault: true
+
     //Low latency mode (shorter network timeouts, may increase error rate on slow connections)
     property alias cfg_lowLatency: lowLatencyCheck.checked
     property bool cfg_lowLatencyDefault: false
@@ -259,6 +263,37 @@ KCM.SimpleKCM {
                     }
                 }
             }
+        }
+
+        // Separator
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.topMargin: 10
+            Layout.bottomMargin: 10
+            implicitHeight: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.3
+        }
+
+        // ==================== CONSOLE SECTION ====================
+        Kirigami.Heading {
+            text: "Console"
+            level: 2
+        }
+
+        QQC2.CheckBox {
+            id: consoleEnabledCheck
+            text: "Enable VM/CT console (VNC/TTY)"
+            checked: root.cfg_consoleEnabled
+            onCheckedChanged: root.cfg_consoleEnabled = checked
+        }
+
+        QQC2.Label {
+            text: "Shows a terminal button on running VMs and containers. Clicking it opens a VNC or TTY console in a new window."
+            font.pixelSize: 11
+            opacity: 0.6
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
         }
 
         // Separator
