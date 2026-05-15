@@ -92,6 +92,13 @@ bash install.sh --no-deps
 | `VM.PowerMgmt`  | `/vms` | Start/stop/reboot VMs and CTs   |
 | `Sys.PowerMgmt` | `/`    | Required in some role setups    |
 
+### Console Permissions
+
+| Permission      | Path   | Purpose                              |
+|-----------------|--------|--------------------------------------|
+| `VM.Console`    | `/vms` | Open VNC console for VMs             |
+| `VM.Console`    | `/vms` | Open terminal for LXC containers     |
+
 > **Privilege Separation note:** If your token has privilege separation enabled, effective permissions are the *intersection* of user and token permissions. You must grant roles to both, or disable privilege separation.
 
 ### Example: Dedicated Monitoring User
