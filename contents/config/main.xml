@@ -65,6 +65,9 @@
         <entry name="connectionMode" type="String">
             <default>single</default>
         </entry>
+        <entry name="multiHostSharedCert" type="Bool">
+            <default>true</default>
+        </entry>
         <!-- JSON array: [{name,host,port,tokenId}] (secrets stored in keyring) -->
         <entry name="multiHostsJson" type="String">
             <default>[]</default>

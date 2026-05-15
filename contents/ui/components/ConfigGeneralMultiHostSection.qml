@@ -12,18 +12,78 @@ ColumnLayout {
     property string trustedCertPem: ""
     property string trustedCertPath: ""
     property string cfg_multiHostSecretsJson: "{}"
+    property bool multiHostSharedCert: true
     property var controller: null
     signal updateSecretsJson(string value)
+    signal pveCertPemEdited(string value)
+    signal pveCertPathEdited(string value)
+    signal multiHostSharedCertToggled(bool value)
 
     Layout.fillWidth: true
     spacing: 12
 
     QQC2.Label {
-        text: "Configure up to 5 Proxmox endpoints. Secrets are stored in the system keyring after Apply. Trusted cert PEM/file settings from the Connection tab are shared across all endpoints."
+        text: "Configure up to 5 Proxmox endpoints. Secrets are stored in the system keyring after Apply."
         font.pixelSize: 11
         opacity: 0.7
         wrapMode: Text.WordWrap
         Layout.fillWidth: true
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 8
+
+        QQC2.CheckBox {
+            id: sharedCertToggle
+            checked: root.multiHostSharedCert
+            text: "Use shared trusted certificate for all endpoints"
+            onToggled: root.multiHostSharedCertToggled(checked)
+        }
+    }
+
+    ColumnLayout {
+        Layout.fillWidth: true
+        visible: sharedCertToggle.checked
+        spacing: 8
+
+        GridLayout {
+            columns: 2
+            columnSpacing: 15
+            rowSpacing: 10
+            Layout.fillWidth: true
+
+            QQC2.Label {
+                text: "Trusted Proxmox VE PEM:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignTop
+            }
+            QQC2.TextArea {
+                id: sharedCertPemArea
+                Layout.fillWidth: true
+                Layout.preferredHeight: 90
+                text: root.trustedCertPem
+                placeholderText: "Paste PEM certificate here. If set, this takes precedence over cert file path."
+                wrapMode: TextEdit.Wrap
+                font.family: "monospace"
+                onTextChanged: {
+                    if (root.trustedCertPem !== text) root.pveCertPemEdited(text)
+                }
+            }
+
+            QQC2.Label {
+                text: "Trusted Proxmox VE File:"
+                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            }
+            QQC2.TextField {
+                id: sharedCertPathField
+                Layout.fillWidth: true
+                text: root.trustedCertPath
+                placeholderText: "/etc/pve/pve-root-ca.pem"
+                onTextChanged: {
+                    if (root.trustedCertPath !== text) root.pveCertPathEdited(text)
+                }
+            }
+        }
     }
 
     Repeater {
@@ -172,6 +232,44 @@ ColumnLayout {
 
                             QQC2.ToolTip.visible: hovered
                             QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
+                        }
+                    }
+
+                    // Per-endpoint cert fields (only shown when shared cert is disabled)
+                    QQC2.Label {
+                        text: "Trusted Proxmox VE PEM:"
+                        visible: !sharedCertToggle.checked
+                        Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                    }
+                    QQC2.TextArea {
+                        visible: !sharedCertToggle.checked
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 80
+                        text: entry.trustedCertPem || ""
+                        placeholderText: "Paste PEM certificate here (optional)"
+                        font.family: "monospace"
+                        wrapMode: TextEdit.Wrap
+                        onTextChanged: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[idx].trustedCertPem = text
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "Trusted Proxmox VE File:"
+                        visible: !sharedCertToggle.checked
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    QQC2.TextField {
+                        visible: !sharedCertToggle.checked
+                        Layout.fillWidth: true
+                        text: entry.trustedCertPath || ""
+                        placeholderText: "/etc/pve/pve-root-ca.pem (optional)"
+                        onTextChanged: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[idx].trustedCertPath = text
+                            root.saveMultiHosts(arr)
                         }
                     }
 

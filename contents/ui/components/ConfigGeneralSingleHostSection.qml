@@ -10,6 +10,8 @@ GridLayout {
     property alias tokenIdText: tokenIdField.text
     property alias tokenSecretText: tokenSecretField.text
     property var controller: null
+    property string trustedCertPem: ""
+    property string trustedCertPath: ""
     property alias pbsEnabled: pbsEnabledCheck.checked
     property alias pbsHostText: pbsHostField.text
     property alias pbsPortValue: pbsPortField.value
@@ -23,6 +25,8 @@ GridLayout {
     signal stashSecret(string secret)
     signal forgetSecret()
     signal stashPbsSecret(string secret)
+    signal pveCertPemEdited(string value)
+    signal pveCertPathEdited(string value)
 
     columns: 2
     columnSpacing: 15
@@ -99,6 +103,37 @@ GridLayout {
 
             QQC2.ToolTip.visible: hovered
             QQC2.ToolTip.text: "Clears the locally entered secret. This does not delete existing keyring entries."
+        }
+    }
+
+    QQC2.Label {
+        text: "Trusted Proxmox VE PEM:"
+        Layout.alignment: Qt.AlignRight | Qt.AlignTop
+    }
+    QQC2.TextArea {
+        id: pveTrustedCertPemArea
+        Layout.fillWidth: true
+        Layout.preferredHeight: 90
+        text: root.trustedCertPem
+        placeholderText: "Paste PEM certificate here. If set, this takes precedence over cert file path."
+        wrapMode: TextEdit.Wrap
+        font.family: "monospace"
+        onTextChanged: {
+            if (root.trustedCertPem !== text) root.pveCertPemEdited(text)
+        }
+    }
+
+    QQC2.Label {
+        text: "Trusted Proxmox VE File:"
+        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+    }
+    QQC2.TextField {
+        id: pveTrustedCertPathField2
+        Layout.fillWidth: true
+        text: root.trustedCertPath
+        placeholderText: "/etc/pve/pve-root-ca.pem"
+        onTextChanged: {
+            if (root.trustedCertPath !== text) root.pveCertPathEdited(text)
         }
     }
 

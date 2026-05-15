@@ -53,6 +53,8 @@ KCM.SimpleKCM {
     property string cfg_multiHostsJsonDefault: "[]"
     property string cfg_multiHostSecretsJson: "{}"
     property string cfg_multiHostSecretsJsonDefault: "{}"
+    property bool cfg_multiHostSharedCert: true
+    property bool cfg_multiHostSharedCertDefault: true
     property bool cfg_autoRetry: true
     property bool cfg_autoRetryDefault: true
     property int cfg_retryStartSeconds: 5

@@ -67,6 +67,8 @@ public:
                                      const QString &tokenId,
                                      const QString &tokenSecret,
                                      bool ignoreSslErrors,
+                                     const QByteArray &trustedCertPem,
+                                     const QString &trustedCertPath,
                                      int seq);
     Q_INVOKABLE void requestQemuFor(const QString &sessionKey,
                                     const QString &host,
@@ -74,6 +76,8 @@ public:
                                     const QString &tokenId,
                                     const QString &tokenSecret,
                                     bool ignoreSslErrors,
+                                    const QByteArray &trustedCertPem,
+                                    const QString &trustedCertPath,
                                     const QString &node,
                                     int seq);
     Q_INVOKABLE void requestLxcFor(const QString &sessionKey,
@@ -82,6 +86,8 @@ public:
                                    const QString &tokenId,
                                    const QString &tokenSecret,
                                    bool ignoreSslErrors,
+                                   const QByteArray &trustedCertPem,
+                                   const QString &trustedCertPath,
                                    const QString &node,
                                    int seq);
 
@@ -93,6 +99,8 @@ public:
                                       const QString &tokenId,
                                       const QString &tokenSecret,
                                       bool ignoreSslErrors,
+                                      const QByteArray &trustedCertPem,
+                                      const QString &trustedCertPath,
                                       const QString &kind,
                                       const QString &node,
                                       int vmid,

@@ -204,6 +204,18 @@ Triple-click the footer to enable:
 
 ---
 
+---
+
+## Shelved feature ideas
+
+### Favourites / pinned rows
+Pin specific VMs or LXCs to the top of their type section (VMs or LXCs) within their node card. Favourites stay scoped per-node to avoid cross-node VMID collisions. In multi-host mode the key would be `sessionKey::nodeName:vmid`, mirroring the existing action/state key pattern. A star toggle on `VmRow`/`LxcRow` (visible on hover, always visible when starred) would persist the favourites set to config. `getVmsForNode` / `getLxcForNode` (and multi-host equivalents) would partition favourites to the top, sort the remainder normally, then concatenate. No conflict with existing `defaultSorting` options since favourites float within — not above — the type group.
+
+### Desktop planar compact indicator (StatusNotifierItem)
+When the widget is placed on the desktop (planar formFactor), the full representation is always shown. Ideally, it would also auto-register a compact indicator (icon + status mode text e.g. CPU%) in the bottom panel via the **StatusNotifierItem** D-Bus interface. Requires new C++ code in the plugin to register/deregister the SNI when planar mode is detected, and dynamic icon rendering to include the status text. Shelved due to complexity — not ideal until the SNI approach can be done cleanly.
+
+---
+
 ### Known bugs / limitations
 
 - **VncWsProxy local port race (known limitation, intentionally not fixed):** `VncWsProxy` binds to `127.0.0.1:0` and emits `ready(port)` before libvncclient calls `connect()`. During that window another local process can grab the slot.

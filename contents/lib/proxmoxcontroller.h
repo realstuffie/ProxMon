@@ -20,6 +20,7 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString trustedCertPem READ trustedCertPem WRITE setTrustedCertPem NOTIFY trustedCertPemChanged)
     Q_PROPERTY(QString trustedCertPath READ trustedCertPath WRITE setTrustedCertPath NOTIFY trustedCertPathChanged)
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
+    Q_PROPERTY(bool multiHostSharedCert READ multiHostSharedCert WRITE setMultiHostSharedCert NOTIFY multiHostSharedCertChanged)
     Q_PROPERTY(bool pbsEnabled READ pbsEnabled WRITE setPbsEnabled NOTIFY pbsEnabledChanged)
     Q_PROPERTY(QString pbsHost READ pbsHost WRITE setPbsHost NOTIFY pbsHostChanged)
     Q_PROPERTY(int pbsPort READ pbsPort WRITE setPbsPort NOTIFY pbsPortChanged)
@@ -87,6 +88,9 @@ public:
 
     QString multiHostsJson() const { return m_multiHostsJson; }
     void setMultiHostsJson(const QString &value);
+
+    bool multiHostSharedCert() const { return m_multiHostSharedCert; }
+    void setMultiHostSharedCert(bool v) { if (m_multiHostSharedCert == v) return; m_multiHostSharedCert = v; emit multiHostSharedCertChanged(); }
 
     bool pbsEnabled() const { return m_pbsEnabled; }
     void setPbsEnabled(bool value);
@@ -185,6 +189,7 @@ signals:
     void trustedCertPemChanged();
     void trustedCertPathChanged();
     void multiHostsJsonChanged();
+    void multiHostSharedCertChanged();
     void pbsEnabledChanged();
     void pbsHostChanged();
     void pbsPortChanged();
@@ -350,6 +355,7 @@ private:
     QString m_trustedCertPem;
     QString m_trustedCertPath;
     QString m_multiHostsJson = QStringLiteral("[]");
+    bool m_multiHostSharedCert = true;
     bool m_pbsEnabled = false;
     QString m_pbsHost;
     int m_pbsPort = 8007;

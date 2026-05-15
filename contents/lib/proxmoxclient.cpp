@@ -123,9 +123,11 @@ void ProxmoxClient::requestNodesFor(const QString &sessionKey,
                                     const QString &tokenId,
                                     const QString &tokenSecret,
                                     bool ignoreSslErrors,
+                                    const QByteArray &trustedCertPem,
+                                    const QString &trustedCertPath,
                                     int seq) {
     requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors,
-               m_trustedCertPem.toUtf8(), m_trustedCertPath,
+               trustedCertPem, trustedCertPath,
                QStringLiteral("/nodes"), seq, ProxmoxConst::Kind::Nodes, QString());
 }
 
@@ -135,10 +137,12 @@ void ProxmoxClient::requestQemuFor(const QString &sessionKey,
                                    const QString &tokenId,
                                    const QString &tokenSecret,
                                    bool ignoreSslErrors,
+                                   const QByteArray &trustedCertPem,
+                                   const QString &trustedCertPath,
                                    const QString &node,
                                    int seq) {
     requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors,
-               m_trustedCertPem.toUtf8(), m_trustedCertPath,
+               trustedCertPem, trustedCertPath,
                QStringLiteral("/nodes/%1/qemu").arg(node), seq, ProxmoxConst::Kind::Qemu, node);
 }
 
@@ -148,10 +152,12 @@ void ProxmoxClient::requestLxcFor(const QString &sessionKey,
                                   const QString &tokenId,
                                   const QString &tokenSecret,
                                   bool ignoreSslErrors,
+                                  const QByteArray &trustedCertPem,
+                                  const QString &trustedCertPath,
                                   const QString &node,
                                   int seq) {
     requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors,
-               m_trustedCertPem.toUtf8(), m_trustedCertPath,
+               trustedCertPem, trustedCertPath,
                QStringLiteral("/nodes/%1/lxc").arg(node), seq, ProxmoxConst::Kind::Lxc, node);
 }
 
@@ -181,6 +187,8 @@ void ProxmoxClient::requestActionFor(const QString &sessionKey,
                                      const QString &tokenId,
                                      const QString &tokenSecret,
                                      bool ignoreSslErrors,
+                                     const QByteArray &trustedCertPem,
+                                     const QString &trustedCertPath,
                                      const QString &kind,
                                      const QString &node,
                                      int vmid,
@@ -203,8 +211,8 @@ void ProxmoxClient::requestActionFor(const QString &sessionKey,
             tokenId,
             tokenSecret,
             ignoreSslErrors,
-            m_trustedCertPem.toUtf8(),
-            m_trustedCertPath,
+            trustedCertPem,
+            trustedCertPath,
             QStringLiteral("/nodes/%1/%2/%3/status/%4").arg(node).arg(kind).arg(vmid).arg(action),
             seq,
             kind,

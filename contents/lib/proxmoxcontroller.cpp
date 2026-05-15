@@ -249,6 +249,16 @@ ProxmoxController::ProxmoxController(QObject *parent)
             endpoint.insert(QStringLiteral("port"), item.value(QStringLiteral("port")));
             endpoint.insert(QStringLiteral("tokenId"), item.value(QStringLiteral("tokenId")));
             endpoint.insert(QStringLiteral("ignoreSsl"), m_ignoreSsl);
+            // Per-endpoint cert: use shared global cert if multiHostSharedCert is true,
+            // otherwise use the cert stored per-endpoint in the JSON config.
+            const QString epCertPem  = m_multiHostSharedCert
+                ? m_trustedCertPem
+                : item.value(QStringLiteral("trustedCertPem")).toString();
+            const QString epCertPath = m_multiHostSharedCert
+                ? m_trustedCertPath
+                : item.value(QStringLiteral("trustedCertPath")).toString();
+            endpoint.insert(QStringLiteral("trustedCertPem"),  epCertPem);
+            endpoint.insert(QStringLiteral("trustedCertPath"), epCertPath);
             m_tempEndpoints.push_back(endpoint);
         }
 
@@ -973,6 +983,8 @@ void ProxmoxController::dispatchSingleFetchWithSecret(const QString &secret) {
                            m_tokenId,
                            secret,
                            m_ignoreSsl,
+                           m_trustedCertPem.toUtf8(),
+                           m_trustedCertPath,
                            m_refreshSeq);
 }
 
@@ -1055,6 +1067,8 @@ bool ProxmoxController::dispatchSingleActionWithSecret(const QString &kind,
                             m_tokenId,
                             secret,
                             m_ignoreSsl,
+                            m_trustedCertPem.toUtf8(),
+                            m_trustedCertPath,
                             kind,
                             node,
                             vmid,
@@ -1213,6 +1227,8 @@ void ProxmoxController::dispatchMultiNodesWithSecret(const QString &sessionKey,
                            endpoint.value(QStringLiteral("tokenId")).toString(),
                            secret,
                            endpoint.value(QStringLiteral("ignoreSsl")).toBool(),
+                           endpoint.value(QStringLiteral("trustedCertPem")).toString().toUtf8(),
+                           endpoint.value(QStringLiteral("trustedCertPath")).toString(),
                            m_refreshSeq);
 }
 
@@ -1239,6 +1255,8 @@ void ProxmoxController::dispatchMultiNodeChildrenWithSecret(const QString &sessi
                               endpoint.value(QStringLiteral("tokenId")).toString(),
                               secret,
                               endpoint.value(QStringLiteral("ignoreSsl")).toBool(),
+                              endpoint.value(QStringLiteral("trustedCertPem")).toString().toUtf8(),
+                              endpoint.value(QStringLiteral("trustedCertPath")).toString(),
                               nodeName,
                               m_refreshSeq);
         m_api->requestLxcFor(sessionKey,
@@ -1247,6 +1265,8 @@ void ProxmoxController::dispatchMultiNodeChildrenWithSecret(const QString &sessi
                              endpoint.value(QStringLiteral("tokenId")).toString(),
                              secret,
                              endpoint.value(QStringLiteral("ignoreSsl")).toBool(),
+                             endpoint.value(QStringLiteral("trustedCertPem")).toString().toUtf8(),
+                             endpoint.value(QStringLiteral("trustedCertPath")).toString(),
                              nodeName,
                              m_refreshSeq);
     }
@@ -1275,6 +1295,8 @@ bool ProxmoxController::dispatchMultiActionWithSecret(const QString &sessionKey,
                             endpoint.value(QStringLiteral("tokenId")).toString(),
                             secret,
                             endpoint.value(QStringLiteral("ignoreSsl")).toBool(),
+                            endpoint.value(QStringLiteral("trustedCertPem")).toString().toUtf8(),
+                            endpoint.value(QStringLiteral("trustedCertPath")).toString(),
                             kind,
                             node,
                             vmid,

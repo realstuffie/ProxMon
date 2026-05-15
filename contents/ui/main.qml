@@ -64,6 +64,7 @@ PlasmoidItem {
 
     // Connection mode: "single" | "multiHost"
     property string connectionMode: Plasmoid.configuration.connectionMode || "single"
+    property bool multiHostSharedCert: Plasmoid.configuration.multiHostSharedCert !== false
 
     // Single-host connection properties
     property string proxmoxHost: Plasmoid.configuration.proxmoxHost || ""
@@ -85,6 +86,7 @@ PlasmoidItem {
         trustedCertPem: root.trustedCertPem
         trustedCertPath: root.trustedCertPath
         multiHostsJson: root.multiHostsJson
+        multiHostSharedCert: root.multiHostSharedCert
         pbsEnabled: root.pbsEnabled
         pbsHost: root.pbsHost
         pbsPort: root.pbsPort
@@ -1426,6 +1428,8 @@ PlasmoidItem {
             Plasmoid.configuration.multiHostSecretsJson = "{}"
         }
     }
+    onMultiHostSharedCertChanged: triggerRefreshFromConfigChange("multiHostSharedCert")
+
     onMultiHostsJsonChanged: {
         controllerPendingResolvedRefresh = true
         if (connectionMode === "multiHost") triggerSecretResolveFromConfigChange()
