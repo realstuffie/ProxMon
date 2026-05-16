@@ -204,6 +204,13 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.6.1
+
+- Fix: closing the VNC console window during connection no longer crashes plasmashell (use-after-free + deadlock in teardown path)
+- Fix: PBS in-flight requests are now correctly aborted by `cancelAll()` alongside PVE requests
+- Fix: per-endpoint SSL certificate is now correctly passed to VNC and TTY proxy requests in multi-host mode
+- Docs: added Security section to README
+
 ### v0.6.0
 
 - VNC console for VMs — GPU-accelerated rendering, full keyboard/mouse/scroll, dynamic resize, auto-reconnect
