@@ -21,16 +21,17 @@ void ProxmoxClient::cancelAll() {
     // Abort any outstanding requests to avoid late reply storms and wasted work.
     //
     // QNetworkReply::abort() emits finished() (Qt docs), so snapshot first to avoid
-    // iterating while callbacks remove from m_inFlight.
+    // iterating while callbacks remove from m_inFlight / m_pbsInFlight.
     const auto pbsReplies = m_pbsInFlight.values();
     m_pbsInFlight.clear();
     const auto replies = m_inFlight.values();
     m_inFlight.clear();
 
     for (QNetworkReply *r : replies) {
-        if (r) {
-            r->abort();
-        }
+        if (r) r->abort();
+    }
+    for (QNetworkReply *r : pbsReplies) {
+        if (r) r->abort();
     }
 }
 
