@@ -1018,11 +1018,13 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
 
         if (actionKind == ProxmoxConst::Kind::Lxc) {
             m_api->requestTtyProxy(QString(), m_host, m_port, m_tokenId, secret,
-                                  m_ignoreSsl, node, vmid);
+                                   m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
+                                   node, vmid);
         } else {
             m_api->requestVncProxy(QString(), m_host, m_port, m_tokenId, secret,
-                              m_ignoreSsl, node, actionKind, vmid);
-            }
+                                   m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
+                                   node, actionKind, vmid);
+        }
         }
     
 
@@ -1148,13 +1150,15 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
             const int     epPort     = endpoint.value(QStringLiteral("port"), ProxmoxConst::Defaults::PvePort).toInt();
             const QString epTokenId  = endpoint.value(QStringLiteral("tokenId")).toString();
             const bool    epIgnore   = endpoint.value(QStringLiteral("ignoreSsl")).toBool();
+            const QByteArray epCertPem  = endpoint.value(QStringLiteral("trustedCertPem")).toString().toUtf8();
+            const QString    epCertPath = endpoint.value(QStringLiteral("trustedCertPath")).toString();
 
             if (actionKind == ProxmoxConst::Kind::Lxc) {
                 m_api->requestTtyProxy(sessionKey, epHost, epPort, epTokenId, secret,
-                                       epIgnore, node, vmid);
+                                       epIgnore, epCertPem, epCertPath, node, vmid);
             } else {
                 m_api->requestVncProxy(sessionKey, epHost, epPort, epTokenId, secret,
-                                       epIgnore, node, actionKind, vmid);
+                                       epIgnore, epCertPem, epCertPath, node, actionKind, vmid);
             }
         }
     }, Qt::SingleShotConnection);

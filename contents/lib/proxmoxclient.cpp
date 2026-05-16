@@ -825,6 +825,8 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
                                      const QString &tokenId,
                                      const QString &tokenSecret,
                                      bool ignoreSslErrors,
+                                     const QByteArray &trustedCertPem,
+                                     const QString &trustedCertPath,
                                      const QString &node,
                                      const QString &kind,
                                      int vmid)
@@ -838,7 +840,7 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
                              .arg(node).arg(kind).arg(vmid);
 
     QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,
-                                       m_trustedCertPem.toUtf8(), m_trustedCertPath);
+                                       trustedCertPem, trustedCertPath);
 
     QByteArray body;
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
@@ -914,6 +916,8 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
                                     const QString &tokenId,
                                     const QString &tokenSecret,
                                     bool ignoreSslErrors,
+                                    const QByteArray &trustedCertPem,
+                                    const QString &trustedCertPath,
                                     const QString &node,
                                     int vmid)
 {
@@ -929,7 +933,7 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
                              .arg(node).arg(vmid);
 
     QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,
-                                       m_trustedCertPem.toUtf8(), m_trustedCertPath);
+                                       trustedCertPem, trustedCertPath);
 
     QByteArray body;
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
