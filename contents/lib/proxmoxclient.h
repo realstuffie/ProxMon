@@ -113,16 +113,20 @@ public:
                                   const QString &tokenId,
                                   const QString &tokenSecret,
                                   bool ignoreSslErrors,
+                                  const QByteArray &trustedCertPem,
+                                  const QString &trustedCertPath,
                                   const QString &node,
                                   const QString &kind,
                                   int vmid);
-    
+
     Q_INVOKABLE void requestTtyProxy(const QString &sessionKey,
                                  const QString &host,
                                  int port,
                                  const QString &tokenId,
                                  const QString &tokenSecret,
                                  bool ignoreSslErrors,
+                                 const QByteArray &trustedCertPem,
+                                 const QString &trustedCertPath,
                                  const QString &node,
                                  int vmid);
 

@@ -2,6 +2,7 @@
 #include "vnckeysym.h"
 
 #include <rfb/rfbclient.h>
+#include <QCoreApplication>
 #include <QDebug>
 
 // Called by libvncclient when the server advertises a new framebuffer size.
@@ -209,6 +210,12 @@ void VncClient::disconnect()
         m_thread->deleteLater();
         m_thread = nullptr;
     }
+
+    // Purge any QueuedConnection invokeMethod calls the worker thread posted
+    // before it exited. If left in the queue they would fire after this object
+    // is destroyed (use-after-free → crash when closing the window during
+    // connection). Must run after wait() so no new events can be posted.
+    QCoreApplication::removePostedEvents(this);
 
     if (m_rfb) {
         rfbClientCleanup(m_rfb);
