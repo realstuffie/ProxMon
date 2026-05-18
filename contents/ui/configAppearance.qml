@@ -62,6 +62,8 @@ KCM.SimpleKCM {
     property bool cfg_multiHostSharedCertDefault: true
     property bool cfg_consoleEnabled: true
     property bool cfg_consoleEnabledDefault: true
+    property bool cfg_powerActionsEnabled: true
+    property bool cfg_powerActionsEnabledDefault: true
     property bool cfg_autoRetry: true
     property bool cfg_autoRetryDefault: true
     property int cfg_retryStartSeconds: 5

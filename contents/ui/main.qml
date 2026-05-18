@@ -1815,6 +1815,7 @@ PlasmoidItem {
                             controller.openConsole("", kind, nodeName, vmid, displayName)
                         }
                         consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
+                        powerActionsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
                     }
                 }
 
@@ -1869,6 +1870,7 @@ PlasmoidItem {
                             root.confirmAndRunActionForSession(sessionKey, kind, nodeName, vmid, displayName, action)
                         }
                         consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
+                        powerActionsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
                     }
                 }
 

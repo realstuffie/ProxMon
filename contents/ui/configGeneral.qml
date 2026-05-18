@@ -70,6 +70,8 @@ KCM.SimpleKCM {
     // property set instead of warning about missing properties.
     property bool cfg_consoleEnabled: true
     property bool cfg_consoleEnabledDefault: true
+    property bool cfg_powerActionsEnabled: true
+    property bool cfg_powerActionsEnabledDefault: true
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
     property string cfg_compactMode: "cpu"

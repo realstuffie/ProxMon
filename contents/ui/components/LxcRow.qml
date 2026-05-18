@@ -30,6 +30,7 @@ Rectangle {
     property var onAction: null
     property var onConsole: null
     property bool consoleEnabled: true
+    property bool powerActionsEnabled: true
 
     Layout.fillWidth: true
     Layout.preferredHeight: uiRowHeight
@@ -159,6 +160,7 @@ Rectangle {
             Layout.preferredHeight: 28
             Layout.minimumHeight: 28
             Layout.maximumHeight: 28
+            visible: root.powerActionsEnabled
 
             PlasmaComponents.BusyIndicator {
                 visible: root.busy

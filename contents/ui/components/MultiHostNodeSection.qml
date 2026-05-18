@@ -40,6 +40,7 @@ ColumnLayout {
     property var onAction: null
     property var onConsole: null
     property bool consoleEnabled: true
+    property bool powerActionsEnabled: true
 
     Layout.fillWidth: true
     Layout.alignment: Qt.AlignTop
@@ -226,6 +227,7 @@ ColumnLayout {
                         if (typeof root.onConsole === "function") root.onConsole(root.sessionKey, kind, nodeName, vmid, displayName)
                     }
                     consoleEnabled: root.consoleEnabled
+                    powerActionsEnabled: root.powerActionsEnabled
                 }
             }
         }
@@ -284,6 +286,7 @@ ColumnLayout {
                         if (typeof root.onConsole === "function") root.onConsole(root.sessionKey, kind, nodeName, vmid, displayName)
                     }
                     consoleEnabled: root.consoleEnabled
+                    powerActionsEnabled: root.powerActionsEnabled
                 }
             }
         }

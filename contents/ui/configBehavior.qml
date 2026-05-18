@@ -118,6 +118,10 @@ KCM.SimpleKCM {
     property alias cfg_consoleEnabled: consoleEnabledCheck.checked
     property bool cfg_consoleEnabledDefault: true
 
+    // Power actions toggle
+    property alias cfg_powerActionsEnabled: powerActionsEnabledCheck.checked
+    property bool cfg_powerActionsEnabledDefault: true
+
     //Low latency mode (shorter network timeouts, may increase error rate on slow connections)
     property alias cfg_lowLatency: lowLatencyCheck.checked
     property bool cfg_lowLatencyDefault: false
@@ -292,6 +296,21 @@ KCM.SimpleKCM {
 
         QQC2.Label {
             text: "Shows a terminal button on running VMs and containers. Clicking it opens a VNC or TTY console in a new window."
+            font.pixelSize: 11
+            opacity: 0.6
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+        }
+
+        QQC2.CheckBox {
+            id: powerActionsEnabledCheck
+            text: "Enable power actions (Start / Shutdown / Reboot)"
+            checked: root.cfg_powerActionsEnabled
+            onCheckedChanged: root.cfg_powerActionsEnabled = checked
+        }
+
+        QQC2.Label {
+            text: "Shows start, shutdown, and reboot buttons on VM and container rows. Disable to make the widget read-only."
             font.pixelSize: 11
             opacity: 0.6
             Layout.fillWidth: true
