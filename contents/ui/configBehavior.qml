@@ -281,9 +281,9 @@ KCM.SimpleKCM {
             opacity: 0.3
         }
 
-        // ==================== CONSOLE SECTION ====================
+        // ==================== FEATURES SECTION ====================
         Kirigami.Heading {
-            text: "Console"
+            text: "Features"
             level: 2
         }
 
