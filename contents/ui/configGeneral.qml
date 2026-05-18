@@ -344,10 +344,22 @@ KCM.SimpleKCM {
                 text: "SSL Verification:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
-            QQC2.CheckBox {
-                id: ignoreSslCheck
-                checked: true
-                text: "Ignore SSL certificate errors"
+            ColumnLayout {
+                spacing: 2
+                QQC2.CheckBox {
+                    id: ignoreSslCheck
+                    checked: true
+                    text: "Ignore SSL certificate errors"
+                }
+                QQC2.Label {
+                    text: "⚠ Disables certificate validation. Only use on trusted networks with self-signed certs."
+                    visible: ignoreSslCheck.checked
+                    font.pixelSize: 11
+                    color: Kirigami.Theme.neutralTextColor
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24
+                }
             }
 
             QQC2.Label {

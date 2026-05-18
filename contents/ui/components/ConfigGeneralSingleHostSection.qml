@@ -212,9 +212,21 @@ GridLayout {
             }
 
             QQC2.Label { text: "SSL Verification:" }
-            QQC2.CheckBox {
-                id: pbsIgnoreSslCheck
-                text: "Ignore SSL errors"
+            ColumnLayout {
+                spacing: 2
+                QQC2.CheckBox {
+                    id: pbsIgnoreSslCheck
+                    text: "Ignore SSL errors"
+                }
+                QQC2.Label {
+                    text: "⚠ Disables certificate validation. Only use on trusted networks with self-signed certs."
+                    visible: pbsIgnoreSslCheck.checked
+                    font.pixelSize: 11
+                    color: Kirigami.Theme.neutralTextColor
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24
+                }
             }
 
             QQC2.Label { text: "PBS Trusted Cert PEM:" }
