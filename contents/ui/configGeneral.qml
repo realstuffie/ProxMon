@@ -355,7 +355,7 @@ KCM.SimpleKCM {
                     text: "⚠ Disables certificate validation. Only use on trusted networks with self-signed certs."
                     visible: ignoreSslCheck.checked
                     font.pixelSize: 11
-                    color: Kirigami.Theme.neutralTextColor
+                    color: "#ff3333"
                     wrapMode: Text.WordWrap
                     Layout.fillWidth: true
                     Layout.leftMargin: 24
