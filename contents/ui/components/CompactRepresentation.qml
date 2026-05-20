@@ -35,6 +35,8 @@ Item {
 
     implicitWidth: compactLayout.implicitWidth
     implicitHeight: compactLayout.implicitHeight
+    width: compactLayout.implicitWidth
+    height: compactLayout.implicitHeight
 
     function averageCpuText() {
         if (typeof safeCpuPercent !== "function") return "-"
