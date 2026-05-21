@@ -4,6 +4,8 @@ import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 
 ColumnLayout {
+    id: root
+
     property bool configured: false
     property bool hasCoreConfig: false
     property string secretState: "idle"
@@ -46,7 +48,7 @@ ColumnLayout {
     ColumnLayout {
         Layout.fillWidth: true
         Layout.fillHeight: true
-        visible: !configured
+        visible: !root.configured
         spacing: 8
 
         Item { Layout.fillHeight: true }
@@ -61,10 +63,10 @@ ColumnLayout {
 
         PlasmaComponents.Label {
             text: {
-                if (!hasCoreConfig) return "Not Configured"
-                if (secretState === "loading" || refreshResolvingSecrets) return "Loading Credentials…"
-                if (secretState === "missing") return "Missing Token Secret"
-                if (secretState === "error") return "Credentials Error"
+                if (!root.hasCoreConfig) return "Not Configured"
+                if (root.secretState === "loading" || root.refreshResolvingSecrets) return "Loading Credentials…"
+                if (root.secretState === "missing") return "Missing Token Secret"
+                if (root.secretState === "error") return "Credentials Error"
                 return "Not Configured"
             }
             font.bold: true
@@ -75,10 +77,10 @@ ColumnLayout {
 
         PlasmaComponents.Label {
             text: {
-                if (!hasCoreConfig) return "Right-click → Configure Widget"
-                if (secretState === "loading" || refreshResolvingSecrets) return "Reading API token secret from keyring…"
-                if (secretState === "missing") return "Open settings and re-enter the API Token Secret."
-                if (secretState === "error") return "Keyring access failed. Check logs (journalctl --user -f)."
+                if (!root.hasCoreConfig) return "Right-click → Configure Widget"
+                if (root.secretState === "loading" || root.refreshResolvingSecrets) return "Reading API token secret from keyring…"
+                if (root.secretState === "missing") return "Open settings and re-enter the API Token Secret."
+                if (root.secretState === "error") return "Keyring access failed. Check logs (journalctl --user -f)."
                 return "Right-click → Configure Widget"
             }
             opacity: 0.7
@@ -94,19 +96,19 @@ ColumnLayout {
 
     Item {
         Layout.fillWidth: true
-        Layout.preferredHeight: loading ? 50 : 0
-        visible: loading
+        Layout.preferredHeight: root.loading ? 50 : 0
+        visible: root.loading
 
         PlasmaComponents.BusyIndicator {
             anchors.centerIn: parent
-            running: loading
+            running: root.loading
         }
     }
 
     ColumnLayout {
         Layout.fillWidth: true
         Layout.margins: 10
-        visible: errorMessage !== "" && !partialFailure && configured
+        visible: root.errorMessage !== "" && !root.partialFailure && root.configured
         spacing: 8
 
         RowLayout {
@@ -127,7 +129,7 @@ ColumnLayout {
         }
 
         PlasmaComponents.Label {
-            text: errorMessage
+            text: root.errorMessage
             color: Kirigami.Theme.negativeTextColor
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
@@ -135,7 +137,7 @@ ColumnLayout {
         }
 
         PlasmaComponents.Label {
-            text: friendlyErrorHint(errorMessage)
+            text: root.friendlyErrorHint(root.errorMessage)
             visible: text !== ""
             opacity: 0.85
             wrapMode: Text.WordWrap
@@ -144,8 +146,8 @@ ColumnLayout {
         }
 
         PlasmaComponents.Label {
-            text: retryStatusText
-            visible: retryStatusText !== ""
+            text: root.retryStatusText
+            visible: root.retryStatusText !== ""
             opacity: 0.85
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
@@ -153,8 +155,8 @@ ColumnLayout {
         }
 
         PlasmaComponents.Label {
-            text: armedLabel
-            visible: armedLabel !== ""
+            text: root.armedLabel
+            visible: root.armedLabel !== ""
             opacity: 0.9
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
@@ -162,8 +164,8 @@ ColumnLayout {
         }
 
         PlasmaComponents.Label {
-            text: actionPermHint
-            visible: actionPermHintShown && actionPermHint !== ""
+            text: root.actionPermHint
+            visible: root.actionPermHintShown && root.actionPermHint !== ""
             opacity: 0.9
             wrapMode: Text.WordWrap
             Layout.fillWidth: true
@@ -174,14 +176,14 @@ ColumnLayout {
             text: "Retry"
             icon.name: "view-refresh"
             Layout.alignment: Qt.AlignHCenter
-            onClicked: if (typeof onRetry === "function") onRetry()
+            onClicked: if (typeof root.onRetry === "function") root.onRetry()
         }
     }
 
     ColumnLayout {
         Layout.fillWidth: true
         Layout.margins: 10
-        visible: pbsError !== "" && configured
+        visible: root.pbsError !== "" && root.configured
         spacing: 8
         RowLayout {
             spacing: 8
@@ -198,7 +200,7 @@ ColumnLayout {
             }
         }
         PlasmaComponents.Label {
-            text: pbsError
+            text: root.pbsError
             color: Kirigami.Theme.neutralTextColor
             wrapMode: Text.WordWrap
             Layout.fillWidth: true

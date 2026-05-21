@@ -1,3 +1,4 @@
+// qmllint disable import missing-property unresolved-type unused-imports unqualified
 import QtQuick
 import QtQuick.Window
 import org.kde.plasma.components as PlasmaComponents

@@ -1,4 +1,5 @@
 #include "secretstore.h"
+#include <algorithm>
 #include <qtkeychain/keychain.h>
 #include <QDBusInterface>
 #include <QDBusReply>
@@ -100,9 +101,9 @@ void SecretStore::deleteSecret() {
 
 void SecretStore::emitFilteredKWalletKeys(const QStringList &raw) {
     QStringList filtered;
-    for (const QString &k : raw) {
-        if (k.startsWith(QStringLiteral("apiTokenSecret:")) && !filtered.contains(k)) filtered.push_back(k);
-    }
+    std::copy_if(raw.begin(), raw.end(), std::back_inserter(filtered), [&](const QString &k) {
+        return k.startsWith(QStringLiteral("apiTokenSecret:")) && !filtered.contains(k);
+    });
 
     if (filtered.isEmpty()) {
         emit keyListError(QStringLiteral("Failed to read KWallet entry list"));
