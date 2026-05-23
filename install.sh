@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     printf '%s\n' "Missing required command: $1" >&2
@@ -9,9 +8,7 @@ require_cmd() {
   fi
 }
 
-# ---------------------------------------------------------------------------
-# run_root: run a command as root. Tries sudo, doas, su in order.
-# ---------------------------------------------------------------------------
+# Run a command as root — tries sudo, doas, su in order.
 run_root() {
   if [ "$(id -u)" -eq 0 ]; then
     "$@"
@@ -35,16 +32,10 @@ for arg in "$@"; do
 Usage: ./install.sh [--no-deps] [--install-standalone-qml-module]
 
 Options:
-  --no-deps   Skip automatic dependency installation. Use this if you have
-              already installed build dependencies or prefer to manage them
-              yourself. By default, install.sh will attempt to install missing
-              build/runtime dependencies using the system package manager
-              (apt-get / zypper / dnf / pacman). Requires sudo/root.
+  --no-deps   Skip automatic dependency installation.
   --install-standalone-qml-module
-              Also copy the native plugin/qmldir to your user-local Qt6 QML
-              module path for compatibility on stricter distro/policy setups.
-              Default behavior keeps runtime plugin location inside the
-              plasmoid package only.
+              Also copy the native plugin/qmldir to the user-local Qt6 QML
+              module path for stricter distro/policy setups.
 EOF
       exit 0
       ;;
@@ -59,20 +50,14 @@ install_deps_best_effort() {
   printf '%s\n' "[ deps ] Installing build dependencies..."
   printf '%s\n' "         Package names vary by distro — missing optional packages are non-fatal."
 
-  # Detect package manager and set distro-specific variables
   local pm="" pm_update="" pm_install="" pm_provider_prefix=""
-  local pkgs_build="" pkgs_ecm="" pkgs_kpackage=""
 
   if command -v apt-get >/dev/null 2>&1; then
     pm="apt-get"
     pm_update="apt-get update"
     pm_install="apt-get install -y"
-    # libvncclient-dev: VNC console; qt6-websockets-dev + libqtermwidget6*-dev: LXC console.
-    # libutf8proc-dev: pulled in transitively by qtermwidget6's headers.
-    # libqtermwidget6 dev package is version-suffixed on some Ubuntu releases
-    # (libqtermwidget6-2-dev), unsuffixed on others (libqtermwidget6-dev) —
-    # both names are listed; install_pkgs_best_effort tolerates a missing one.
-    # libvncserver-dev ships both libvncserver and libvncclient headers/pc files on Debian/Ubuntu.
+    # libvncserver-dev ships both libvncserver and libvncclient headers on Debian/Ubuntu.
+    # libqtermwidget6 dev pkg is version-suffixed on some releases — both names listed.
     pkgs_build="cmake make g++ pkg-config qt6-base-dev qt6-declarative-dev qt6-websockets-dev libsecret-1-dev libvncserver-dev libutf8proc-dev qtermwidget6-data"
     pkgs_qtermwidget="libqtermwidget6-2-dev libqtermwidget6-dev"
     pkgs_ecm="extra-cmake-modules"
@@ -102,13 +87,11 @@ install_deps_best_effort() {
     return 0
   fi
 
-  # Helper to install a list of packages, don't fail the whole script if some are missing.
   install_pkgs_best_effort() {
     # shellcheck disable=SC2086
     run_root $pm_install "$@" || true
   }
 
-  # Attempt to resolve a package providing a given file/capability, then install it.
   install_provider_best_effort() {
     local provider_query="$1"
     local pkg=""
@@ -123,19 +106,13 @@ install_deps_best_effort() {
     fi
   }
 
-  # Run update if needed
   [ -n "$pm_update" ] && run_root $pm_update
 
-  # Install core build deps
   # shellcheck disable=SC2086
   install_pkgs_best_effort $pkgs_build
-
-  # Install ECM
   install_pkgs_best_effort "$pkgs_ecm"
 
-  # qtermwidget6 dev package: try each candidate name in turn (apt versions
-  # the dev pkg as libqtermwidget6-2-dev on Ubuntu 26+, libqtermwidget6-dev
-  # elsewhere). Stop at the first one that's actually present in the index.
+  # Try each qtermwidget6 dev candidate; stop at the first available one.
   if [ -n "${pkgs_qtermwidget:-}" ]; then
     for candidate in $pkgs_qtermwidget; do
       if [ "$pm" = "apt-get" ]; then
@@ -144,20 +121,17 @@ install_deps_best_effort() {
           break
         fi
       else
-        # zypper/dnf/pacman: just try; install_pkgs_best_effort tolerates failure
         install_pkgs_best_effort "$candidate" && break
       fi
     done
   fi
 
-  # Install kpackage tool (apt has a direct package name, zypper/dnf use provider lookup)
   if [ -n "${pkgs_kpackage:-}" ]; then
     install_pkgs_best_effort "$pkgs_kpackage"
   else
     command -v kpackagetool6 >/dev/null 2>&1 || install_provider_best_effort "${pm_provider_prefix}kpackagetool6"
   fi
 
-  # Install remaining providers (zypper/dnf only, skip if already present)
   if [ "$pm" = "zypper" ] || [ "$pm" = "dnf" ]; then
     rpm -q extra-cmake-modules >/dev/null 2>&1 || install_provider_best_effort "${pm_provider_prefix}ECMConfig.cmake"
     rpm -q kf6-plasma-devel >/dev/null 2>&1 || install_provider_best_effort "${pm_provider_prefix}KF6PlasmaConfig.cmake"
@@ -168,16 +142,13 @@ install_deps_best_effort() {
   fi
 }
 
-# Prime sudo credentials upfront so the password prompt doesn't interrupt
-# build output mid-stream. Only needed when auto dep install is enabled.
+# Prime sudo upfront so the password prompt doesn't interrupt build output.
 if [ "$AUTO_DEPS" -eq 1 ] && [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
   sudo -v
 fi
 
-# Run dep install first so kpackagetool6/cmake are available for the checks below.
 install_deps_best_effort
 
-# Prefer kpackagetool6 (Plasma 6), fallback to kpackagetool5 (Plasma 5)
 KPACKAGETOOL=""
 if command -v kpackagetool6 >/dev/null 2>&1; then
   KPACKAGETOOL="kpackagetool6"
@@ -188,7 +159,6 @@ else
   exit 1
 fi
 
-# Ensure qtkeychain submodule is available when running from a git checkout.
 if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
   printf '%s\n' "[ git  ] Initializing submodules..."
   git submodule update --init --recursive
@@ -202,7 +172,6 @@ require_cmd mkdir
 
 printf '%s\n' "[ build] Compiling native plugin..."
 
-# Build out-of-source to avoid polluting the repo with build artifacts
 BUILD_DIR="$(mktemp -d -t proxmon-build-XXXXXX)"
 trap 'rm -rf "$BUILD_DIR"' EXIT
 
@@ -214,24 +183,11 @@ cmake --build "$BUILD_DIR" -- -j"$JOBS" || exit 1
 BUILD_END="$(date +%s)"
 printf '%s\n' "[ build] Done in $(( BUILD_END - BUILD_START ))s"
 
-# ---------------------------------------------------------------------------
-# Stage runtime QML module into the plasmoid package.
-#
-# main.qml uses a RELATIVE import: import "../lib/proxmox" as ProxMon
-# (resolved from contents/ui/ → contents/lib/proxmox/)
-# The .so must be co-located with the qmldir in contents/lib/proxmox/.
-# kpackagetool6 installs all files under contents/ verbatim, so the .so
-# will land at:
-#   <plasmoid_dir>/contents/lib/proxmox/libproxmoxclientplugin.so
-# which is exactly where the QML engine will look for it.
-# ---------------------------------------------------------------------------
+# Stage .so into the plasmoid package — main.qml uses a relative import
+# resolved to contents/lib/proxmox/, which kpackagetool installs verbatim.
 cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/
 printf '%s\n' "[ build] Plugin staged → contents/lib/proxmox/libproxmoxclientplugin.so"
 
-# ---------------------------------------------------------------------------
-# Detect user-local Qt6 QML dir for documentation/diagnostics only.
-# Runtime plugin is shipped inside the plasmoid package at contents/lib/proxmox.
-# ---------------------------------------------------------------------------
 detect_qt6_qml_user_dir() {
   local arch_triplet=""
   if command -v dpkg-architecture >/dev/null 2>&1; then
@@ -253,13 +209,12 @@ if [ "$INSTALL_STANDALONE_QML_MODULE" -eq 1 ]; then
   printf '%s\n' "[ qml  ] Standalone module copied → $QML_MODULE_USER_DIR"
 fi
 
-# Clean up any stale Plasma workspace env file from a previous install attempt
+# Remove stale env file from older installs.
 PLASMA_ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/plasma-workspace/env/proxmon-qml.sh"
 if [ -f "$PLASMA_ENV_FILE" ]; then
   rm -f "$PLASMA_ENV_FILE"
 fi
 
-# Install plasmoid package
 PKG_PATH="."
 if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
   "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
@@ -269,7 +224,6 @@ else
   "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" || true
 fi
 
-# Install icons from a single authoritative source
 ICON_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
 ICON_DIR="$ICON_BASE/hicolor/scalable/apps"
 mkdir -p "$ICON_DIR"
@@ -286,13 +240,8 @@ elif command -v kbuildsycoca5 >/dev/null 2>&1; then
   kbuildsycoca5 >/dev/null 2>&1 || true
 fi
 
-# ---------------------------------------------------------------------------
-# install_autoupdate: resolves libplasma.so path at install time via ldconfig,
-# generates a systemd path unit pointing at it, and installs a service unit
-# that runs check-and-rebuild.sh when the path unit fires.
-#
-# Using a path unit (inotify-based) rather than a timer.
-# ---------------------------------------------------------------------------
+# Installs a systemd path unit that watches runtime libs and triggers a rebuild
+# via check-and-rebuild.sh when any of them change (e.g. after a Qt update).
 install_autoupdate() {
   if ! command -v systemctl >/dev/null 2>&1; then
     printf '%s\n' "systemctl not found — skipping auto-update watcher install."
@@ -304,12 +253,9 @@ install_autoupdate() {
 
   mkdir -p "$plasmoid_dir" "$systemd_dir"
 
-  # Copy check-and-rebuild.sh and install.sh into the plasmoid dir so the
-  # setup is self-contained and survives the source repo being moved/deleted.
   if [ -f "check-and-rebuild.sh" ]; then
     cp check-and-rebuild.sh "$plasmoid_dir/check-and-rebuild.sh"
     chmod +x "$plasmoid_dir/check-and-rebuild.sh"
-    # install.sh is needed by check-and-rebuild.sh for --no-deps rebuilds
     cp "$0" "$plasmoid_dir/install.sh"
     chmod +x "$plasmoid_dir/install.sh"
   else
@@ -317,7 +263,6 @@ install_autoupdate() {
     return 0
   fi
 
-  # Copy the static service unit
   if [ -f "proxmox-plasmoid-rebuild.service" ]; then
     cp proxmox-plasmoid-rebuild.service "$systemd_dir/"
   else
@@ -325,7 +270,7 @@ install_autoupdate() {
     return 0
   fi
 
-  # Resolve a library path via ldconfig, with a find fallback.
+  # Resolve a lib path via ldconfig with a find fallback.
   resolve_lib() {
     local pattern="$1"
     local result
@@ -349,12 +294,10 @@ install_autoupdate() {
   libqtermwidget_path="$(resolve_lib 'libqtermwidget')"
 
   printf '%s\n' "[ watch] libplasma.so      → $libplasma_path"
-  [ -n "${libqt6core_path:-}"    ] && printf '%s\n' "[ watch] libQt6Core.so     → $libqt6core_path"
-  [ -n "${libvncclient_path:-}"  ] && printf '%s\n' "[ watch] libvncclient.so   → $libvncclient_path"
+  [ -n "${libqt6core_path:-}"     ] && printf '%s\n' "[ watch] libQt6Core.so     → $libqt6core_path"
+  [ -n "${libvncclient_path:-}"   ] && printf '%s\n' "[ watch] libvncclient.so   → $libvncclient_path"
   [ -n "${libqtermwidget_path:-}" ] && printf '%s\n' "[ watch] libqtermwidget6   → $libqtermwidget_path"
 
-  # Generate the path unit dynamically — watch all resolved libs.
-  # A change to any of them (Qt update, VNC lib update, etc.) triggers a rebuild.
   {
     cat <<'EOF'
 [Unit]
@@ -381,10 +324,6 @@ EOF
 
 install_autoupdate
 
-# ---------------------------------------------------------------------------
-# Write build fingerprint now that install succeeded, so the path unit's
-# first trigger does not cause a redundant rebuild.
-# ---------------------------------------------------------------------------
 PLASMOID_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
 FINGERPRINT_FILE="$PLASMOID_DIR/.build_fingerprint"
 { ldconfig -p 2>/dev/null | grep -iE 'libplasma|libQt6' || true; } \
@@ -399,7 +338,7 @@ printf '%s\n' "Install complete."
 printf '\n'
 printf '%s\n' "  Restart Plasma to activate:"
 printf '%s\n' "    kquitapp6 plasmashell && kstart plasmashell"
-printf '%s\n' "    systemctl --user restart plasma-plasmashell.service"
+printf '%s\n' "    or simply log out and back in."
 printf '\n'
 printf '%s\n' "  Add the widget:"
 printf '%s\n' "    Right-click panel → Add Widgets → search 'Proxmox'"

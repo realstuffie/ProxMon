@@ -2,8 +2,6 @@
 
 Design decisions that aren't obvious from reading the code alone.
 
----
-
 ## Credential security model
 
 ### Why credentials are never Q_PROPERTYs
@@ -21,7 +19,7 @@ Both are `Q_INVOKABLE` only so they can be invoked via `QMetaObject::invokeMetho
 
 `ProxmoxController` maintains two maps keyed by `sessionKey`:
 
-```
+```cpp
 QHash<QString, QByteArray> m_pendingConsoleAuth
 QMap<QString, QByteArray>  m_pendingConsoleTicket
 ```
@@ -36,19 +34,17 @@ All burns follow `fill(0)` then `clear()` — in that order. `clear()` alone dro
 
 Burn points:
 
-| Holder                       | What          | When                                                                    |
-|------------------------------|---------------|-------------------------------------------------------------------------|
-| `VncWsProxy::m_ticket`       | VNC ticket    | `onWsConnected` — HTTP upgrade complete, ticket already in WS URL       |
-| `VncWsProxy::m_authHeader`   | Auth header   | `onWsConnected` — same point                                            |
-| `VncClient::m_ticket`        | VNC ticket    | Immediately after `strdup` into libvncclient client-data slot 1         |
-| libvncclient slot 1          | C-string copy | Worker thread, after `rfbInitClient` handshake completes                |
-| `LxcTerminal::m_ticket`      | Ticket        | Immediately after `sendTextMessage` of the `user:ticket\n` auth line   |
-| `LxcTerminal::m_authHeader`  | Auth header   | WS `connected` lambda — HTTP upgrade complete                           |
-| `ProxmoxController` maps     | Both          | `deliver*` — `fill(0)` in-map, erase, then `fill(0)` on local copy     |
+| Holder                      | What          | When                                                                  |
+|-----------------------------|---------------|-----------------------------------------------------------------------|
+| `VncWsProxy::m_ticket`      | VNC ticket    | `onWsConnected` — HTTP upgrade complete, ticket already in WS URL     |
+| `VncWsProxy::m_authHeader`  | Auth header   | `onWsConnected` — same point                                          |
+| `VncClient::m_ticket`       | VNC ticket    | Immediately after `strdup` into libvncclient client-data slot 1       |
+| libvncclient slot 1         | C-string copy | Worker thread, after `rfbInitClient` handshake completes              |
+| `LxcTerminal::m_ticket`     | Ticket        | Immediately after `sendTextMessage` of the `user:ticket\n` auth line  |
+| `LxcTerminal::m_authHeader` | Auth header   | WS `connected` lambda — HTTP upgrade complete                         |
+| `ProxmoxController` maps    | Both          | `deliver*` — `fill(0)` in-map, erase, then `fill(0)` on local copy    |
 
 Note on Qt CoW: `QByteArray` uses implicit sharing. `it.value().fill(0)` in the deliver methods detaches the map's copy into a new zeroed block, leaving the local variable holding the real data. The local variable's final `fill(0)` then zeroes that. This is intentional — targets receive the real bytes; map and local copies are zeroed.
-
----
 
 ## VNC console architecture
 
@@ -69,8 +65,6 @@ libvncclient's `GotFrameBufferUpdate` callback fires once per dirty rect per `Ha
 ### SetDesktopSize (resize) workaround
 
 libvncclient ≤ 0.9.15 truncates the SCREEN array in its `SendExtDesktopSize` implementation (LibVNC issue #640), causing QEMU to silently reject resize requests. `VncClient::resizeRemote` hand-crafts the `SetDesktopSize` (251) wire frame directly rather than using libvncclient's helper.
-
----
 
 ## LXC terminal architecture
 
@@ -96,17 +90,30 @@ The LXC terminal uses the same `vncwebsocket` endpoint as VNC but speaks a diffe
 
 ### Receiving data into QTermWidget
 
-`QTermWidget` exposes `sendText(QString)` publicly, but this echoes input — it's intended for injecting keystrokes, not received server data. The correct injection point is `Konsole::Session::onReceiveBlock(const char*, int)` (or equivalent depending on qtermwidget version), which feeds the emulation layer directly. `LxcTerminal` locates the `Konsole::Session` child via `findChildren` and resolves the slot name once at window creation, then invokes it by name for each received frame.
+`QTermWidget` exposes `sendText(QString)` publicly, but this echoes input — it is intended for injecting keystrokes, not received server data. The correct path is `write(getPtySlaveFd(), data, size)`, which writes directly to the PTY slave file descriptor. The kernel delivers the bytes to QTermWidget's PTY master side, which feeds the emulation layer without echo. This is the approach documented in QTermWidget's RemoteTerm example.
 
-### Initial resize strategy
+`sendText` is kept as a fallback for the case where `getPtySlaveFd()` returns -1 (layout not yet settled), but in practice the fd is always valid after `startTerminalTeletype()`.
 
-Proxmox's pty size is set by `TIOCSWINSZ` when the terminal reports its grid dimensions. Sending the same size twice (e.g. the compiled-in 80×24 default) produces no `SIGWINCH` and the shell never redraws. To force a real delta:
+### Copy/paste and keyboard bindings
 
-1. Send immediately after auth-OK with whatever `QTermWidget` reports (or 81×25 if layout hasn't settled — deliberately non-default).
+`setKeyBindings("linux")` enables Ctrl+Shift+C / Ctrl+Shift+V for clipboard copy/paste.
+
+Right-click context menu (Copy/Paste) is implemented via an event filter installed on `QTermWidget` and all its internal child widgets. Mouse and context events land on QTermWidget's internal `TerminalDisplay` child rather than on the `QTermWidget` itself, so the filter must cover the full child tree (`findChildren<QWidget*>()`) to intercept them reliably.
+
+### Resize strategy
+
+Resize has two legs:
+
+1. **Local PTY** — `ioctl(fd, TIOCSWINSZ, &ws)` on the PTY slave fd updates the kernel's idea of the terminal size so local signals and `ioctl(TIOCGWINSZ)` calls inside the container see the correct dimensions.
+2. **Remote side** — a `1:cols:rows:` WebSocket frame tells Proxmox's termproxy to send `SIGWINCH` to the shell process.
+
+Both legs fire together in `sendCurrentResize`. A `QResizeEvent` on the `QTermWidget` triggers a two-pass send (0 ms + 150 ms) to catch cases where the grid count hasn't settled on the first fire.
+
+Sending the same size twice produces no `SIGWINCH`. To force a real delta on first connect, the fallback size is 81×25 (not the standard 80×24), ensuring the first resize frame always differs from the default pty allocation:
+
+1. Send immediately after auth-OK (or 81×25 if grid not yet available).
 2. Re-send 120 ms later with the actual post-layout grid.
 3. At 500 ms, if fewer than 24 bytes of terminal output have arrived, send a wake CR (`0:1:\r`) to nudge containers with a silent getty.
-
----
 
 ## ProxmoxController
 
@@ -117,8 +124,6 @@ In single-host mode the session key is an empty string. In multi-host mode it id
 ### Pending console name stash
 
 `ProxmoxClient` returns `vmName` via the node children response, but the `vncProxyReady` / `ttyProxyReady` signals don't carry it (they're issued later, from a different request). `m_pendingConsoleNames` bridges the gap — populated in `readSingleSecretFor` / `readMultiSecretFor` when the console request is dispatched, drained in the proxy-ready lambdas.
-
----
 
 ## Multi-host vs single-host
 

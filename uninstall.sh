@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-# Remove plasmoid package
 if command -v kpackagetool6 >/dev/null 2>&1; then
   kpackagetool6 -t Plasma/Applet -r org.kde.plasma.proxmox 2>/dev/null || true
 elif command -v kpackagetool5 >/dev/null 2>&1; then
@@ -9,9 +8,6 @@ elif command -v kpackagetool5 >/dev/null 2>&1; then
 fi
 printf '%s\n' "[ pkg  ] Plasmoid package removed."
 
-# ---------------------------------------------------------------------------
-# Detect user-local Qt6 QML path for legacy cleanup only.
-# ---------------------------------------------------------------------------
 detect_qt6_qml_user_dir() {
   local arch_triplet=""
   if command -v dpkg-architecture >/dev/null 2>&1; then
@@ -31,21 +27,15 @@ if [ -d "$QML_MODULE_USER_DIR" ]; then
   rm -rf "$QML_MODULE_USER_DIR"
 fi
 
-# Remove stale Plasma workspace env file (from older install versions)
 PLASMA_ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/plasma-workspace/env/proxmon-qml.sh"
-if [ -f "$PLASMA_ENV_FILE" ]; then
-  rm -f "$PLASMA_ENV_FILE"
-fi
+[ -f "$PLASMA_ENV_FILE" ] && rm -f "$PLASMA_ENV_FILE"
 
-# Remove icons
 rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/proxmox-monitor.svg"
 rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/lxc.svg"
 printf '%s\n' "[ icons] Icons removed."
 
-# Remove saved settings
 rm -rf "${HOME}/.config/proxmox-plasmoid" || true
 
-# Remove auto-update watcher
 if command -v systemctl >/dev/null 2>&1; then
   systemctl --user disable --now proxmox-plasmoid-rebuild.path 2>/dev/null || true
   systemctl --user disable --now proxmox-plasmoid-rebuild.service 2>/dev/null || true
@@ -55,7 +45,6 @@ if command -v systemctl >/dev/null 2>&1; then
   printf '%s\n' "[ watch] Auto-update watcher disabled."
 fi
 
-# Remove plasmoid dir (contains check-and-rebuild.sh, install.sh, fingerprint, log)
 rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
 
 printf '\n'
@@ -63,5 +52,5 @@ printf '%s\n' "Uninstall complete."
 printf '\n'
 printf '%s\n' "  Restart Plasma to remove the widget:"
 printf '%s\n' "    kquitapp6 plasmashell && kstart plasmashell"
-printf '%s\n' "    systemctl --user restart plasma-plasmashell.service"
+printf '%s\n' "    or simply log out and back in."
 printf '\n'

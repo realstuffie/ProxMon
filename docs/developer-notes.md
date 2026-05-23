@@ -2,64 +2,36 @@
 
 ## QML module packaging (native plugin)
 
-This plasmoid uses a native QML plugin (`.so`) exposed as:
-
-- `org.kde.plasma.proxmox`
-
-Used in `contents/ui/main.qml`:
+`main.qml` uses a **relative** import rather than a URI-based one:
 
 ```qml
-import org.kde.plasma.proxmox
+import "../lib/proxmox" as ProxMon
 ```
 
-### Required install layout
+This resolves from `contents/ui/` to `contents/lib/proxmox/`, which must contain:
 
-To resolve `org.kde.plasma.proxmox`, files must exist under a QML import root matching the URI:
+- `qmldir`
+- `libproxmoxclientplugin.so`
 
-- `org/kde/plasma/proxmox/qmldir`
-- `org/kde/plasma/proxmox/libproxmoxclientplugin.so`
-
-For Plasma 6, place custom modules under:
-
-- `contents/qml/org/kde/plasma/proxmox/`
-
-`plasmashell` reliably includes `contents/qml` in import paths.  
-`contents/lib` is not a reliable QML import root and can cause:
+`kpackagetool6` installs all files under `contents/` verbatim, so at runtime the plugin lives at:
 
 ```text
-module "org.kde.plasma.proxmox" is not installed
+~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/lib/proxmox/libproxmoxclientplugin.so
 ```
 
 ### Packaging verification
 
 After install, verify:
 
-- `~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/qml/org/kde/plasma/proxmox/qmldir`
-- `~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/qml/org/kde/plasma/proxmox/libproxmoxclientplugin.so`
-
-Restart Plasma:
-
 ```bash
-kquitapp6 plasmashell && kstart plasmashell
+ls ~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/lib/proxmox/
+# should show: libproxmoxclientplugin.so  qmldir
 ```
 
 ### Notes
 
-- `kpackagetool6` can install even if runtime import resolution still fails.
-- `qml` CLI import behavior can differ from `plasmashell`.
-
-### Quick health check
-
-```bash
-which qmllint; qmllint --version 2>&1; ls -d /usr/lib/*/qt6/qml /usr/lib/qt6/qml /usr/share/qt6/qml 2>/dev/null
-```
-
-Healthy result:
-
-- `qmllint --version` succeeds
-- At least one Qt6 QML path exists (here: `/usr/lib/x86_64-linux-gnu/qt6/qml`)
-
----
+- `kpackagetool6` can report success even if the `.so` is missing — always verify the file is present.
+- The `--install-standalone-qml-module` flag copies the plugin to the user-local Qt6 QML path as a fallback for distros that block loading from the plasmoid package path.
 
 ## Install script
 
@@ -113,8 +85,6 @@ rm -f ~/.local/share/icons/hicolor/scalable/apps/lxc.svg
 rm -rf ~/.config/proxmox-plasmoid/
 ```
 
----
-
 ## Proxmox API — privilege separation
 
 If an API token is created with **Privilege Separation** enabled (`-privsep 1`), the token does **not** automatically inherit the user's ACLs. Per Proxmox docs, effective permissions are the **intersection** of user permissions and token permissions. You must grant roles to both the user and the token, or disable privilege separation.
@@ -135,8 +105,6 @@ Recommended pattern:
 
 - Keep a read-only monitoring token with `Sys.Audit` + `VM.Audit`
 - Create a separate token/user for power actions with `VM.PowerMgmt` (+ `Sys.PowerMgmt` only if required by your ACL/role setup) at the minimum scope needed
-
----
 
 ## Configuration internals
 
@@ -202,19 +170,15 @@ Triple-click the footer to enable:
 
 **Note:** This applies to any VM running a KDE desktop (Kubuntu, KDE Neon, openSUSE KDE, etc.). Other desktop environments have equivalent settings under different names (GNOME: Settings → Power, XFCE: Power Manager).
 
----
-
----
-
 ## Shelved feature ideas
 
 ### Favourites / pinned rows
+
 Pin specific VMs or LXCs to the top of their type section (VMs or LXCs) within their node card. Favourites stay scoped per-node to avoid cross-node VMID collisions. In multi-host mode the key would be `sessionKey::nodeName:vmid`, mirroring the existing action/state key pattern. A star toggle on `VmRow`/`LxcRow` (visible on hover, always visible when starred) would persist the favourites set to config. `getVmsForNode` / `getLxcForNode` (and multi-host equivalents) would partition favourites to the top, sort the remainder normally, then concatenate. No conflict with existing `defaultSorting` options since favourites float within — not above — the type group.
 
 ### Desktop planar compact indicator (StatusNotifierItem)
-When the widget is placed on the desktop (planar formFactor), the full representation is always shown. Ideally, it would also auto-register a compact indicator (icon + status mode text e.g. CPU%) in the bottom panel via the **StatusNotifierItem** D-Bus interface. Requires new C++ code in the plugin to register/deregister the SNI when planar mode is detected, and dynamic icon rendering to include the status text. Shelved due to complexity — not ideal until the SNI approach can be done cleanly.
 
----
+When the widget is placed on the desktop (planar formFactor), the full representation is always shown. Ideally, it would also auto-register a compact indicator (icon + status mode text e.g. CPU%) in the bottom panel via the **StatusNotifierItem** D-Bus interface. Requires new C++ code in the plugin to register/deregister the SNI when planar mode is detected, and dynamic icon rendering to include the status text. Shelved due to complexity
 
 ### Known bugs / limitations
 
