@@ -1,7 +1,6 @@
 #!/bin/bash
 set -euo pipefail
 
-printf '%s\n' "Installing Proxmox Monitor Plasmoid..."
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -57,9 +56,8 @@ install_deps_best_effort() {
     return 0
   fi
 
-  printf '%s\n' "Attempting best-effort dependency install (pass --no-deps to skip)..."
-  printf '%s\n' "NOTE: This is best-effort. Package names vary by distro and version."
-  printf '%s\n' "NOTE: Any \"not found\" messages for optional packages are non-fatal and can be ignored if the build succeeds."
+  printf '%s\n' "[ deps ] Installing build dependencies..."
+  printf '%s\n' "         Package names vary by distro — missing optional packages are non-fatal."
 
   # Detect package manager and set distro-specific variables
   local pm="" pm_update="" pm_install="" pm_provider_prefix=""
@@ -165,10 +163,8 @@ install_deps_best_effort() {
     rpm -q kf6-plasma-devel >/dev/null 2>&1 || install_provider_best_effort "${pm_provider_prefix}KF6PlasmaConfig.cmake"
   fi
 
-  # Fedora-specific output note
   if [ "$pm" = "dnf" ]; then
-    printf '%s\n' "NOTE: On Fedora, sudo password prompts may appear mid-output. This is normal — the install continues in the background."
-    printf '%s\n' "NOTE: The final '== Install Complete ==' banner may be hidden above the prompt. Run with --no-deps on subsequent installs for clean output."
+    printf '%s\n' "         (Fedora) sudo prompts may appear mid-output — this is normal."
   fi
 }
 
@@ -194,7 +190,7 @@ fi
 
 # Ensure qtkeychain submodule is available when running from a git checkout.
 if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
-  printf '%s\n' "Initializing git submodules (qtkeychain)..."
+  printf '%s\n' "[ git  ] Initializing submodules..."
   git submodule update --init --recursive
 fi
 
@@ -204,7 +200,7 @@ require_cmd getconf
 require_cmd cp
 require_cmd mkdir
 
-printf '%s\n' "Building native Proxmox API plugin..."
+printf '%s\n' "[ build] Compiling native plugin..."
 
 # Build out-of-source to avoid polluting the repo with build artifacts
 BUILD_DIR="$(mktemp -d -t proxmon-build-XXXXXX)"
@@ -213,7 +209,10 @@ trap 'rm -rf "$BUILD_DIR"' EXIT
 cmake -S contents/lib -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release || exit 1
 
 JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+BUILD_START="$(date +%s)"
 cmake --build "$BUILD_DIR" -- -j"$JOBS" || exit 1
+BUILD_END="$(date +%s)"
+printf '%s\n' "[ build] Done in $(( BUILD_END - BUILD_START ))s"
 
 # ---------------------------------------------------------------------------
 # Stage runtime QML module into the plasmoid package.
@@ -227,7 +226,7 @@ cmake --build "$BUILD_DIR" -- -j"$JOBS" || exit 1
 # which is exactly where the QML engine will look for it.
 # ---------------------------------------------------------------------------
 cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/
-printf '%s\n' "Native plugin staged: contents/lib/proxmox/libproxmoxclientplugin.so"
+printf '%s\n' "[ build] Plugin staged → contents/lib/proxmox/libproxmoxclientplugin.so"
 
 # ---------------------------------------------------------------------------
 # Detect user-local Qt6 QML dir for documentation/diagnostics only.
@@ -247,14 +246,11 @@ detect_qt6_qml_user_dir() {
 
 QT6_QML_USER_DIR="$(detect_qt6_qml_user_dir)"
 QML_MODULE_USER_DIR="$QT6_QML_USER_DIR/org/kde/plasma/proxmox"
-printf '%s\n' "Detected user-local Qt6 QML dir: $QT6_QML_USER_DIR"
 if [ "$INSTALL_STANDALONE_QML_MODULE" -eq 1 ]; then
   mkdir -p "$QML_MODULE_USER_DIR"
   cp "$BUILD_DIR/libproxmoxclientplugin.so" "$QML_MODULE_USER_DIR/"
   cp contents/lib/proxmox/qmldir "$QML_MODULE_USER_DIR/"
-  printf '%s\n' "Standalone QML module copy enabled: $QML_MODULE_USER_DIR"
-else
-  printf '%s\n' "No standalone QML module copy is performed; final runtime path is inside the plasmoid package."
+  printf '%s\n' "[ qml  ] Standalone module copied → $QML_MODULE_USER_DIR"
 fi
 
 # Clean up any stale Plasma workspace env file from a previous install attempt
@@ -341,7 +337,7 @@ install_autoupdate() {
     return 0
   fi
 
-  printf '%s\n' "Resolved libplasma.so: $libplasma_path"
+  printf '%s\n' "[ watch] libplasma.so → $libplasma_path"
 
   # Generate the path unit dynamically with the resolved library path
   cat > "$systemd_dir/proxmox-plasmoid-rebuild.path" <<EOF
@@ -359,7 +355,7 @@ EOF
   systemctl --user daemon-reload
   systemctl --user enable --now proxmox-plasmoid-rebuild.path
 
-  printf '%s\n' "Auto-update watcher installed and enabled (watching: $libplasma_path)"
+  printf '%s\n' "[ watch] Auto-update watcher enabled."
 }
 
 install_autoupdate
@@ -378,22 +374,16 @@ FINGERPRINT_FILE="$PLASMOID_DIR/.build_fingerprint"
   | cut -d' ' -f1 > "$FINGERPRINT_FILE"
 
 printf '\n'
-printf '%s\n' "========================================"
-printf '%s\n' "  Proxmox Plasmoid - Install Complete  "
-printf '%s\n' "========================================"
+printf '%s\n' "Install complete."
 printf '\n'
-printf '%s\n' "You may need to restart Plasma:"
-printf '%s\n' "  kquitapp6 plasmashell && kstart plasmashell"
-printf '%s\n' "If that doesn't work on your distro, try:"
-printf '%s\n' "  systemctl --user restart plasma-plasmashell.service"
-printf '%s\n' "or log out/in."
+printf '%s\n' "  Restart Plasma to activate:"
+printf '%s\n' "    kquitapp6 plasmashell && kstart plasmashell"
+printf '%s\n' "    systemctl --user restart plasma-plasmashell.service"
 printf '\n'
-printf '%s\n' "Auto-update watcher status:"
-printf '%s\n' "  systemctl --user status proxmox-plasmoid-rebuild.path"
-printf '%s\n' "  tail -f $PLASMOID_DIR/rebuild.log"
+printf '%s\n' "  Add the widget:"
+printf '%s\n' "    Right-click panel → Add Widgets → search 'Proxmox'"
 printf '\n'
-printf '%s\n' "To add the widget:"
-printf '%s\n' "  1. Right-click on your panel"
-printf '%s\n' "  2. Click 'Add Widgets'"
-printf '%s\n' "  3. Search for 'Proxmox'"
-printf '%s\n' "  4. Drag to panel"
+printf '%s\n' "  Auto-update watcher:"
+printf '%s\n' "    systemctl --user status proxmox-plasmoid-rebuild.path"
+printf '%s\n' "    tail -f $PLASMOID_DIR/rebuild.log"
+printf '\n'
