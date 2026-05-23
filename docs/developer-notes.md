@@ -38,9 +38,10 @@ ls ~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/lib/proxmox/
 ### Flags
 
 | Flag | Effect |
-| ------ | -------- |
+| ---------------------------------- | ------- |
 | *(none)* | Full install with best-effort dependency detection |
 | `--no-deps` | Skip dependency install; build and install only. Use for subsequent installs for clean output. |
+| `--no-watcher` | Skip auto-update watcher install. |
 | `--install-standalone-qml-module` | Also copy the QML module to the user-local Qt6 QML path as a compatibility fallback for distros that block loading the packaged plugin path. |
 
 ### Build output and install policy

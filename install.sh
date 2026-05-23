@@ -23,19 +23,22 @@ run_root() {
 
 AUTO_DEPS=1
 INSTALL_STANDALONE_QML_MODULE=0
+INSTALL_WATCHER=1
 for arg in "$@"; do
   case "$arg" in
     --no-deps) AUTO_DEPS=0 ;;
+    --no-watcher) INSTALL_WATCHER=0 ;;
     --install-standalone-qml-module) INSTALL_STANDALONE_QML_MODULE=1 ;;
     -h|--help)
       cat <<'EOF'
-Usage: ./install.sh [--no-deps] [--install-standalone-qml-module]
+Usage: ./install.sh [--no-deps] [--no-watcher] [--install-standalone-qml-module]
 
 Options:
-  --no-deps   Skip automatic dependency installation.
+  --no-deps     Skip automatic dependency installation.
+  --no-watcher  Skip auto-update watcher install.
   --install-standalone-qml-module
-              Also copy the native plugin/qmldir to the user-local Qt6 QML
-              module path for stricter distro/policy setups.
+                Also copy the native plugin/qmldir to the user-local Qt6 QML
+                module path for stricter distro/policy setups.
 EOF
       exit 0
       ;;
@@ -322,7 +325,9 @@ EOF
   printf '%s\n' "[ watch] Auto-update watcher enabled."
 }
 
-install_autoupdate
+if [ "$INSTALL_WATCHER" -eq 1 ]; then
+  install_autoupdate
+fi
 
 PLASMOID_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
 FINGERPRINT_FILE="$PLASMOID_DIR/.build_fingerprint"
