@@ -325,32 +325,53 @@ install_autoupdate() {
     return 0
   fi
 
-  # Resolve libplasma.so path via ldconfig (distro-agnostic)
-  local libplasma_path
-  libplasma_path="$(ldconfig -p 2>/dev/null | grep -i 'libPlasma\.so\.' | awk '{print $NF}' | head -1)" || true
+  # Resolve a library path via ldconfig, with a find fallback.
+  resolve_lib() {
+    local pattern="$1"
+    local result
+    result="$(ldconfig -p 2>/dev/null | grep -i "$pattern" | awk '{print $NF}' | head -1)" || true
+    if [ -z "${result:-}" ]; then
+      result="$(find /usr/lib64 /usr/lib /lib64 /lib -name "${pattern}*" 2>/dev/null | grep '\.so\.[0-9]*$' | head -1)" || true
+    fi
+    printf '%s' "${result:-}"
+  }
 
+  local libplasma_path libqt6core_path libvncclient_path libqtermwidget_path
+
+  libplasma_path="$(resolve_lib 'libPlasma\.so\.')"
   if [ -z "${libplasma_path:-}" ]; then
-    libplasma_path="$(find /usr/lib64 /usr/lib /lib64 /lib -name 'libPlasma.so.*' 2>/dev/null | grep '\.so\.[0-9]*$' | head -1)" || true
-  fi
-  if [ -z "${libplasma_path:-}" ]; then
-    printf '%s\n' "WARNING: Could not resolve libplasma.so via ldconfig or find — skipping auto-update install." >&2
+    printf '%s\n' "WARNING: Could not resolve libplasma.so — skipping auto-update install." >&2
     return 0
   fi
 
-  printf '%s\n' "[ watch] libplasma.so → $libplasma_path"
+  libqt6core_path="$(resolve_lib 'libQt6Core\.so\.')"
+  libvncclient_path="$(resolve_lib 'libvncclient\.so\.')"
+  libqtermwidget_path="$(resolve_lib 'libqtermwidget')"
 
-  # Generate the path unit dynamically with the resolved library path
-  cat > "$systemd_dir/proxmox-plasmoid-rebuild.path" <<EOF
+  printf '%s\n' "[ watch] libplasma.so      → $libplasma_path"
+  [ -n "${libqt6core_path:-}"    ] && printf '%s\n' "[ watch] libQt6Core.so     → $libqt6core_path"
+  [ -n "${libvncclient_path:-}"  ] && printf '%s\n' "[ watch] libvncclient.so   → $libvncclient_path"
+  [ -n "${libqtermwidget_path:-}" ] && printf '%s\n' "[ watch] libqtermwidget6   → $libqtermwidget_path"
+
+  # Generate the path unit dynamically — watch all resolved libs.
+  # A change to any of them (Qt update, VNC lib update, etc.) triggers a rebuild.
+  {
+    cat <<'EOF'
 [Unit]
-Description=Proxmox Plasmoid - watch libplasma.so for library changes
+Description=Proxmox Plasmoid - watch runtime libraries for changes
 
 [Path]
-# Resolved at install time by ldconfig — distro-agnostic
-PathChanged=$libplasma_path
+EOF
+    printf 'PathChanged=%s\n' "$libplasma_path"
+    [ -n "${libqt6core_path:-}"     ] && printf 'PathChanged=%s\n' "$libqt6core_path"
+    [ -n "${libvncclient_path:-}"   ] && printf 'PathChanged=%s\n' "$libvncclient_path"
+    [ -n "${libqtermwidget_path:-}" ] && printf 'PathChanged=%s\n' "$libqtermwidget_path"
+    cat <<'EOF'
 
 [Install]
 WantedBy=default.target
 EOF
+  } > "$systemd_dir/proxmox-plasmoid-rebuild.path"
 
   systemctl --user daemon-reload
   systemctl --user enable --now proxmox-plasmoid-rebuild.path
