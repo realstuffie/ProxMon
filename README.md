@@ -58,6 +58,8 @@ API token secrets are stored in your system keyring and never written to disk in
 
 - **VNC console — resize down not honoured**: shrinking the console window sends a VNC `SetDesktopSize` request, but QEMU's VNC server does not honour shrink requests regardless of the video backend. The display will scale to fit the smaller window (letterboxed) while the remote framebuffer stays at the previous resolution. Resize up works correctly. A workaround using the QEMU guest agent is planned.
 
+- **LXC terminal — resize reflow not guaranteed**: resizing the terminal window sends `SIGWINCH` to the running process, but reflow behaviour varies by application. Some programs (e.g. shells and editors) will redraw correctly; others may not reflow their output until the next render or keypress or not at all. This is a quirk of most terminal emulators and is not specific to ProxMon.
+
 ## Installation
 
 ```bash
@@ -206,6 +208,20 @@ Open an issue with your KDE Plasma version (`plasmashell --version`), Proxmox VE
 GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
+
+### v0.7.0
+
+- Feat: power actions toggle — enable/disable start/stop/restart buttons per endpoint
+- Fix: collapse backup status row layout when hidden (VmRow, LxcRow)
+- Fix: TapHandler hitbox by setting explicit width/height on compact representation root
+- LXC terminal: rework data path and add copy/paste support
+- UI: SSL warning text now uses bright red; security warnings added to ignore SSL toggles
+- UI: rename Console section to Features in behavior settings
+- Install: extend auto-rebuild watcher to cover Qt6, libvncclient, qtermwidget6, and additional libraries
+- Install: add `--no-watcher` flag to skip auto-rebuild watcher setup
+- Build: add mold linker support
+- Docs: script cleanup and security section trimmed to keychain and loopback limitation
+- Docs: add LXC terminal resize reflow known limitation
 
 ### v0.6.1
 
