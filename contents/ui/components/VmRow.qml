@@ -121,9 +121,11 @@ Rectangle {
 
         Row {
             spacing: 4
-            Layout.leftMargin: 4
-            Layout.preferredWidth: 50
-            opacity: (root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0) ? 1 : 0
+            Layout.leftMargin: (root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0) ? 4 : 0
+            Layout.preferredWidth: (root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0) ? 50 : 0
+            Layout.minimumWidth: 0
+            Layout.maximumWidth: (root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0) ? 50 : 0
+            visible: root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0
 
             Rectangle {
                 width: 8

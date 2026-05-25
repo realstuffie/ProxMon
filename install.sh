@@ -77,7 +77,7 @@ install_deps_best_effort() {
     pm_install="dnf install -y"
     pm_provider_prefix="*/"
     pkgs_build="cmake make gcc-c++ pkgconf-pkg-config qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwebsockets-devel libvncserver-devel utf8proc-devel"
-    pkgs_qtermwidget="qtermwidget-qt6-devel"
+    pkgs_qtermwidget="qtermwidget-devel"
     pkgs_ecm="extra-cmake-modules"
   elif command -v pacman >/dev/null 2>&1; then
     pm="pacman"
@@ -225,6 +225,15 @@ if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
 else
   "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
   "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" || true
+fi
+
+# kpackagetool --upgrade does not always overwrite existing files on all
+# distros/versions. Force-sync the contents directory to guarantee the
+# installed files match the source.
+PLASMOID_CONTENTS="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox/contents"
+if [ -d "$PLASMOID_CONTENTS" ]; then
+  cp -r contents/. "$PLASMOID_CONTENTS/"
+  printf '%s\n' "[ install] Contents force-synced → $PLASMOID_CONTENTS"
 fi
 
 ICON_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
