@@ -30,6 +30,7 @@ Rectangle {
     property var onAction: null
     property var onConsole: null
     property bool consoleEnabled: true
+    property bool powerActionsEnabled: true
 
     Layout.fillWidth: true
     Layout.preferredHeight: uiRowHeight
@@ -120,9 +121,11 @@ Rectangle {
 
         Row {
             spacing: 4
-            Layout.leftMargin: 4
-            Layout.preferredWidth: 50
-            opacity: (root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0) ? 1 : 0
+            Layout.leftMargin: (root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0) ? 4 : 0
+            Layout.preferredWidth: (root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0) ? 50 : 0
+            Layout.minimumWidth: 0
+            Layout.maximumWidth: (root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0) ? 50 : 0
+            visible: root.vmModel && root.vmModel.backupStatus !== undefined && root.vmModel.backupStatus !== 0
 
             Rectangle {
                 width: 8
@@ -159,6 +162,7 @@ Rectangle {
             Layout.preferredHeight: 28
             Layout.minimumHeight: 28
             Layout.maximumHeight: 28
+            visible: root.powerActionsEnabled
 
             PlasmaComponents.BusyIndicator {
                 visible: root.busy

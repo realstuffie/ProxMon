@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.components as PlasmaComponents
@@ -40,6 +42,7 @@ ColumnLayout {
     property var onAction: null
     property var onConsole: null
     property bool consoleEnabled: true
+    property bool powerActionsEnabled: true
 
     Layout.fillWidth: true
     Layout.alignment: Qt.AlignTop
@@ -220,6 +223,7 @@ ColumnLayout {
                     onAction: root.onAction
                     onConsole: root.onConsole
                     consoleEnabled: root.consoleEnabled
+                    powerActionsEnabled: root.powerActionsEnabled
                 }
             }
         }
@@ -272,6 +276,7 @@ ColumnLayout {
                     onAction: root.onAction
                     onConsole: root.onConsole
                     consoleEnabled: root.consoleEnabled
+                    powerActionsEnabled: root.powerActionsEnabled
                 }
             }
         }

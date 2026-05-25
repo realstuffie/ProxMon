@@ -263,8 +263,8 @@ PlasmoidItem {
         interval: 5000
         repeat: false
         onTriggered: {
-            armedActionKey = ""
-            armedLabel = ""
+            root.armedActionKey = ""
+            root.armedLabel = ""
         }
     }
 
@@ -305,7 +305,7 @@ PlasmoidItem {
     Timer {
         id: footerClickTimer
         interval: 1000
-        onTriggered: footerClickCount = 0
+        onTriggered: root.footerClickCount = 0
     }
 
     // Keep platform colors from Kirigami, but standardize shape/opacity rhythm
@@ -347,11 +347,11 @@ PlasmoidItem {
         id: api
         // Single-host properties for legacy calls + actions.
         // For multi-host fetching we use requestNodesFor/requestQemuFor/requestLxcFor.
-        host: proxmoxHost
-        port: proxmoxPort
-        tokenId: apiTokenId
+        host: root.proxmoxHost
+        port: root.proxmoxPort
+        tokenId: root.apiTokenId
         tokenSecret: ""
-        ignoreSslErrors: ignoreSsl
+        ignoreSslErrors: root.ignoreSsl
         lowLatency: Plasmoid.configuration.lowLatency !== false
 
 
@@ -1168,8 +1168,8 @@ PlasmoidItem {
         interval: 150
         repeat: false
         onTriggered: {
-            logDebug("secretResolveDebounce: resolving secrets after config change")
-            resolveSecretIfNeeded()
+            root.logDebug("secretResolveDebounce: resolving secrets after config change")
+            root.resolveSecretIfNeeded()
         }
     }
 
@@ -1183,8 +1183,8 @@ PlasmoidItem {
         interval: 600
         repeat: false
         onTriggered: {
-            logDebug("configRefreshDebounce: triggering refresh after config change")
-            fetchData()
+            root.logDebug("configRefreshDebounce: triggering refresh after config change")
+            root.fetchData()
         }
     }
 
@@ -1228,13 +1228,13 @@ PlasmoidItem {
     function fetchVMs(nodeName) {
         if (!nodeName) return
         logDebug("fetchVMs: Requesting VMs for node: " + nodeName)
-        api.requestQemu(nodeName, refreshSeq)
+        api.requestQemu(nodeName, root.refreshSeq)
     }
 
     function fetchLXC(nodeName) {
         if (!nodeName) return
         logDebug("fetchLXC: Requesting LXCs for node: " + nodeName)
-        api.requestLxc(nodeName, refreshSeq)
+        api.requestLxc(nodeName, root.refreshSeq)
     }
 
     // Use displayed data for counts
@@ -1264,7 +1264,7 @@ PlasmoidItem {
     Connections {
         target: controller
         function onDisplayedEndpointsChanged() {
-            checkStateChanges()
+            root.checkStateChanges()
         }
         function onErrorMessageChanged() {
             if (controller.errorMessage !== "") root.errorMessage = controller.errorMessage
@@ -1273,15 +1273,15 @@ PlasmoidItem {
             root.pbsError = controller.pbsLastError
         }
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
-            setActionBusy(node, actionKind, vmid, false, sessionKey)
+            root.setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
         function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, apiPort, ignoreSsl) {
             var key = kind + ":" + vmid
-            if (openConsoles[key]) {
+            if (root.openConsoles[key]) {
                 // Auth header and ticket for reconnect are stashed in controller registry.
-                openConsoles[key].connectWithTicket(vncPort)
-                openConsoles[key].raise()
-                openConsoles[key].requestActivate()
+                root.openConsoles[key].connectWithTicket(vncPort)
+                root.openConsoles[key].raise()
+                root.openConsoles[key].requestActivate()
                 return
             }
             var win = consoleComponent.createObject(root, {
@@ -1296,8 +1296,8 @@ PlasmoidItem {
                 apiPort: apiPort,
                 ignoreSsl: ignoreSsl
             })
-            openConsoles[key] = win
-            win.closing.connect(function() { delete openConsoles[key] })
+            root.openConsoles[key] = win
+            win.closing.connect(function() { delete root.openConsoles[key] })
             win.requestReconnect.connect(function() {
                 controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
             })
@@ -1305,12 +1305,12 @@ PlasmoidItem {
         function onLxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl) {
             var key = "lxc:" + vmid
             var label = vmName || ("lxc " + vmid)
-            if (openConsoles[key]) {
+            if (root.openConsoles[key]) {
                 // Deliver fresh auth header and ticket from C++ registry.
-                controller.deliverConsoleAuth(sessionKey, openConsoles[key])
-                controller.deliverConsoleTicket(sessionKey, openConsoles[key])
-                openConsoles[key].connectWithTicket(proxyPort, user, ignoreSsl)
-                openConsoles[key].raise()
+                controller.deliverConsoleAuth(sessionKey, root.openConsoles[key])
+                controller.deliverConsoleTicket(sessionKey, root.openConsoles[key])
+                root.openConsoles[key].connectWithTicket(proxyPort, user, ignoreSsl)
+                root.openConsoles[key].raise()
                 return
             }
             var term = lxcTerminalComponent.createObject(root)
@@ -1326,9 +1326,9 @@ PlasmoidItem {
             var capturedNode = node
             var capturedVmid = vmid
             var capturedLabel = label
-            openConsoles[key] = term
+            root.openConsoles[key] = term
             term.closed.connect(function() {
-                delete openConsoles[key]
+                delete root.openConsoles[key]
                 term.destroy()
             })
             term.requestReconnect.connect(function() {
@@ -1340,18 +1340,18 @@ PlasmoidItem {
             term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl)
         }
         function onConsoleError(node, kind, vmid, message) {
-            errorMessage = "Console failed: " + message
+            root.errorMessage = "Console failed: " + message
         }
         function onActionError(sessionKey, actionKind, node, vmid, action, message) {
-            setActionBusy(node, actionKind, vmid, false, sessionKey)
-            errorMessage = message || ("Action failed: " + action)
+            root.setActionBusy(node, actionKind, vmid, false, sessionKey)
+            root.errorMessage = message || ("Action failed: " + action)
             configRefreshDebounce.restart()
         }
         function onPbsTestSucceeded(pbsHost) {
-            sendNotification("PBS connection OK", pbsHost || "Connection succeeded", "network-connect", "pbs-test-" + String(pbsHost || "ok"))
+            root.sendNotification("PBS connection OK", pbsHost || "Connection succeeded", "network-connect", "pbs-test-" + String(pbsHost || "ok"))
         }
         function onPbsTestFailed(pbsHost, message) {
-            errorMessage = message || ("PBS connection failed: " + String(pbsHost || ""))
+            root.errorMessage = message || ("PBS connection failed: " + String(pbsHost || ""))
         }
     }
 
@@ -1494,12 +1494,12 @@ PlasmoidItem {
         connectedSources: []
 
         onNewData: function(source, data) {
-            logDebug("loadDefaults: Received response")
+            root.logDebug("loadDefaults: Received response")
 
-            if (data["exit code"] === 0 && data["stdout"] && !defaultsLoaded) {
+            if (data["exit code"] === 0 && data["stdout"] && !root.defaultsLoaded) {
                 try {
                     var s = JSON.parse(data["stdout"])
-                    logDebug("loadDefaults: Parsed settings file")
+                    root.logDebug("loadDefaults: Parsed settings file")
 
                     if (s.host) Plasmoid.configuration.proxmoxHost = s.host
                     if (s.port) Plasmoid.configuration.proxmoxPort = s.port
@@ -1508,16 +1508,16 @@ PlasmoidItem {
                     if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
                     if (s.enableNotifications !== undefined) Plasmoid.configuration.enableNotifications = s.enableNotifications
 
-                    proxmoxHost = s.host || ""
-                    proxmoxPort = s.port || 8006
-                    apiTokenId = s.tokenId || ""
-                    refreshInterval = (s.refreshInterval || 30) * 1000
-                    ignoreSsl = s.ignoreSsl !== false
-                    enableNotifications = s.enableNotifications !== false
-                    defaultsLoaded = true
-                    logDebug("loadDefaults: Settings applied - host: " + proxmoxHost)
+                    root.proxmoxHost = s.host || ""
+                    root.proxmoxPort = s.port || 8006
+                    root.apiTokenId = s.tokenId || ""
+                    root.refreshInterval = (s.refreshInterval || 30) * 1000
+                    root.ignoreSsl = s.ignoreSsl !== false
+                    root.enableNotifications = s.enableNotifications !== false
+                    root.defaultsLoaded = true
+                    root.logDebug("loadDefaults: Settings applied - host: " + root.proxmoxHost)
                 } catch (e) {
-                    logDebug("loadDefaults: No defaults found or parse error - " + e)
+                    root.logDebug("loadDefaults: No defaults found or parse error - " + e)
                 }
             }
             disconnectSource(source)
@@ -1562,7 +1562,7 @@ PlasmoidItem {
     fullRepresentation: Item {
         id: fullRep
         Layout.preferredWidth: 420
-        Layout.preferredHeight: Math.min(calculatedHeight, 500)
+        Layout.preferredHeight: Math.min(root.calculatedHeight, 500)
         Layout.minimumWidth: 380
         Layout.minimumHeight: 200
         Layout.maximumHeight: 600
@@ -1587,10 +1587,10 @@ PlasmoidItem {
             height: fullRep.headerHeight
 
             PlasmaComponents.Label {
-                text: configured
-                    ? (connectionMode === "multiHost"
-                       ? "Proxmox - " + displayedEndpoints.length + " hosts"
-                       : "Proxmox - " + anonymizeHost(proxmoxHost))
+                text: root.configured
+                    ? (root.connectionMode === "multiHost"
+                       ? "Proxmox - " + root.displayedEndpoints.length + " hosts"
+                       : "Proxmox - " + root.anonymizeHost(root.proxmoxHost))
                     : "Proxmox Monitor"
                 font.bold: true
                 Layout.fillWidth: true
@@ -1598,15 +1598,15 @@ PlasmoidItem {
 
             PlasmaComponents.Label {
                 text: "🔧"
-                visible: devMode
+                visible: root.devMode
                 font.pixelSize: 14
             }
 
             // Copy debug info button (dev mode only)
             PlasmaComponents.Button {
                 icon.name: "edit-copy"
-                onClicked: copyDebugInfo()
-                visible: devMode
+                onClicked: root.copyDebugInfo()
+                visible: root.devMode
                 implicitHeight: 28
                 implicitWidth: 28
 
@@ -1618,8 +1618,8 @@ PlasmoidItem {
             // Test notifications button (dev mode only)
             PlasmaComponents.Button {
                 icon.name: "notifications"
-                onClicked: testNotifications()
-                visible: devMode
+                onClicked: root.testNotifications()
+                visible: root.devMode
                 implicitHeight: 28
                 implicitWidth: 28
 
@@ -1629,16 +1629,16 @@ PlasmoidItem {
             }
 
             PlasmaComponents.BusyIndicator {
-                running: isRefreshing
-                visible: isRefreshing
+                running: root.isRefreshing
+                visible: root.isRefreshing
                 implicitWidth: 20
                 implicitHeight: 20
             }
 
             PlasmaComponents.Button {
                 icon.name: "view-refresh"
-                onClicked: fetchData()
-                visible: configured && !isRefreshing
+                onClicked: root.fetchData()
+                visible: root.configured && !root.isRefreshing
                 implicitHeight: 28
                 implicitWidth: 28
             }
@@ -1652,7 +1652,7 @@ PlasmoidItem {
             anchors.right: parent.right
             anchors.leftMargin: fullRep.horizontalMargin
             anchors.rightMargin: fullRep.horizontalMargin
-            visible: !configured
+            visible: !root.configured
             spacing: 8
 
             Item { Layout.fillHeight: true }
@@ -1667,7 +1667,7 @@ PlasmoidItem {
 
             PlasmaComponents.Label {
                 text: {
-                    if (!hasCoreConfig) return "Not Configured"
+                    if (!root.hasCoreConfig) return "Not Configured"
                     if (controller.secretState === "loading" || controller.refreshResolvingSecrets) return "Loading Credentials…"
                     if (controller.secretState === "missing") return "Missing Token Secret"
                     if (controller.secretState === "error") return "Credentials Error"
@@ -1681,7 +1681,7 @@ PlasmoidItem {
 
             PlasmaComponents.Label {
                 text: {
-                    if (!hasCoreConfig) return "Right-click → Configure Widget"
+                    if (!root.hasCoreConfig) return "Right-click → Configure Widget"
                     if (controller.secretState === "loading" || controller.refreshResolvingSecrets) return "Reading API token secret from keyring…"
                     if (controller.secretState === "missing") return "Open settings and re-enter the API Token Secret."
                     if (controller.secretState === "error") return "Keyring access failed. Check logs (journalctl --user -f)."
@@ -1705,12 +1705,12 @@ PlasmoidItem {
             anchors.right: parent.right
             anchors.leftMargin: fullRep.horizontalMargin
             anchors.rightMargin: fullRep.horizontalMargin
-            height: loading ? 50 : 0
-            visible: loading
+            height: root.loading ? 50 : 0
+            visible: root.loading
 
             PlasmaComponents.BusyIndicator {
                 anchors.centerIn: parent
-                running: loading
+                running: root.loading
             }
         }
 
@@ -1747,7 +1747,7 @@ PlasmoidItem {
             anchors.bottomMargin: fullRep.sectionSpacing
             anchors.leftMargin: fullRep.scrollSideMargin
             anchors.rightMargin: fullRep.scrollSideMargin
-            visible: configured && !loading && errorMessage === ""
+            visible: root.configured && !root.loading && root.errorMessage === ""
 
             QQC2.ScrollView {
                 id: scrollView
@@ -1771,8 +1771,8 @@ PlasmoidItem {
                     spacing: 8
 
                 Repeater {
-                    visible: connectionMode === "single"
-                    model: displayedProxmoxData && displayedProxmoxData.data ? displayedProxmoxData.data : []
+                    visible: root.connectionMode === "single"
+                    model: root.displayedProxmoxData && root.displayedProxmoxData.data ? root.displayedProxmoxData.data : []
 
                     delegate: NodeSection {
                         required property int index
@@ -1780,9 +1780,9 @@ PlasmoidItem {
 
                         nodeIndex: index
                         nodeModel: modelData
-                        nodeVms: getVmsForNode(modelData ? modelData.node : "")
-                        nodeLxc: getLxcForNode(modelData ? modelData.node : "")
-                        isCollapsed: isNodeCollapsed(modelData ? modelData.node : "")
+                        nodeVms: root.getVmsForNode(modelData ? modelData.node : "")
+                        nodeLxc: root.getLxcForNode(modelData ? modelData.node : "")
+                        isCollapsed: root.isNodeCollapsed(modelData ? modelData.node : "")
                         uiRadiusS: root.uiRadiusS
                         uiRadiusL: root.uiRadiusL
                         uiBorderOpacity: root.uiBorderOpacity
@@ -1815,18 +1815,19 @@ PlasmoidItem {
                             controller.openConsole("", kind, nodeName, vmid, displayName)
                         }
                         consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
+                        powerActionsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
                     }
                 }
 
                 // Multi-host view (group by endpoint)
                 Repeater {
-                    visible: connectionMode === "multiHost"
-                    model: displayedEndpointsModel
+                    visible: root.connectionMode === "multiHost"
+                    model: root.displayedEndpointsModel
 
                     Component.onCompleted: {
-                        logDebug("[ProxMon UI] multi repeater visible=" + visible
-                                 + " mode=" + connectionMode
-                                 + " modelLen=" + (displayedEndpointsModel ? displayedEndpointsModel.length : -1))
+                        root.logDebug("[ProxMon UI] multi repeater visible=" + visible
+                                 + " mode=" + root.connectionMode
+                                 + " modelLen=" + (root.displayedEndpointsModel ? root.displayedEndpointsModel.length : -1))
                     }
 
                     delegate: MultiHostEndpointSection {
@@ -1869,15 +1870,16 @@ PlasmoidItem {
                             root.confirmAndRunActionForSession(sessionKey, kind, nodeName, vmid, displayName, action)
                         }
                         consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
+                        powerActionsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
                     }
                 }
 
                 // Empty state
                 PlasmaComponents.Label {
                     text: "No nodes found"
-                    visible: (connectionMode === "single")
-                        ? (!displayedProxmoxData || !displayedProxmoxData.data || displayedProxmoxData.data.length === 0)
-                        : (displayedEndpointsModel.length === 0)
+                    visible: (root.connectionMode === "single")
+                        ? (!root.displayedProxmoxData || !root.displayedProxmoxData.data || root.displayedProxmoxData.data.length === 0)
+                        : (root.displayedEndpointsModel.length === 0)
                     opacity: 0.6
                     Layout.alignment: Qt.AlignHCenter
                 }

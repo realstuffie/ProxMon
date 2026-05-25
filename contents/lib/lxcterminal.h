@@ -107,13 +107,6 @@ protected:
 
     QPointer<QMainWindow> m_window;
     QPointer<QTermWidget> m_term;
-    // Pointer into QTermWidget's child tree; used to push received bytes
-    // into the display without retriggering QTermWidget::sendData.
-    // qtermwidget6 doesn't expose Session.h or Emulation through findChild,
-    // so we keep a generic QObject* and invoke the receive slot via the
-    // meta-object system.
-    QPointer<QObject> m_session;
-    QByteArray m_sessionRecvSlot;  // method signature we resolved on first use
     QWebSocket *m_ws = nullptr;
     // Bytes received post-auth before our wake-CR timer expires. Used to
     // decide whether to send a wake CR — boolean isn't enough because some

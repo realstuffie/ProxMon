@@ -1,3 +1,5 @@
+// Plasmoid, root.expanded, averageCpuText() are Plasma runtime injections — not resolvable at lint time
+// qmllint disable unqualified
 import QtQuick
 import QtQuick.Layouts
 import org.kde.plasma.components as PlasmaComponents
@@ -35,6 +37,8 @@ Item {
 
     implicitWidth: compactLayout.implicitWidth
     implicitHeight: compactLayout.implicitHeight
+    width: compactLayout.implicitWidth
+    height: compactLayout.implicitHeight
 
     function averageCpuText() {
         if (typeof safeCpuPercent !== "function") return "-"

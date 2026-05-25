@@ -92,3 +92,9 @@ yarn-error.log*
 *.tar.gz
 *.bak
 .firecrawl/
+
+# ---- Doxygen ----
+Doxyfile
+docs/html/
+docs/latex/
+proxmon.png

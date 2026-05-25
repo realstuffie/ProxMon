@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -90,16 +92,17 @@ ColumnLayout {
         model: 5
 
         delegate: Kirigami.Card {
+            id: card
             Layout.fillWidth: true
 
-            property int idx: index
-            property var entry: (root.ensureMultiHostsLen(5)[idx])
+            required property int index
+            property var entry: (root.ensureMultiHostsLen(5)[index])
 
             header: RowLayout {
                 spacing: 12
 
                 Kirigami.Heading {
-                    text: "Endpoint " + (idx + 1)
+                    text: "Endpoint " + (card.index + 1)
                     level: 4
                 }
 
@@ -107,10 +110,10 @@ ColumnLayout {
 
                 QQC2.Switch {
                     text: checked ? "Enabled" : "Disabled"
-                    checked: entry.enabled !== false
+                    checked: card.entry.enabled !== false
                     onToggled: {
                         var arr = root.ensureMultiHostsLen(5)
-                        arr[idx].enabled = checked
+                        arr[card.index].enabled = checked
                         root.saveMultiHosts(arr)
                     }
                 }
@@ -135,11 +138,11 @@ ColumnLayout {
                     }
                     QQC2.TextField {
                         Layout.fillWidth: true
-                        text: entry.name || ""
+                        text: card.entry.name || ""
                         placeholderText: "e.g. Home / Work"
                         onTextChanged: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].name = text
+                            arr[card.index].name = text
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -150,11 +153,11 @@ ColumnLayout {
                     }
                     QQC2.TextField {
                         Layout.fillWidth: true
-                        text: entry.host || ""
+                        text: card.entry.host || ""
                         placeholderText: "192.168.1.100 or proxmox.local"
                         onTextChanged: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].host = text
+                            arr[card.index].host = text
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -166,11 +169,11 @@ ColumnLayout {
                     QQC2.SpinBox {
                         from: 1
                         to: 65535
-                        value: entry.port || 8006
+                        value: card.entry.port || 8006
                         editable: true
                         onValueModified: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].port = value
+                            arr[card.index].port = value
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -181,11 +184,11 @@ ColumnLayout {
                     }
                     QQC2.TextField {
                         Layout.fillWidth: true
-                        text: entry.tokenId || ""
+                        text: card.entry.tokenId || ""
                         placeholderText: "user@realm!tokenname"
                         onTextChanged: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].tokenId = text
+                            arr[card.index].tokenId = text
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -211,7 +214,7 @@ ColumnLayout {
                             enabled: mhSecretField.text && mhSecretField.text.trim() !== ""
                             onClicked: {
                                 var arr = root.ensureMultiHostsLen(5)
-                                var entryNow = arr[idx]
+                                var entryNow = arr[card.index]
                                 var key = root.multiHostSecretKey(entryNow)
                                 if (!key) return
 
@@ -245,13 +248,13 @@ ColumnLayout {
                         visible: !sharedCertToggle.checked
                         Layout.fillWidth: true
                         Layout.preferredHeight: 80
-                        text: entry.trustedCertPem || ""
+                        text: card.entry.trustedCertPem || ""
                         placeholderText: "Paste PEM certificate here (optional)"
                         font.family: "monospace"
                         wrapMode: TextEdit.Wrap
                         onTextChanged: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].trustedCertPem = text
+                            arr[card.index].trustedCertPem = text
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -264,11 +267,11 @@ ColumnLayout {
                     QQC2.TextField {
                         visible: !sharedCertToggle.checked
                         Layout.fillWidth: true
-                        text: entry.trustedCertPath || ""
+                        text: card.entry.trustedCertPath || ""
                         placeholderText: "/etc/pve/pve-root-ca.pem (optional)"
                         onTextChanged: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].trustedCertPath = text
+                            arr[card.index].trustedCertPath = text
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -278,11 +281,11 @@ ColumnLayout {
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     }
                     QQC2.CheckBox {
-                        checked: entry.pbsEnabled === true
+                        checked: card.entry.pbsEnabled === true
                         text: checked ? "Enabled" : "Disabled"
                         onToggled: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].pbsEnabled = checked
+                            arr[card.index].pbsEnabled = checked
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -293,11 +296,11 @@ ColumnLayout {
                     }
                     QQC2.TextField {
                         Layout.fillWidth: true
-                        text: entry.pbsHost || ""
+                        text: card.entry.pbsHost || ""
                         placeholderText: "backup-server or IP"
                         onTextChanged: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].pbsHost = text
+                            arr[card.index].pbsHost = text
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -309,11 +312,11 @@ ColumnLayout {
                     QQC2.SpinBox {
                         from: 1
                         to: 65535
-                        value: entry.pbsPort || 8007
+                        value: card.entry.pbsPort || 8007
                         editable: true
                         onValueModified: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].pbsPort = value
+                            arr[card.index].pbsPort = value
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -324,11 +327,11 @@ ColumnLayout {
                     }
                     QQC2.TextField {
                         Layout.fillWidth: true
-                        text: entry.pbsTokenId || ""
+                        text: card.entry.pbsTokenId || ""
                         placeholderText: "user@pbs!tokenname"
                         onTextChanged: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].pbsTokenId = text
+                            arr[card.index].pbsTokenId = text
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -353,7 +356,7 @@ ColumnLayout {
                             enabled: pbsSecretField.text && pbsSecretField.text.trim() !== ""
                             onClicked: {
                                 var arr = root.ensureMultiHostsLen(5)
-                                var entryNow = arr[idx]
+                                var entryNow = arr[card.index]
                                 var host = String(entryNow.pbsHost || "").trim()
                                 if (!host) return
 
@@ -370,13 +373,26 @@ ColumnLayout {
                         text: "PBS SSL:"
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     }
-                    QQC2.CheckBox {
-                        checked: entry.pbsIgnoreSsl === true
-                        text: "Ignore SSL errors"
-                        onToggled: {
-                            var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].pbsIgnoreSsl = checked
-                            root.saveMultiHosts(arr)
+                    ColumnLayout {
+                        spacing: 2
+                        QQC2.CheckBox {
+                            id: pbsIgnoreSslCheck
+                            checked: card.entry.pbsIgnoreSsl === true
+                            text: "Ignore SSL errors"
+                            onToggled: {
+                                var arr = root.ensureMultiHostsLen(5)
+                                arr[card.index].pbsIgnoreSsl = checked
+                                root.saveMultiHosts(arr)
+                            }
+                        }
+                        QQC2.Label {
+                            text: "⚠ Disables certificate validation. Only use on trusted networks with self-signed certs."
+                            visible: pbsIgnoreSslCheck.checked
+                            font.pixelSize: 11
+                            color: "#ff3333"
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 24
                         }
                     }
 
@@ -387,11 +403,11 @@ ColumnLayout {
                     QQC2.SpinBox {
                         from: 1
                         to: 30
-                        value: entry.pbsBackupWarningDays || 7
+                        value: card.entry.pbsBackupWarningDays || 7
                         editable: true
                         onValueModified: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].pbsBackupWarningDays = value
+                            arr[card.index].pbsBackupWarningDays = value
                             root.saveMultiHosts(arr)
                         }
                     }
@@ -403,11 +419,11 @@ ColumnLayout {
                     QQC2.SpinBox {
                         from: 1
                         to: 90
-                        value: entry.pbsBackupStaleDays || 14
+                        value: card.entry.pbsBackupStaleDays || 14
                         editable: true
                         onValueModified: {
                             var arr = root.ensureMultiHostsLen(5)
-                            arr[idx].pbsBackupStaleDays = value
+                            arr[card.index].pbsBackupStaleDays = value
                             root.saveMultiHosts(arr)
                         }
                     }

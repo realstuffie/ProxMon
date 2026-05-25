@@ -238,34 +238,6 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 - Connection settings now support trusted SSL certificate PEM input or a cert file path as a safer alternative to ignoring certificate errors
 - Compact panel label can now show average CPU, running workloads, error state, or last update time
 
-### v0.4.3
-
-- Multi-host reliability improvements for key autodetect, secret migration, and config restore
-- More accurate refresh/loading state while credentials are being resolved
-- Reduced default debug noise and small UI polish/fixups
-
-### v0.4.2
-
-- Auto-rebuild watcher: detects libplasma/Qt soname bumps and rebuilds the native plugin automatically
-- Install script: cross-distro fixes and validation (Ubuntu 26.04, Fedora 43, Manjaro, openSUSE Tumbleweed)
-- Install script: improved handling of package manager edge cases on Fedora and openSUSE
-
-### v0.4.1
-
-- Install script: cross-distro improvements (kpackagetool 5/6 support, safer option detection, XDG icon paths)
-- Install script: optional `--install-deps` mode with root escalation via root/sudo/doas/su (best-effort, distro-dependent package names)
-- UI: VM/CT row layout polish (CPU|Mem alignment + tighter spacing)
-- UI: Power action buttons now use icon ToolButtons with tooltips + subtle hover highlight
-- UI: Right-aligned action buttons with protection from overlay scrollbar overlap
-- Notifications: add privacy toggle to redact `user@realm!tokenid` fragments (default: on)
-
-### v0.4.0
-
-- Reliability: cancel/abort in-flight requests during refresh/timeouts
-- Credentials: keyring secret lookup normalized + legacy key auto-migration
-- Notifications: rate limiting to reduce spam
-- Various UI/behavior improvements
-
 ### Credits
 
 - [Proxmox VE](https://www.proxmox.com/) - Virtualization platform

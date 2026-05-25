@@ -1,7 +1,13 @@
 #include "lxcterminal.h"
 
 #include <QCloseEvent>
-#include <QDebug>
+#include <QContextMenuEvent>
+#include <QMenu>
+#include <cerrno>
+#include <cstring>
+#include <sys/ioctl.h>
+#include <termios.h>
+#include <unistd.h>
 #include <QEvent>
 #include <QMainWindow>
 #include <QNetworkRequest>
@@ -16,11 +22,6 @@
 #include <QWidget>
 
 #include <qtermwidget.h>
-// Note: Session.h / Emulation.h aren't reachable through findChild on this
-// distro's qtermwidget6 (Emulation is raw-owned by Session). We invoke
-// Session's data-injection slot via QMetaObject by name instead.
-#include <QMetaMethod>
-#include <QMetaObject>
 
 namespace {
 
@@ -156,6 +157,11 @@ void LxcTerminal::ensureWindow(const QString &vmName, const QString &nodeName)
     term->setColorScheme(QStringLiteral("DarkPastels"));
     term->setScrollBarPosition(QTermWidget::ScrollBarRight);
     term->setTerminalFont(QFont(QStringLiteral("Monospace"), 11));
+
+    // Clipboard support: Ctrl+Shift+C to copy, Ctrl+Shift+V to paste.
+    // Middle-click paste is handled in eventFilter() below.
+    term->setKeyBindings(QStringLiteral("linux"));
+
     term->startTerminalTeletype();
 
     layout->addWidget(term);
@@ -166,45 +172,6 @@ void LxcTerminal::ensureWindow(const QString &vmName, const QString &nodeName)
 
     m_window = win;
     m_term = term;
-
-    // Find the Konsole::Session that QTermWidget owns. Emulation (which
-    // actually decodes VT escape sequences) is reachable from Session via
-    // a raw pointer, but Emulation is not a QObject child of anything we
-    // can findChild() so we route data injection through Session's slot.
-    m_session = nullptr;
-    for (auto *o : term->findChildren<QObject*>(QString(), Qt::FindChildrenRecursively)) {
-        if (qstrcmp(o->metaObject()->className(), "Konsole::Session") == 0) {
-            m_session = o;
-            break;
-        }
-    }
-    if (!m_session) {
-        qWarning() << "LxcTerminal: Konsole::Session child not found on QTermWidget;"
-                   << "incoming data will fall back to sendText (will echo).";
-    } else {
-        // Resolve the method signature once. Names that have shipped across
-        // qtermwidget/Konsole versions: onReceiveBlock(const char*,int) is
-        // the canonical Pty→Session forwarding slot. Some forks rename it.
-        const QMetaObject *mo = m_session->metaObject();
-        const char *candidates[] = {
-            "onReceiveBlock(const char*,int)",
-            "onReceiveBlock(QByteArray)",
-            "receiveData(const char*,int)",
-            nullptr,
-        };
-        m_sessionRecvSlot.clear();
-        for (auto *cand : candidates) {
-            if (!cand) break;
-            if (mo->indexOfMethod(QMetaObject::normalizedSignature(cand).constData()) >= 0) {
-                m_sessionRecvSlot = QByteArray(cand);
-                break;
-            }
-        }
-        if (m_sessionRecvSlot.isEmpty()) {
-            qWarning() << "LxcTerminal: no known data-injection slot on Konsole::Session;"
-                       << "this qtermwidget6 version may need a new candidate name added.";
-        }
-    }
 
     QObject::connect(win, &TerminalWindow::windowClosed, this, [this]() {
         disconnect();
@@ -218,9 +185,13 @@ void LxcTerminal::ensureWindow(const QString &vmName, const QString &nodeName)
     QObject::connect(term, &QTermWidget::sendData,
                      this, &LxcTerminal::onTerminalSendDataRaw);
 
-    // No public resize signal; install an event filter to catch QResizeEvent
-    // and forward grid dimensions to the remote pty.
+    // Install event filter on the terminal and all its internal child widgets.
+    // Mouse/context events land on the internal TerminalDisplay child, not the
+    // QTermWidget itself, so we need to cover the whole tree.
     term->installEventFilter(this);
+    for (auto *w : term->findChildren<QWidget *>()) {
+        w->installEventFilter(this);
+    }
 
     win->show();
     term->setFocus();
@@ -343,32 +314,15 @@ void LxcTerminal::handleBinaryFrame(const QByteArray &data)
 
 void LxcTerminal::deliverToTerminal(const QByteArray &data)
 {
-    if (m_session && !m_sessionRecvSlot.isEmpty()) {
-        // Invoke Session::onReceiveBlock or equivalent. Match the resolved
-        // signature: (const char*,int) is the most common, (QByteArray) the
-        // alternate.
-        bool ok = false;
-        if (m_sessionRecvSlot.contains("QByteArray")) {
-            ok = QMetaObject::invokeMethod(m_session, "onReceiveBlock",
-                    Q_ARG(QByteArray, data));
-        } else {
-            // Both onReceiveBlock and receiveData take (const char*, int) here.
-            const QByteArray slotName = m_sessionRecvSlot.left(m_sessionRecvSlot.indexOf('('));
-            ok = QMetaObject::invokeMethod(m_session, slotName.constData(),
-                    Q_ARG(const char*, data.constData()),
-                    Q_ARG(int, data.size()));
-        }
-        if (!ok) {
-            qWarning() << "LxcTerminal: invokeMethod on Session failed for slot"
-                       << m_sessionRecvSlot;
+    if (!m_term) return;
+    const int fd = m_term->getPtySlaveFd();
+    if (fd >= 0) {
+        if (::write(fd, data.constData(), data.size()) < 0) {
+            qWarning() << "LxcTerminal: write to PTY slave fd failed:" << strerror(errno);
         }
         return;
     }
-    if (m_term) {
-        // Last-resort fallback: produces echo loop, but at least something
-        // visible. Should not normally be hit.
-        m_term->sendText(QString::fromUtf8(data));
-    }
+    m_term->sendText(QString::fromUtf8(data));
 }
 
 void LxcTerminal::handleAuthLine(const QByteArray &line)
@@ -430,22 +384,59 @@ void LxcTerminal::onTerminalSendDataRaw(const char *s, int len)
 
 void LxcTerminal::sendCurrentResize()
 {
-    if (!m_ws || m_phase != Phase::Connected || !m_term) return;
+    if (!m_term) return;
     int columns = m_term->screenColumnsCount();
     int lines   = m_term->screenLinesCount();
-    // Fall back to 81×25 (not 80×24) so the ioctl produces a real delta and SIGWINCH fires.
+    // Fall back to 81×25 (not 80×24) so the ioctl produces a real delta.
     if (columns <= 0) columns = 81;
     if (lines   <= 0) lines   = 25;
-    const QString frame = QStringLiteral("1:%1:%2:").arg(columns).arg(lines);
-    m_ws->sendTextMessage(frame);
+
+    const int fd = m_term->getPtySlaveFd();
+    if (fd >= 0) {
+        struct winsize ws {};
+        ws.ws_col    = static_cast<unsigned short>(columns);
+        ws.ws_row    = static_cast<unsigned short>(lines);
+        ws.ws_xpixel = 0;
+        ws.ws_ypixel = 0;
+        if (::ioctl(fd, TIOCSWINSZ, &ws) < 0)
+            qWarning() << "LxcTerminal: TIOCSWINSZ failed:" << strerror(errno);
+    }
+
+    // Notify the remote side so its apps get SIGWINCH.
+    if (m_ws && m_phase == Phase::Connected) {
+        const QString frame = QStringLiteral("1:%1:%2:").arg(columns).arg(lines);
+        m_ws->sendTextMessage(frame);
+    }
 }
 
 bool LxcTerminal::eventFilter(QObject *watched, QEvent *event)
 {
     if (watched == m_term && event->type() == QEvent::Resize) {
-        // Defer — grid count isn't updated synchronously with QResizeEvent.
-        QTimer::singleShot(0, this, [this]() { sendCurrentResize(); });
+        // Two-pass: immediate pass picks up the new grid count, 150ms pass
+        // catches cases where the layout hasn't fully settled on the first fire.
+        QTimer::singleShot(0,   this, [this]() { sendCurrentResize(); });
+        QTimer::singleShot(150, this, [this]() { sendCurrentResize(); });
     }
+
+    // Right-click context menu for copy/paste — intercept on any child widget
+    // since mouse events land on QTermWidget's internal TerminalDisplay child.
+    if (event->type() == QEvent::ContextMenu && m_term) {
+        auto *w = qobject_cast<QWidget *>(watched);
+        if (w && (w == m_term.data() || m_term->isAncestorOf(w))) {
+            auto *me = static_cast<QContextMenuEvent *>(event);
+            QMenu menu;
+            QAction *copyAction  = menu.addAction(QStringLiteral("Copy"));
+            QAction *pasteAction = menu.addAction(QStringLiteral("Paste"));
+            copyAction->setEnabled(!m_term->selectedText().isEmpty());
+            QAction *chosen = menu.exec(me->globalPos());
+            if (chosen == copyAction)
+                m_term->copyClipboard();
+            else if (chosen == pasteAction)
+                m_term->pasteClipboard();
+            return true;
+        }
+    }
+
     return QObject::eventFilter(watched, event);
 }
 

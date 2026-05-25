@@ -70,6 +70,8 @@ KCM.SimpleKCM {
     // property set instead of warning about missing properties.
     property bool cfg_consoleEnabled: true
     property bool cfg_consoleEnabledDefault: true
+    property bool cfg_powerActionsEnabled: true
+    property bool cfg_powerActionsEnabledDefault: true
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
     property string cfg_compactMode: "cpu"
@@ -269,7 +271,7 @@ KCM.SimpleKCM {
                 }
 
                 onActivated: {
-                    cfg_connectionMode = model[currentIndex].value
+                    root.cfg_connectionMode = currentValue
                 }
             }
         }
@@ -280,15 +282,15 @@ KCM.SimpleKCM {
             visible: (root.cfg_connectionMode || "single") === "single"
             trustedCertPem: root.cfg_trustedCertPem
             trustedCertPath: root.cfg_trustedCertPath
-            controller: typeof kcm !== "undefined" && kcm.controller ? kcm.controller : null
+            controller: typeof kcm !== "undefined" && kcm.controller ? kcm.controller : null // qmllint disable unqualified
             onStashSecret: function(secret) {
-                cfg_apiTokenSecret = secret
+                root.cfg_apiTokenSecret = secret
             }
             onForgetSecret: function() {
-                cfg_apiTokenSecret = ""
+                root.cfg_apiTokenSecret = ""
             }
             onStashPbsSecret: function(secret) {
-                cfg_pbsTokenSecretBuffer = secret
+                root.cfg_pbsTokenSecretBuffer = secret
             }
             onPveCertPemEdited: function(value) { root.cfg_trustedCertPem = value }
             onPveCertPathEdited: function(value) { root.cfg_trustedCertPath = value }
@@ -304,7 +306,7 @@ KCM.SimpleKCM {
             saveMultiHosts: root.saveMultiHosts
             multiHostSecretKey: root.multiHostSecretKey
             cfg_multiHostSecretsJson: root.cfg_multiHostSecretsJson
-            controller: typeof kcm !== "undefined" && kcm.controller ? kcm.controller : null
+            controller: typeof kcm !== "undefined" && kcm.controller ? kcm.controller : null // qmllint disable unqualified
             onUpdateSecretsJson: function(value) {
                 root.cfg_multiHostSecretsJson = value
             }
@@ -342,10 +344,22 @@ KCM.SimpleKCM {
                 text: "SSL Verification:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             }
-            QQC2.CheckBox {
-                id: ignoreSslCheck
-                checked: true
-                text: "Ignore SSL certificate errors"
+            ColumnLayout {
+                spacing: 2
+                QQC2.CheckBox {
+                    id: ignoreSslCheck
+                    checked: true
+                    text: "Ignore SSL certificate errors"
+                }
+                QQC2.Label {
+                    text: "⚠ Disables certificate validation. Only use on trusted networks with self-signed certs."
+                    visible: ignoreSslCheck.checked
+                    font.pixelSize: 11
+                    color: "#ff3333"
+                    wrapMode: Text.WordWrap
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 24
+                }
             }
 
             QQC2.Label {
@@ -403,7 +417,7 @@ KCM.SimpleKCM {
         // Separator
         Rectangle {
             Layout.fillWidth: true
-            height: 1
+            implicitHeight: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.3
         }
@@ -442,7 +456,7 @@ KCM.SimpleKCM {
         // Separator
         Rectangle {
             Layout.fillWidth: true
-            height: 1
+            implicitHeight: 1
             color: Kirigami.Theme.disabledTextColor
             opacity: 0.3
             Layout.topMargin: 10

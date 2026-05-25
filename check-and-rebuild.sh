@@ -1,17 +1,10 @@
 #!/bin/bash
-# ---------------------------------------------------------------------------
-# check-and-rebuild.sh
-# Checks if relevant plasma/qt libraries have changed since the last build
-# via a fingerprint hash. If changed, rebuilds and reinstalls the plasmoid.
-# Triggered by proxmox-plasmoid-rebuild.path whenever libplasma.so changes.
-# ---------------------------------------------------------------------------
 set -euo pipefail
 
 PLASMOID_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
 LOG_FILE="$PLASMOID_DIR/rebuild.log"
 FINGERPRINT_FILE="$PLASMOID_DIR/.build_fingerprint"
 
-# install.sh is copied next to this script inside the plasmoid dir
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_SCRIPT="$SCRIPT_DIR/install.sh"
 
@@ -28,12 +21,7 @@ notify_error() {
   fi
 }
 
-# ---------------------------------------------------------------------------
-# Fingerprint: hash of all libplasma + libQt6 resolved lib paths.
-# Using ldconfig -p is distro-agnostic — no hardcoded paths needed.
-# The path unit fires on file change, but we still fingerprint all libs
-# so a single trigger catches any combination of lib updates.
-# ---------------------------------------------------------------------------
+# Hash of all resolved libplasma + libQt6 paths — distro-agnostic via ldconfig.
 get_fingerprint() {
   ldconfig -p 2>/dev/null \
     | grep -E 'libplasma|libQt6' \
@@ -43,10 +31,6 @@ get_fingerprint() {
     | md5sum \
     | cut -d' ' -f1
 }
-
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
 
 if [ ! -d "$PLASMOID_DIR" ]; then
   log "ERROR: Plasmoid directory not found: $PLASMOID_DIR"
@@ -61,15 +45,11 @@ if [ ! -f "$INSTALL_SCRIPT" ]; then
 fi
 
 CURRENT_FINGERPRINT="$(get_fingerprint)"
-
 STORED_FINGERPRINT=""
-if [ -f "$FINGERPRINT_FILE" ]; then
-  STORED_FINGERPRINT="$(cat "$FINGERPRINT_FILE")"
-fi
+[ -f "$FINGERPRINT_FILE" ] && STORED_FINGERPRINT="$(cat "$FINGERPRINT_FILE")"
 
-# Path unit fired but fingerprint unchanged — lib was touched but not updated
 if [ "$CURRENT_FINGERPRINT" = "$STORED_FINGERPRINT" ]; then
-  log "INFO: Path unit fired but fingerprint unchanged. No rebuild needed."
+  log "INFO: Fingerprint unchanged — no rebuild needed."
   exit 0
 fi
 

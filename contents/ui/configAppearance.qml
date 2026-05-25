@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
@@ -62,6 +64,8 @@ KCM.SimpleKCM {
     property bool cfg_multiHostSharedCertDefault: true
     property bool cfg_consoleEnabled: true
     property bool cfg_consoleEnabledDefault: true
+    property bool cfg_powerActionsEnabled: true
+    property bool cfg_powerActionsEnabledDefault: true
     property bool cfg_autoRetry: true
     property bool cfg_autoRetryDefault: true
     property int cfg_retryStartSeconds: 5
@@ -225,6 +229,7 @@ KCM.SimpleKCM {
 
                     QQC2.Label { text: "R" }
                     QQC2.SpinBox {
+                        id: runningRedSpin
                         from: 0
                         to: 255
                         value: root.channelFromHex(root.cfg_appearanceRunningColor, 0)
@@ -526,6 +531,7 @@ KCM.SimpleKCM {
                                 ]
 
                                 delegate: Rectangle {
+                                    id: previewItem
                                     required property var modelData
                                     Layout.fillWidth: true
                                     implicitHeight: 24
@@ -550,13 +556,13 @@ KCM.SimpleKCM {
                                             implicitWidth: 8
                                             implicitHeight: 8
                                             radius: 4
-                                            color: modelData.running
+                                            color: previewItem.modelData.running
                                                 ? root.previewColor(root.cfg_appearanceRunningColor, Kirigami.Theme.positiveTextColor)
                                                 : root.previewColor(root.cfg_appearanceStoppedColor, Kirigami.Theme.disabledTextColor)
                                         }
 
                                         QQC2.Label {
-                                            text: modelData.label
+                                            text: previewItem.modelData.label
                                             font.pixelSize: 10
                                             Layout.fillWidth: true
                                             elide: Text.ElideRight
