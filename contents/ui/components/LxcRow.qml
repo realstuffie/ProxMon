@@ -119,19 +119,23 @@ Rectangle {
             }
         }
 
-        Row {
+        RowLayout {
+            readonly property bool hasBackup: root.ctModel && root.ctModel.backupStatus !== undefined
+                                              && root.ctModel.backupStatus !== 0
+                                              && root.ctModel.backupStatus !== 5 // Excluded
+            readonly property bool isExcluded: root.ctModel && root.ctModel.backupStatus === 5
+
             spacing: 4
-            Layout.leftMargin: (root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0) ? 4 : 0
-            Layout.preferredWidth: (root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0) ? 50 : 0
-            Layout.minimumWidth: 0
-            Layout.maximumWidth: (root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0) ? 50 : 0
-            visible: root.ctModel && root.ctModel.backupStatus !== undefined && root.ctModel.backupStatus !== 0
+            Layout.preferredWidth: (hasBackup || isExcluded) ? 50 : 0
+            Layout.minimumWidth: (hasBackup || isExcluded) ? 50 : 0
+            Layout.maximumWidth: (hasBackup || isExcluded) ? 50 : 0
 
             Rectangle {
                 width: 8
                 height: 8
                 radius: 4
                 anchors.verticalCenter: parent.verticalCenter
+                visible: parent.hasBackup
                 color: {
                     switch (root.ctModel ? root.ctModel.backupStatus : 0) {
                     case 1: return Kirigami.Theme.positiveTextColor
@@ -147,6 +151,7 @@ Rectangle {
                 text: root.ctModel ? (root.ctModel.lastBackupDisplay || "") : ""
                 font.pixelSize: 8
                 opacity: 0.8
+                visible: parent.hasBackup
                 color: root.ctModel && root.ctModel.verifyState === "failed"
                     ? Kirigami.Theme.negativeTextColor
                     : Kirigami.Theme.textColor
@@ -155,9 +160,10 @@ Rectangle {
 
         RowLayout {
             spacing: Kirigami.Units.smallSpacing
-            Layout.preferredWidth: 92
-            Layout.minimumWidth: 92
-            Layout.maximumWidth: 92
+            Layout.preferredWidth: 48
+            Layout.minimumWidth: 48
+            Layout.maximumWidth: 48
+            Layout.rightMargin: 1
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             Layout.preferredHeight: 28
             Layout.minimumHeight: 28
@@ -191,7 +197,6 @@ Rectangle {
 
                 onClicked: if (typeof root.onAction === "function") root.onAction("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name, "start")
             }
-            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.busy || root.ctModel.status === "running" }
 
             PlasmaComponents.ToolButton {
                 flat: true
@@ -213,7 +218,7 @@ Rectangle {
 
                 onClicked: if (typeof root.onAction === "function") root.onAction("lxc", root.nodeName, root.ctModel.vmid, root.ctModel.name, "shutdown")
             }
-            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.busy || root.ctModel.status !== "running" }
+            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.ctModel || root.busy }
 
             PlasmaComponents.ToolButton {
                 flat: true

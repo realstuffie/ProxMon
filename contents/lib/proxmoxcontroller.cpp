@@ -1820,8 +1820,8 @@ void ProxmoxController::applyBackupState(QVariantList &items, const QVariantMap 
             const int exOldStatus = item.value(QStringLiteral("backupStatus"), int(BackupStatus::Unknown)).toInt();
             const QString exOldDisplay = item.value(QStringLiteral("lastBackupDisplay")).toString();
             const QString exOldVerify = item.value(QStringLiteral("verifyState")).toString();
-            if (exOldStatus != int(BackupStatus::Unknown) || !exOldDisplay.isEmpty() || !exOldVerify.isEmpty()) {
-                item.insert(QStringLiteral("backupStatus"), int(BackupStatus::Unknown));
+            if (exOldStatus != int(BackupStatus::Excluded) || !exOldDisplay.isEmpty() || !exOldVerify.isEmpty()) {
+                item.insert(QStringLiteral("backupStatus"), int(BackupStatus::Excluded));
                 item.insert(QStringLiteral("lastBackupTime"), 0);
                 item.insert(QStringLiteral("lastBackupDisplay"), QString());
                 item.insert(QStringLiteral("verifyState"), QString());

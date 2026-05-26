@@ -69,8 +69,8 @@ install_deps_best_effort() {
     pm="zypper"
     pm_update="zypper refresh"
     pm_install="zypper install -y"
-    pkgs_build="cmake make gcc-c++ pkg-config qt6-base-devel qt6-declarative-devel qt6-websockets-devel libvncserver-devel utf8proc-devel"
-    pkgs_qtermwidget="qtermwidget-qt6-devel"
+    pkgs_build="cmake make gcc-c++ pkg-config qt6-base-devel qt6-declarative-devel qt6-websockets-devel LibVNCServer-devel utf8proc-devel"
+    pkgs_qtermwidget="qtermwidget-devel qtermwidget-qt6-devel"
     pkgs_ecm="extra-cmake-modules"
   elif command -v dnf >/dev/null 2>&1; then
     pm="dnf"
