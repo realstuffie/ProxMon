@@ -307,7 +307,8 @@ QString extractTaskExitMessage(const QVariant &data) {
     QString status = payload.value(QStringLiteral("status")).toString().trimmed();
 
     if (exitStatus.compare(QStringLiteral("OK"), Qt::CaseInsensitive) == 0
-        || exitStatus.compare(QStringLiteral("TASK OK"), Qt::CaseInsensitive) == 0) {
+        || exitStatus.compare(QStringLiteral("TASK OK"), Qt::CaseInsensitive) == 0
+        || exitStatus.startsWith(QStringLiteral("TASK WARNINGS"), Qt::CaseInsensitive)) {
         return {};
     }
     if (!exitStatus.isEmpty()) {
