@@ -12,7 +12,7 @@ ColumnLayout {
     property var singleHostSection: null
     property var refreshField: null
     property var ignoreSslCheck: null
-    property var enableNotificationsCheck: null
+    property bool enableNotifications: true
     property string saveStatusText: ""
     property color saveStatusColor: Kirigami.Theme.textColor
     property string loadStatusText: ""
@@ -49,7 +49,7 @@ ColumnLayout {
                     tokenSecret: "",
                     refreshInterval: root.refreshField.value,
                     ignoreSsl: root.ignoreSslCheck.checked,
-                    enableNotifications: root.enableNotificationsCheck.checked
+                    enableNotifications: root.enableNotifications
                 }
                 var json = JSON.stringify(settings)
                 var safeJson = root.escapeForShell(json)

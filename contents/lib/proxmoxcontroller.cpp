@@ -1771,9 +1771,13 @@ QString ProxmoxController::lastBackupDisplay(qint64 backupTime) const {
     const qint64 age = std::max<qint64>(0, QDateTime::currentSecsSinceEpoch() - backupTime);
     const qint64 hours = age / ProxmoxConst::Defaults::SecondsPerHour;
     const qint64 days = age / ProxmoxConst::Defaults::SecondsPerDay;
+    const qint64 weeks = days / 7;
+    const qint64 years = days / 365;
     if (hours < 1) return QStringLiteral("Just now");
     if (hours < 24) return QStringLiteral("%1h ago").arg(hours);
-    return QStringLiteral("%1d ago").arg(days);
+    if (days < 7) return QStringLiteral("%1d ago").arg(days);
+    if (weeks < 52) return QStringLiteral("%1w ago").arg(weeks);
+    return QStringLiteral("%1y ago").arg(years);
 }
 
 bool ProxmoxController::isBackupExcluded(int vmid, const QString &tags) const {
@@ -1820,8 +1824,8 @@ void ProxmoxController::applyBackupState(QVariantList &items, const QVariantMap 
             const int exOldStatus = item.value(QStringLiteral("backupStatus"), int(BackupStatus::Unknown)).toInt();
             const QString exOldDisplay = item.value(QStringLiteral("lastBackupDisplay")).toString();
             const QString exOldVerify = item.value(QStringLiteral("verifyState")).toString();
-            if (exOldStatus != int(BackupStatus::Unknown) || !exOldDisplay.isEmpty() || !exOldVerify.isEmpty()) {
-                item.insert(QStringLiteral("backupStatus"), int(BackupStatus::Unknown));
+            if (exOldStatus != int(BackupStatus::Excluded) || !exOldDisplay.isEmpty() || !exOldVerify.isEmpty()) {
+                item.insert(QStringLiteral("backupStatus"), int(BackupStatus::Excluded));
                 item.insert(QStringLiteral("lastBackupTime"), 0);
                 item.insert(QStringLiteral("lastBackupDisplay"), QString());
                 item.insert(QStringLiteral("verifyState"), QString());

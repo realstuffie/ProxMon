@@ -52,7 +52,7 @@ KCM.SimpleKCM {
     property string cfg_trustedCertPath: ""
     property alias cfg_refreshInterval: refreshField.value
     property alias cfg_ignoreSsl: ignoreSslCheck.checked
-    property alias cfg_enableNotifications: enableNotificationsCheck.checked
+    property bool cfg_enableNotifications: true
     property string cfg_pbsExcludeVmids: ""
     property string cfg_pbsExcludeTag: ""
 
@@ -362,35 +362,6 @@ KCM.SimpleKCM {
                 }
             }
 
-            QQC2.Label {
-                text: "Notifications:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            QQC2.CheckBox {
-                id: enableNotificationsCheck
-                checked: true
-                text: "Enable desktop notifications"
-            }
-        }
-
-        // Notification info
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-
-            Kirigami.Icon {
-                source: "dialog-information"
-                implicitWidth: 16
-                implicitHeight: 16
-                opacity: 0.7
-            }
-            QQC2.Label {
-                text: "Notifications are sent when VMs, containers, or nodes change state. Configure filters in the Behavior tab."
-                font.pixelSize: 11
-                opacity: 0.7
-                wrapMode: Text.WordWrap
-                Layout.fillWidth: true
-            }
         }
 
         // Auth/config refresh hint (Plasma sometimes caches plasmoid runtime state)
@@ -446,7 +417,7 @@ KCM.SimpleKCM {
             singleHostSection: singleHostSection
             refreshField: refreshField
             ignoreSslCheck: ignoreSslCheck
-            enableNotificationsCheck: enableNotificationsCheck
+            enableNotifications: cfg_enableNotifications
             saveStatusText: saveStatus.text
             saveStatusColor: saveStatus.color
             loadStatusText: loadStatus.text

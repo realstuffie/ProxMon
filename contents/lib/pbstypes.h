@@ -17,5 +17,6 @@ enum class BackupStatus {
     Current,
     Warning,
     Stale,
-    Never
+    Never,
+    Excluded
 };
