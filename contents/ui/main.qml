@@ -37,11 +37,9 @@ PlasmoidItem {
     switchWidth: switchSizeFromSize(PlasmaCore.Types.Horizontal, compactRepresentationItem?.implicitWidth ?? Infinity, fullRepresentationItem?.Layout.minimumWidth ?? -1)
     switchHeight: switchSizeFromSize(PlasmaCore.Types.Vertical, compactRepresentationItem?.implicitHeight ?? Infinity, fullRepresentationItem?.Layout.minimumHeight ?? -1)
 
-    // Toggle expanded state when the applet is activated (e.g. keyboard shortcut).
-    // The compactRepresentation also has a MouseArea for direct clicks.
+
     activationTogglesExpanded: true
 
-    // Panel icon tooltip — updated whenever data changes.
     toolTipMainText: "Proxmox Monitor"
     toolTipSubText: {
         if (!configured) {
@@ -61,7 +59,6 @@ PlasmoidItem {
         return txt 
     }
 
-
     // Connection mode: "single" | "multiHost"
     property string connectionMode: Plasmoid.configuration.connectionMode || "single"
     property bool multiHostSharedCert: Plasmoid.configuration.multiHostSharedCert !== false
@@ -73,6 +70,7 @@ PlasmoidItem {
     property string apiTokenSecret: Plasmoid.configuration.apiTokenSecret || ""
     property string trustedCertPem: Plasmoid.configuration.trustedCertPem || ""
     property string trustedCertPath: Plasmoid.configuration.trustedCertPath || ""
+
     // Multi-host config (KCM stores these)
     property string multiHostsJson: Plasmoid.configuration.multiHostsJson || "[]"
     property string multiHostSecretsJson: Plasmoid.configuration.multiHostSecretsJson || "{}"
@@ -124,10 +122,12 @@ PlasmoidItem {
         id: consoleComponent
         VncConsole {}
     }
-    // LXC console is a C++-managed QMainWindow with QTermWidget inside;
-    // no QML wrapper. We instantiate the C++ object directly via this
-    // Component so we get a per-VM lifetime managed by QML's GC + the
-    // LxcTerminal::closed() signal.
+    /*
+    LXC console is a C++-managed QMainWindow with QTermWidget inside;
+    no QML wrapper. We instantiate the C++ object directly via this
+    Component so we get a per-VM lifetime managed by QML's GC + the
+    LxcTerminal::closed() signal.
+    */
     Component {
         id: lxcTerminalComponent
         ProxMon.LxcTerminal {}
@@ -167,11 +167,7 @@ PlasmoidItem {
     property bool notifyOnStop: Plasmoid.configuration.notifyOnStop !== false
     property bool notifyOnStart: Plasmoid.configuration.notifyOnStart !== false
     property bool notifyOnNodeChange: Plasmoid.configuration.notifyOnNodeChange !== false
-
-    // Notification privacy: redact user@realm and token IDs when present in notification text.
     property bool redactNotifyIdentities: Plasmoid.configuration.redactNotifyIdentities !== false
-
-    // Notification rate limiting (seconds)
     property bool notifyRateLimitEnabled: Plasmoid.configuration.notifyRateLimitEnabled !== false
     property int notifyRateLimitSeconds: Math.max(0, Plasmoid.configuration.notifyRateLimitSeconds || 120)
     // key => epoch ms
@@ -207,11 +203,9 @@ PlasmoidItem {
     property string errorMessage: controller ? controller.errorMessage : ""
     property string lastUpdate: controller ? controller.lastUpdate : ""
 
-    // One-time hint to guide users when action permissions are missing
     property bool actionPermHintShown: false
     property string actionPermHint: ""
 
-    // Debug log (capped to debugLogMaxLines entries)
     property var debugLog: []
     readonly property int debugLogMaxLines: 100
 
@@ -234,9 +228,10 @@ PlasmoidItem {
         return proxmoxHost !== "" && apiTokenId !== ""
     }
 
-    // "configured" means we have at least one usable endpoint and secrets resolved.
-    // During refresh-time secret re-resolution, keep the widget in configured state
-    // so it does not flash the not-configured UI between refreshes.
+    /* "configured" means we have at least one usable endpoint and secrets resolved.
+        During refresh-time secret re-resolution, keep the widget in configured state
+        so it does not flash the not-configured UI between refreshes.
+    */
     property bool configured: {
         if (connectionMode === "multiHost") {
             if (controller.secretState === "ready" && controller.endpoints && controller.endpoints.length > 0) return true
@@ -254,7 +249,6 @@ PlasmoidItem {
     property var actionBusy: ({})
 
     // Two-click confirmation state (works in plasmoids where popups/dialogs may not render reliably)
-    // If the same action is clicked again while the timer is running, it executes.
     property string armedActionKey: ""
     property string armedLabel: ""
 
@@ -268,9 +262,7 @@ PlasmoidItem {
         }
     }
 
-    // Avoid QQC2 Popup/Dialog in plasmoids (overlay may not exist); use two-click confirm.
-
-    // Multi-node support
+    // Avoid QQC2 Popup/Dialog in plasmoids
 
     // Collapsed state tracking for nodes
     property var collapsedNodes: ({})
@@ -301,7 +293,6 @@ PlasmoidItem {
         return Math.max(200, Math.min(h, 600))
     }
 
-    // Footer click sequence timer (dev mode toggle)
     Timer {
         id: footerClickTimer
         interval: 1000
@@ -309,7 +300,6 @@ PlasmoidItem {
     }
 
     // Keep platform colors from Kirigami, but standardize shape/opacity rhythm
-    // for a flatter, Adwaita-leaning look.
     readonly property int uiRadiusS: 4
     readonly property int uiRadiusM: 6
     readonly property int uiRadiusL: 8
@@ -333,19 +323,17 @@ PlasmoidItem {
         }
 
     // Clamp/sanitize CPU values coming from Proxmox.
-    // On some restarts the initial cpu field can be garbage (e.g. negative), which then renders as -4000%.
+    // On some restarts the initial cpu field can be garbage.
     function safeCpuPercent(cpuFraction) {
         var x = Number(cpuFraction)
         if (!isFinite(x) || isNaN(x)) return 0
         // Proxmox reports CPU as fraction (0..1 typically, can exceed 1 on some metrics).
-        // Clamp to a sane range for UI.
         x = Math.max(0, Math.min(x, 1))
         return x * 100
     }
  
         ProxMon.ProxmoxClient {
         id: api
-        // Single-host properties for legacy calls + actions.
         // For multi-host fetching we use requestNodesFor/requestQemuFor/requestLxcFor.
         host: root.proxmoxHost
         port: root.proxmoxPort
@@ -359,7 +347,7 @@ PlasmoidItem {
 
 
     // Redact sensitive identity fragments in debug logs / copied debug output.
-    // Matches "user@realm" and "!tokenid" style segments.
+    // Matches "user@realm" and "!tokenid"
     property string secretRedactRegex: "([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)|!([A-Za-z0-9._:-]+)"
 
     function redactSecretsForDebug(str) {
@@ -371,7 +359,7 @@ PlasmoidItem {
         })
     }
 
-    // Debug logging is gated behind developer mode to avoid flooding the user journal.
+    // Debug logging is gated behind developer mode to avoid flood.
     function logDebug(message) {
         if (!devMode) return
 
@@ -429,7 +417,7 @@ PlasmoidItem {
     }
 
 
-    // Escape regex special chars except "*" (wildcard)
+    // Escape regex special chars except "*"
     function escapeRegexPattern(str) {
         if (!str) return ""
         // Escape regex metacharacters but intentionally leave "*" untouched so
@@ -472,7 +460,7 @@ PlasmoidItem {
                 var regex = new RegExp("^" + escaped + "$")
                 return regex.test(nameL) || regex.test(vmidStr)
             }
-            // Exact match on name or vmid
+            // Exact match
             return nameL === filter || vmidStr === filter
         })
 
@@ -509,7 +497,6 @@ PlasmoidItem {
         notifyLastSent = newMap
     }
 
-    // Send desktop notification
     function sendNotification(title, message, iconName, rateLimitKey) {
         if (!enableNotifications) {
             return
@@ -525,7 +512,6 @@ PlasmoidItem {
         message = (message || "").replace(/[\r\n]+/g, " ")
 
         // Redact sensitive "user@realm!tokenid" fragments from notification text.
-        // This can appear in UPIDs (tasks) and logs.
         function redactIdentities(str) {
             str = String(str || "")
             // redact "user@realm" portion but preserve realm
@@ -557,7 +543,7 @@ PlasmoidItem {
         if (rateLimitKey) markNotifySent(rateLimitKey)
     }
 
-    // Test notifications function (dev mode)
+    // Test notifications function
     function testNotifications() {
         logDebug("Testing notifications...")
         sendNotification("VM Stopped", "test-vm (100) on pve1 is now stopped", "dialog-warning")
@@ -632,7 +618,7 @@ PlasmoidItem {
             if (!initialLoadComplete) {
                 logDebug("checkStateChanges(multi): Initial load, recording states")
 
-                // Record initial node states per endpoint/session.
+                // Record initial node states
                 for (var mn = 0; mn < displayedEndpoints.length; mn++) {
                     var endpoint = displayedEndpoints[mn]
                     if (!endpoint || !endpoint.sessionKey || !endpoint.nodes) continue
@@ -662,7 +648,7 @@ PlasmoidItem {
                 return
             }
 
-            // Check nodes for state changes per endpoint/session.
+            // Check nodes for state changes
             if (notifyOnNodeChange) {
                 for (var mei = 0; mei < displayedEndpoints.length; mei++) {
                     var endpointData = displayedEndpoints[mei]
@@ -1259,7 +1245,7 @@ PlasmoidItem {
         return String(sessionKey) + "::" + String(nodeName || "")
     }
 
-    // ---------- Multi-host aggregation is controller-owned ----------
+    // Multi-host aggregation is controller-owned
 
     Connections {
         target: controller
@@ -1615,7 +1601,7 @@ PlasmoidItem {
                 }
             }
 
-            // Test notifications button (dev mode only)
+            // Test notifications button
             PlasmaComponents.Button {
                 icon.name: "notifications"
                 onClicked: root.testNotifications()
@@ -1763,7 +1749,7 @@ PlasmoidItem {
                 // Reserve width for overlay scrollbar so right-side actions aren't covered.
                 // Keep this small; we also reserve it inside each row.
                 readonly property int __scrollbarGap: 2
-                readonly property int __scrollbarReserve: 14 + __scrollbarGap
+                readonly property int __scrollbarReserve: 2 + __scrollbarGap
 
                 ColumnLayout {
                     id: mainContentColumn
@@ -1893,7 +1879,7 @@ PlasmoidItem {
             }
         }
 
-        // Footer (keep it pinned to the bottom of the panel; prevent "floating" during ScrollView relayout)
+        // Footer, keep it pinned to the bottom of the panel
         RowLayout {
             id: footerRow
             anchors.left: parent.left

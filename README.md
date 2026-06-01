@@ -23,9 +23,9 @@ ProxMon is designed to keep your Proxmox credentials off disk and out of memory 
 
 - **Keychain storage** — API token secrets are stored in your system keyring (Qtkeychain) and never written to disk in plaintext. They are read on demand and held in memory only for the duration of a request.
 - **Isolated from the UI layer** — Credentials are never exposed to the QML/JavaScript layer. Auth tokens and VNC tickets are delivered directly between native C++ components and zeroed from memory immediately after use.
-- **SSL/TLS** — Connections to Proxmox use HTTPS/WSS. You can supply your own CA certificate (PEM or file path) for self-signed setups. "Ignore SSL" disables all TLS verification and encryption — only enable it when **all** other options are exhausted.
-- **Notification privacy** — Token identifiers are redacted from desktop notifications by default, so credentials don't appear in your notification history.
-- **Known limitation** — The VNC console uses a local loopback socket to bridge between the native VNC client and the Proxmox WebSocket endpoint. There is a brief window where another local process could connect to that socket instead. In the worst case this causes a failed connection for the user — no credentials can be extracted this way as the VNC ticket never leaves the application.
+- **SSL/TLS** — Connections to Proxmox use HTTPS/WSS. You can supply your own CA certificate for self-signed setups. "Ignore SSL" disables all TLS verification and encryption — only enable it when **all** other options are exhausted.
+- **Notification privacy** — Token identifiers are redacted from desktop notifications by default, So credentials don't appear in your notifications.
+- **Known limitation** — The VNC console uses a local loopback socket to bridge between the native VNC client and the Proxmox WebSocket endpoint. There is a brief window where another local process could connect to that socket instead. In the worst case this causes a dos — no credentials can be extracted this way.
 
 ## Screenshots
 
@@ -204,6 +204,26 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.7.1
+
+- Fix: normalize row spacing, monospace stats labels, vertical centering in VM and LXC rows
+- Fix: tighten stats block and mem label width to close visual gap between cpu/mem and PBS column
+- Fix: add left margin to power buttons; reduce row left margin 8→4px
+- Fix: extend backup age display to weeks (7d+) and years (52w+)
+- Fix: checksum-based install sync; skip kpackagetool re-register if already installed
+- Fix: move notification toggle to Behavior tab; bind via bool prop
+- Fix: treat task WARNINGS as non-fatal
+
+### v0.7.0
+
+- Power actions toggle — enable/disable start/stop/restart buttons per endpoint
+- LXC terminal: reworked data path with copy/paste support
+- SSL warning text now uses bright red; security warnings added to ignore SSL toggles
+- Renamed Console section to Features in behavior settings
+- Install: extended auto-rebuild watcher to cover Qt6, libvncclient, qtermwidget6
+- Install: added `--no-watcher` flag to skip auto-rebuild watcher setup
+- Build: mold linker support
+
 ### v0.6.1
 
 - Fix: closing the VNC console window during connection no longer crashes plasmashell (use-after-free + deadlock in teardown path)
@@ -219,21 +239,6 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 - Multi-host trusted cert toggle — shared or per-endpoint
 - Various config and stability fixes
 - Bump bundled QtKeychain
-
-### v0.5.1
-
-- PBS integration: optional Proxmox Backup Server support per endpoint
-- Backup status badges inline on VM and container rows (green/amber/red)
-- Separate hourly PBS poll timer independent of PVE refresh
-- Per-endpoint configurable warning and stale thresholds
-- PBS secret stored securely in keyring matching existing PVE handoff pattern
-
-### v0.5.0
-
-- New appearance tab with custom running, stopped/offline, and node colors
-- Appearance controls now include synced hex/RGB inputs, live preview, card tint opacity, and expanded window opacity
-- Connection settings now support trusted SSL certificate PEM input or a cert file path as a safer alternative to ignoring certificate errors
-- Compact panel label can now show average CPU, running workloads, error state, or last update time
 
 ### Credits
 

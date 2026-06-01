@@ -42,7 +42,7 @@ Rectangle {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 8
+        anchors.leftMargin: 4
         anchors.rightMargin: 2
         spacing: 4
 
@@ -58,25 +58,21 @@ Rectangle {
                 ? (root.anonymizeVmId(root.vmModel.vmid, root.vmIndex) + ": " + root.anonymizeVmName(root.vmModel.name, root.vmIndex))
                 : ""
             Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.preferredHeight: root.uiRowHeight
             elide: Text.ElideRight
             font.pixelSize: 11
+            verticalAlignment: Text.AlignVCenter
         }
 
         RowLayout {
+            visible: root.vmModel && root.vmModel.status === "running"
             Layout.alignment: Qt.AlignVCenter
-            spacing: 1
+            Layout.fillHeight: true
+            spacing: 4
             Layout.preferredWidth: 80
             Layout.minimumWidth: 80
             Layout.maximumWidth: 80
-
-            PlasmaComponents.Label {
-                visible: root.vmModel && root.vmModel.status !== "running"
-                text: root.vmModel && root.vmModel.status !== "running" ? root.vmModel.status : ""
-                font.pixelSize: 10
-                opacity: 0.7
-                horizontalAlignment: Text.AlignHCenter
-                Layout.fillWidth: true
-            }
 
             PlasmaComponents.Label {
                 visible: root.vmModel && root.vmModel.status === "running"
@@ -84,24 +80,24 @@ Rectangle {
                     ? (root.vmModel.cpu * 100).toFixed(0) + "%"
                     : ""
                 font.pixelSize: 10
+                font.family: "monospace"
                 opacity: 0.7
                 horizontalAlignment: Text.AlignRight
-                Layout.preferredWidth: 28
-                Layout.minimumWidth: 28
-                Layout.maximumWidth: 28
+                verticalAlignment: Text.AlignVCenter
+                Layout.fillHeight: true
+                Layout.preferredHeight: root.uiRowHeight
+                Layout.preferredWidth: 32
+                Layout.minimumWidth: 32
+                Layout.maximumWidth: 32
             }
 
-            PlasmaComponents.Label {
+            Rectangle {
                 visible: root.vmModel && root.vmModel.status === "running"
-                text: "|"
-                font.pixelSize: 10
-                opacity: 0.7
-                horizontalAlignment: Text.AlignHCenter
-                Layout.preferredWidth: 4
-                Layout.minimumWidth: 4
-                Layout.maximumWidth: 4
-                Layout.leftMargin: 2
-                Layout.rightMargin: 2
+                width: 1
+                height: 10
+                opacity: 0.4
+                color: Kirigami.Theme.textColor
+                Layout.alignment: Qt.AlignVCenter
             }
 
             PlasmaComponents.Label {
@@ -110,12 +106,15 @@ Rectangle {
                     ? (root.vmModel.mem / root.bytesPerGiB).toFixed(1) + "G"
                     : ""
                 font.pixelSize: 10
+                font.family: "monospace"
                 opacity: 0.7
                 horizontalAlignment: Text.AlignLeft
-                Layout.preferredWidth: 36
-                Layout.minimumWidth: 36
-                Layout.maximumWidth: 36
-                Layout.leftMargin: 2
+                verticalAlignment: Text.AlignVCenter
+                Layout.fillHeight: true
+                Layout.preferredHeight: root.uiRowHeight
+                Layout.preferredWidth: 34
+                Layout.minimumWidth: 34
+                Layout.maximumWidth: 34
             }
         }
 
@@ -127,6 +126,7 @@ Rectangle {
             readonly property bool isExcluded: root.vmModel && root.vmModel.backupStatus === 5
 
             spacing: 4
+            Layout.fillHeight: true
             Layout.preferredWidth: (hasBackup || isExcluded) ? 50 : 0
             Layout.minimumWidth: (hasBackup || isExcluded) ? 50 : 0
             Layout.maximumWidth: (hasBackup || isExcluded) ? 50 : 0
@@ -135,7 +135,7 @@ Rectangle {
                 width: 8
                 height: 8
                 radius: 4
-                anchors.verticalCenter: parent.verticalCenter
+                Layout.alignment: Qt.AlignVCenter
                 visible: parent.hasBackup
                 color: {
                     switch (root.vmModel ? root.vmModel.backupStatus : 0) {
@@ -150,9 +150,14 @@ Rectangle {
 
             PlasmaComponents.Label {
                 text: root.vmModel ? (root.vmModel.lastBackupDisplay || "") : ""
-                font.pixelSize: 8
+                font.pixelSize: 10
+                font.family: "monospace"
                 opacity: 0.8
                 visible: parent.hasBackup
+                verticalAlignment: Text.AlignVCenter
+                Layout.alignment: Qt.AlignVCenter
+                Layout.fillHeight: true
+                Layout.preferredHeight: root.uiRowHeight
                 color: root.vmModel && root.vmModel.verifyState === "failed"
                     ? Kirigami.Theme.negativeTextColor
                     : Kirigami.Theme.textColor
@@ -160,10 +165,11 @@ Rectangle {
         }
 
         RowLayout {
-            spacing: Kirigami.Units.smallSpacing
+            spacing: 4
             Layout.preferredWidth: 48
             Layout.minimumWidth: 48
             Layout.maximumWidth: 48
+            Layout.leftMargin: 6
             Layout.rightMargin: 1
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
             Layout.preferredHeight: 28
@@ -174,7 +180,7 @@ Rectangle {
             PlasmaComponents.BusyIndicator {
                 visible: root.busy
                 running: root.busy
-                implicitWidth: root.uiBusyIndicatorSize
+                implicitWidth: root.busy ? root.uiBusyIndicatorSize : 0
                 implicitHeight: root.uiBusyIndicatorSize
             }
 

@@ -1,5 +1,29 @@
 # Changelog
 
+## v0.7.1
+- fix(VmRow/LxcRow): normalize row spacing, monospace stats labels at 12px, wider containers, vertical centering
+- fix(VmRow/LxcRow): add left margin to power buttons; reduce row left margin 8→4px
+- fix(VmRow/LxcRow): tighten stats block (90→80px) and mem label (46→34px) to close PBS-to-stats gap
+- fix(proxmoxcontroller): extend backup age display to weeks (7d+) and years (52w+)
+- fix(install): checksum-based sync; skip kpackagetool re-register if already installed
+- fix(configGeneral): remove notification toggle; bind via bool prop
+- fix(proxmoxclient): treat task WARNINGS as non-fatal
+- chore(main.qml): comment cleanup and dead code removal
+- docs(README): tighten security and SSL wording
+
+## v0.7.0
+- Feat: power actions toggle — enable/disable start/stop/restart buttons per endpoint
+- Fix: collapse backup status row layout when hidden (VmRow, LxcRow)
+- Fix: TapHandler hitbox by setting explicit width/height on compact representation root
+- LXC terminal: rework data path and add copy/paste support
+- UI: SSL warning text now uses bright red; security warnings added to ignore SSL toggles
+- UI: rename Console section to Features in behavior settings
+- Install: extend auto-rebuild watcher to cover Qt6, libvncclient, qtermwidget6, and additional libraries
+- Install: add `--no-watcher` flag to skip auto-rebuild watcher setup
+- Build: add mold linker support
+- Docs: script cleanup and security section trimmed to keychain and loopback limitation
+- Docs: add LXC terminal resize reflow known limitation
+
 ## v0.6.1
 - Fixed VNC crash and deadlock when closing console mid-connection
 - Fixed PBS in-flight request abort on cancelAll()

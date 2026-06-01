@@ -1771,9 +1771,13 @@ QString ProxmoxController::lastBackupDisplay(qint64 backupTime) const {
     const qint64 age = std::max<qint64>(0, QDateTime::currentSecsSinceEpoch() - backupTime);
     const qint64 hours = age / ProxmoxConst::Defaults::SecondsPerHour;
     const qint64 days = age / ProxmoxConst::Defaults::SecondsPerDay;
+    const qint64 weeks = days / 7;
+    const qint64 years = days / 365;
     if (hours < 1) return QStringLiteral("Just now");
     if (hours < 24) return QStringLiteral("%1h ago").arg(hours);
-    return QStringLiteral("%1d ago").arg(days);
+    if (days < 7) return QStringLiteral("%1d ago").arg(days);
+    if (weeks < 52) return QStringLiteral("%1w ago").arg(weeks);
+    return QStringLiteral("%1y ago").arg(years);
 }
 
 bool ProxmoxController::isBackupExcluded(int vmid, const QString &tags) const {

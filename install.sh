@@ -218,29 +218,65 @@ if [ -f "$PLASMA_ENV_FILE" ]; then
   rm -f "$PLASMA_ENV_FILE"
 fi
 
-PKG_PATH="."
-if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
-  "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
-  "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH" || true
-else
-  "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
-  "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" || true
-fi
-
-# kpackagetool --upgrade does not always overwrite existing files on all
-# distros/versions. Force-sync the contents directory to guarantee the
-# installed files match the source.
 PLASMOID_CONTENTS="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox/contents"
-if [ -d "$PLASMOID_CONTENTS" ]; then
-  cp -r contents/. "$PLASMOID_CONTENTS/"
-  printf '%s\n' "[ install] Contents force-synced → $PLASMOID_CONTENTS"
-fi
-
 ICON_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
 ICON_DIR="$ICON_BASE/hicolor/scalable/apps"
+
+# Checksum-based sync: copy only files whose md5 differs from the installed copy.
+# Falls back to cp -r if md5sum is unavailable.
+sync_contents() {
+  local src="$1" dst="$2"
+  if ! command -v md5sum >/dev/null 2>&1; then
+    cp -r "$src/." "$dst/"
+    return
+  fi
+  local copied=0
+  while IFS= read -r -d '' srcfile; do
+    local rel="${srcfile#$src/}"
+    local dstfile="$dst/$rel"
+    local copy=1
+    if [ -f "$dstfile" ]; then
+      local src_sum dst_sum
+      src_sum="$(md5sum "$srcfile" | cut -d' ' -f1)"
+      dst_sum="$(md5sum "$dstfile" | cut -d' ' -f1)"
+      [ "$src_sum" = "$dst_sum" ] && copy=0
+    fi
+    if [ "$copy" -eq 1 ]; then
+      mkdir -p "$(dirname "$dstfile")"
+      cp "$srcfile" "$dstfile"
+      copied=$(( copied + 1 ))
+    fi
+  done < <(find "$src" -type f -print0)
+  printf '%s\n' "[ install] Synced $copied file(s) → $dst"
+}
+
+# First install: register with kpackagetool so Plasma knows the plasmoid exists.
+PKG_PATH="."
+if [ ! -d "$PLASMOID_CONTENTS" ]; then
+  if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
+    "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
+    "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH" || true
+  else
+    "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
+    "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" || true
+  fi
+fi
+
+# Checksum sync contents — skips unchanged files.
+if [ -d "$PLASMOID_CONTENTS" ]; then
+  sync_contents "contents" "$PLASMOID_CONTENTS"
+fi
+
 mkdir -p "$ICON_DIR"
 if [ -d "contents/icons" ]; then
-  cp contents/icons/*.svg "$ICON_DIR/"
+  while IFS= read -r -d '' icon; do
+    dst_icon="$ICON_DIR/$(basename "$icon")"
+    icon_copy=1
+    if [ -f "$dst_icon" ] && command -v md5sum >/dev/null 2>&1; then
+      [ "$(md5sum "$icon" | cut -d' ' -f1)" = "$(md5sum "$dst_icon" | cut -d' ' -f1)" ] && icon_copy=0
+    fi
+    [ "$icon_copy" -eq 1 ] && cp "$icon" "$dst_icon"
+  done < <(find "contents/icons" -name "*.svg" -print0)
 fi
 
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
