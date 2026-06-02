@@ -65,76 +65,74 @@ Rectangle {
             verticalAlignment: Text.AlignVCenter
         }
 
-        RowLayout {
+        Item {
             visible: root.ctModel && root.ctModel.status === "running"
-            Layout.alignment: Qt.AlignVCenter
-            Layout.fillHeight: true
-            spacing: 4
             Layout.preferredWidth: 80
             Layout.minimumWidth: 80
             Layout.maximumWidth: 80
+            Layout.fillHeight: true
 
-            PlasmaComponents.Label {
-                visible: root.ctModel && root.ctModel.status === "running"
+            Text {
+                id: ctCpuText
+                anchors.right: ctStatDivider.left
+                anchors.rightMargin: 4
+                anchors.verticalCenter: parent.verticalCenter
+                width: 32
+                height: font.pixelSize
                 text: root.ctModel && root.ctModel.status === "running"
                     ? (root.ctModel.cpu * 100).toFixed(0) + "%"
                     : ""
                 font.pixelSize: 10
                 font.family: "monospace"
+                color: Kirigami.Theme.textColor
                 opacity: 0.7
                 horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                Layout.preferredHeight: root.uiRowHeight
-                Layout.preferredWidth: 32
-                Layout.minimumWidth: 32
-                Layout.maximumWidth: 32
             }
 
             Rectangle {
-                visible: root.ctModel && root.ctModel.status === "running"
+                id: ctStatDivider
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
                 width: 1
                 height: 10
                 opacity: 0.4
                 color: Kirigami.Theme.textColor
-                Layout.alignment: Qt.AlignVCenter
             }
 
-            PlasmaComponents.Label {
-                visible: root.ctModel && root.ctModel.status === "running"
+            Text {
+                anchors.left: ctStatDivider.right
+                anchors.leftMargin: 4
+                anchors.verticalCenter: parent.verticalCenter
+                width: 34
+                height: font.pixelSize
                 text: root.ctModel && root.ctModel.status === "running"
                     ? (root.ctModel.mem / root.bytesPerGiB).toFixed(1) + "G"
                     : ""
                 font.pixelSize: 10
                 font.family: "monospace"
+                color: Kirigami.Theme.textColor
                 opacity: 0.7
-                horizontalAlignment: Text.AlignLeft
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                Layout.preferredHeight: root.uiRowHeight
-                Layout.preferredWidth: 34
-                Layout.minimumWidth: 34
-                Layout.maximumWidth: 34
             }
         }
 
-        RowLayout {
+        Item {
             readonly property bool hasBackup: root.ctModel && root.ctModel.backupStatus !== undefined
                                               && root.ctModel.backupStatus !== 0
                                               && root.ctModel.backupStatus !== 5 // Excluded
             readonly property bool isExcluded: root.ctModel && root.ctModel.backupStatus === 5
 
-            spacing: 4
             Layout.fillHeight: true
             Layout.preferredWidth: (hasBackup || isExcluded) ? 50 : 0
             Layout.minimumWidth: (hasBackup || isExcluded) ? 50 : 0
             Layout.maximumWidth: (hasBackup || isExcluded) ? 50 : 0
 
             Rectangle {
+                id: ctBackupDot
                 width: 8
                 height: 8
                 radius: 4
-                Layout.alignment: Qt.AlignVCenter
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 visible: parent.hasBackup
                 color: {
                     switch (root.ctModel ? root.ctModel.backupStatus : 0) {
@@ -147,16 +145,16 @@ Rectangle {
                 }
             }
 
-            PlasmaComponents.Label {
+            Text {
+                anchors.left: ctBackupDot.right
+                anchors.leftMargin: 4
+                anchors.verticalCenter: parent.verticalCenter
+                height: font.pixelSize
                 text: root.ctModel ? (root.ctModel.lastBackupDisplay || "") : ""
                 font.pixelSize: 10
                 font.family: "monospace"
-                opacity: 0.8
+                opacity: 0.7
                 visible: parent.hasBackup
-                verticalAlignment: Text.AlignVCenter
-                Layout.alignment: Qt.AlignVCenter
-                Layout.fillHeight: true
-                Layout.preferredHeight: root.uiRowHeight
                 color: root.ctModel && root.ctModel.verifyState === "failed"
                     ? Kirigami.Theme.negativeTextColor
                     : Kirigami.Theme.textColor

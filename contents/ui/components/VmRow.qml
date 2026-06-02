@@ -65,77 +65,75 @@ Rectangle {
             verticalAlignment: Text.AlignVCenter
         }
 
-        RowLayout {
+        Item {
             visible: root.vmModel && root.vmModel.status === "running"
-            Layout.alignment: Qt.AlignVCenter
-            Layout.fillHeight: true
-            spacing: 4
             Layout.preferredWidth: 80
             Layout.minimumWidth: 80
             Layout.maximumWidth: 80
+            Layout.fillHeight: true
 
-            PlasmaComponents.Label {
-                visible: root.vmModel && root.vmModel.status === "running"
+            Text {
+                id: vmCpuText
+                anchors.right: vmStatDivider.left
+                anchors.rightMargin: 4
+                anchors.verticalCenter: parent.verticalCenter
+                width: 32
+                height: font.pixelSize
                 text: root.vmModel && root.vmModel.status === "running"
                     ? (root.vmModel.cpu * 100).toFixed(0) + "%"
                     : ""
                 font.pixelSize: 10
                 font.family: "monospace"
+                color: Kirigami.Theme.textColor
                 opacity: 0.7
                 horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                Layout.preferredHeight: root.uiRowHeight
-                Layout.preferredWidth: 32
-                Layout.minimumWidth: 32
-                Layout.maximumWidth: 32
             }
 
             Rectangle {
-                visible: root.vmModel && root.vmModel.status === "running"
+                id: vmStatDivider
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.verticalCenter: parent.verticalCenter
                 width: 1
                 height: 10
                 opacity: 0.4
                 color: Kirigami.Theme.textColor
-                Layout.alignment: Qt.AlignVCenter
             }
 
-            PlasmaComponents.Label {
-                visible: root.vmModel && root.vmModel.status === "running"
+            Text {
+                anchors.left: vmStatDivider.right
+                anchors.leftMargin: 4
+                anchors.verticalCenter: parent.verticalCenter
+                width: 34
+                height: font.pixelSize
                 text: root.vmModel && root.vmModel.status === "running"
                     ? (root.vmModel.mem / root.bytesPerGiB).toFixed(1) + "G"
                     : ""
                 font.pixelSize: 10
                 font.family: "monospace"
+                color: Kirigami.Theme.textColor
                 opacity: 0.7
-                horizontalAlignment: Text.AlignLeft
-                verticalAlignment: Text.AlignVCenter
-                Layout.fillHeight: true
-                Layout.preferredHeight: root.uiRowHeight
-                Layout.preferredWidth: 34
-                Layout.minimumWidth: 34
-                Layout.maximumWidth: 34
             }
         }
 
 
-        RowLayout {
+        Item {
             readonly property bool hasBackup: root.vmModel && root.vmModel.backupStatus !== undefined
                                               && root.vmModel.backupStatus !== 0
                                               && root.vmModel.backupStatus !== 5 // Excluded
             readonly property bool isExcluded: root.vmModel && root.vmModel.backupStatus === 5
 
-            spacing: 4
             Layout.fillHeight: true
             Layout.preferredWidth: (hasBackup || isExcluded) ? 50 : 0
             Layout.minimumWidth: (hasBackup || isExcluded) ? 50 : 0
             Layout.maximumWidth: (hasBackup || isExcluded) ? 50 : 0
 
             Rectangle {
+                id: vmBackupDot
                 width: 8
                 height: 8
                 radius: 4
-                Layout.alignment: Qt.AlignVCenter
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 visible: parent.hasBackup
                 color: {
                     switch (root.vmModel ? root.vmModel.backupStatus : 0) {
@@ -148,16 +146,16 @@ Rectangle {
                 }
             }
 
-            PlasmaComponents.Label {
+            Text {
+                anchors.left: vmBackupDot.right
+                anchors.leftMargin: 4
+                anchors.verticalCenter: parent.verticalCenter
+                height: font.pixelSize
                 text: root.vmModel ? (root.vmModel.lastBackupDisplay || "") : ""
                 font.pixelSize: 10
                 font.family: "monospace"
-                opacity: 0.8
+                opacity: 0.7
                 visible: parent.hasBackup
-                verticalAlignment: Text.AlignVCenter
-                Layout.alignment: Qt.AlignVCenter
-                Layout.fillHeight: true
-                Layout.preferredHeight: root.uiRowHeight
                 color: root.vmModel && root.vmModel.verifyState === "failed"
                     ? Kirigami.Theme.negativeTextColor
                     : Kirigami.Theme.textColor
