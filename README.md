@@ -211,21 +211,13 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
-<<<<<<< HEAD
-### v0.7.0
+### v0.7.2
 
-- Feat: power actions toggle — enable/disable start/stop/restart buttons per endpoint
-- Fix: collapse backup status row layout when hidden (VmRow, LxcRow)
-- Fix: TapHandler hitbox by setting explicit width/height on compact representation root
-- LXC terminal: rework data path and add copy/paste support
-- UI: SSL warning text now uses bright red; security warnings added to ignore SSL toggles
-- UI: rename Console section to Features in behavior settings
-- Install: extend auto-rebuild watcher to cover Qt6, libvncclient, qtermwidget6, and additional libraries
-- Install: add `--no-watcher` flag to skip auto-rebuild watcher setup
-- Build: add mold linker support
-- Docs: script cleanup and security section trimmed to keychain and loopback limitation
-- Docs: add LXC terminal resize reflow known limitation
-=======
+- Fix: bundle JetBrains Mono for consistent cross-distro font metrics
+- Fix: monospace text vertical centering in VM and LXC rows
+
+Tested on Ubuntu 26 (KDE 6.6.4), Fedora 44 (KDE 6.6.5), Manjaro (KDE 6.6.5), openSUSE Tumbleweed (KDE 6.6.5)
+
 ### v0.7.1
 
 - Fix: normalize row spacing, monospace stats labels, vertical centering in VM and LXC rows
@@ -245,7 +237,6 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 - Install: extended auto-rebuild watcher to cover Qt6, libvncclient, qtermwidget6
 - Install: added `--no-watcher` flag to skip auto-rebuild watcher setup
 - Build: mold linker support
->>>>>>> staging
 
 ### v0.6.1
 

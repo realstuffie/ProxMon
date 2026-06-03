@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.7.2
+- fix(VmRow/LxcRow): bundle JetBrains Mono for consistent cross-distro font metrics
+- fix(VmRow/LxcRow): fix monospace text vertical centering
+
+Tested on Ubuntu 26 (KDE 6.6.4), Fedora 44 (KDE 6.6.5), Manjaro (KDE 6.6.5), openSUSE Tumbleweed (KDE 6.6.5)
+
 ## v0.7.1
 - fix(VmRow/LxcRow): normalize row spacing, monospace stats labels at 12px, wider containers, vertical centering
 - fix(VmRow/LxcRow): add left margin to power buttons; reduce row left margin 8→4px
