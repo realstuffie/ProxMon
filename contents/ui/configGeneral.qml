@@ -51,7 +51,7 @@ KCM.SimpleKCM {
     property string cfg_trustedCertPem: ""
     property string cfg_trustedCertPath: ""
     property alias cfg_refreshInterval: refreshField.value
-    property alias cfg_ignoreSsl: ignoreSslCheck.checked
+    property alias cfg_ignoreSsl: singleHostSection.ignoreSsl
     property bool cfg_enableNotifications: true
     property string cfg_pbsExcludeVmids: ""
     property string cfg_pbsExcludeTag: ""
@@ -164,7 +164,7 @@ KCM.SimpleKCM {
                     if (s.tokenId) singleHostSection.tokenIdText = s.tokenId
                     if (s.tokenSecret) singleHostSection.tokenSecretText = s.tokenSecret
                     if (s.refreshInterval) refreshField.value = s.refreshInterval
-                    if (s.ignoreSsl !== undefined) ignoreSslCheck.checked = s.ignoreSsl
+                    if (s.ignoreSsl !== undefined) singleHostSection.ignoreSsl = s.ignoreSsl
                     if (s.enableNotifications !== undefined) enableNotificationsCheck.checked = s.enableNotifications
                     loadStatus.text = "✓ Loaded!"
                     loadStatus.color = Kirigami.Theme.positiveTextColor
@@ -324,6 +324,7 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Refresh Interval:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                Layout.leftMargin: 35
             }
             RowLayout {
                 spacing: 8
@@ -337,28 +338,6 @@ KCM.SimpleKCM {
                 QQC2.Label {
                     text: "seconds"
                     opacity: 0.7
-                }
-            }
-
-            QQC2.Label {
-                text: "SSL Verification:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-            }
-            ColumnLayout {
-                spacing: 2
-                QQC2.CheckBox {
-                    id: ignoreSslCheck
-                    checked: true
-                    text: "Ignore SSL certificate errors"
-                }
-                QQC2.Label {
-                    text: "⚠ Disables certificate validation. Only use on trusted networks with self-signed certs."
-                    visible: ignoreSslCheck.checked
-                    font.pixelSize: 11
-                    color: "#ff3333"
-                    wrapMode: Text.WordWrap
-                    Layout.fillWidth: true
-                    Layout.leftMargin: 24
                 }
             }
 
@@ -416,7 +395,7 @@ KCM.SimpleKCM {
             escapeForShell: root.escapeForShell
             singleHostSection: singleHostSection
             refreshField: refreshField
-            ignoreSslCheck: ignoreSslCheck
+            ignoreSsl: singleHostSection.ignoreSsl
             enableNotifications: cfg_enableNotifications
             saveStatusText: saveStatus.text
             saveStatusColor: saveStatus.color

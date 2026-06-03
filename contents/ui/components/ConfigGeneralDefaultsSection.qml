@@ -11,7 +11,7 @@ ColumnLayout {
     property var escapeForShell: null
     property var singleHostSection: null
     property var refreshField: null
-    property var ignoreSslCheck: null
+    property bool ignoreSsl: false
     property bool enableNotifications: true
     property string saveStatusText: ""
     property color saveStatusColor: Kirigami.Theme.textColor
@@ -48,7 +48,7 @@ ColumnLayout {
                     tokenId: root.singleHostSection.tokenIdText,
                     tokenSecret: "",
                     refreshInterval: root.refreshField.value,
-                    ignoreSsl: root.ignoreSslCheck.checked,
+                    ignoreSsl: root.ignoreSsl,
                     enableNotifications: root.enableNotifications
                 }
                 var json = JSON.stringify(settings)
@@ -59,13 +59,6 @@ ColumnLayout {
             }
         }
 
-        QQC2.Label {
-            text: root.saveStatusText
-            color: root.saveStatusColor
-        }
-
-        Item { Layout.fillWidth: true }
-
         QQC2.Button {
             text: "Load Default"
             icon.name: "document-open"
@@ -74,9 +67,19 @@ ColumnLayout {
             }
         }
 
-        QQC2.Label {
-            text: root.loadStatusText
-            color: root.loadStatusColor
+        QQC2.Button {
+            text: "Delete Default"
+            icon.name: "edit-delete"
+            onClicked: {
+                root.saveExec.connectSource("rm -f ~/.config/proxmox-plasmoid/settings.json")
+            }
         }
+
+        QQC2.Label {
+            text: root.saveStatusText || root.loadStatusText
+            color: root.saveStatusColor
+        }
+
+        Item { Layout.fillWidth: true }
     }
 }

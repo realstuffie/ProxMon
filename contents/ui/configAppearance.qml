@@ -177,6 +177,9 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Running color:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                Layout.leftMargin: 35
+                Layout.topMargin: 5
+                horizontalAlignment: Text.AlignRight
             }
 
             ColumnLayout {
@@ -268,6 +271,9 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Stopped/offline color:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                Layout.leftMargin: 35
+                Layout.topMargin: 5
+                horizontalAlignment: Text.AlignRight
             }
 
             ColumnLayout {
@@ -359,6 +365,9 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Node color:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                Layout.leftMargin: 35
+                Layout.topMargin: 5
+                horizontalAlignment: Text.AlignRight
             }
 
             ColumnLayout {
@@ -449,7 +458,10 @@ KCM.SimpleKCM {
 
             QQC2.Label {
                 text: "Card tint opacity:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                Layout.leftMargin: 35
+                Layout.topMargin: 5
+                horizontalAlignment: Text.AlignRight
             }
 
             ColumnLayout {
@@ -486,6 +498,9 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Preview:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                Layout.leftMargin: 35
+                Layout.topMargin: 5
+                horizontalAlignment: Text.AlignRight
             }
 
             Rectangle {
@@ -577,7 +592,10 @@ KCM.SimpleKCM {
 
             QQC2.Label {
                 text: "Window opacity:"
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                Layout.leftMargin: 35
+                Layout.topMargin: 5
+                horizontalAlignment: Text.AlignRight
             }
 
             ColumnLayout {

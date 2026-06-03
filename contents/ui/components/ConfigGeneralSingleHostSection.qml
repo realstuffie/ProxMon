@@ -16,6 +16,7 @@ GridLayout {
     property alias pbsHostText: pbsHostField.text
     property alias pbsPortValue: pbsPortField.value
     property alias pbsTokenIdText: pbsTokenIdField.text
+    property alias ignoreSsl: ignoreSslCheck.checked
     property alias pbsIgnoreSsl: pbsIgnoreSslCheck.checked
     property alias pbsTrustedCertPem: pbsTrustedCertPemField.text
     property alias pbsTrustedCertPath: pbsTrustedCertPathField.text
@@ -36,6 +37,7 @@ GridLayout {
     QQC2.Label {
         text: "Host:"
         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        horizontalAlignment: Text.AlignRight
     }
     QQC2.TextField {
         id: hostField
@@ -46,6 +48,7 @@ GridLayout {
     QQC2.Label {
         text: "Port:"
         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        horizontalAlignment: Text.AlignRight
     }
     QQC2.SpinBox {
         id: portField
@@ -58,6 +61,7 @@ GridLayout {
     QQC2.Label {
         text: "API Token ID:"
         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        horizontalAlignment: Text.AlignRight
     }
     QQC2.TextField {
         id: tokenIdField
@@ -68,6 +72,7 @@ GridLayout {
     QQC2.Label {
         text: "API Token Secret:"
         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        horizontalAlignment: Text.AlignRight
     }
     RowLayout {
         Layout.fillWidth: true
@@ -109,6 +114,7 @@ GridLayout {
     QQC2.Label {
         text: "Trusted Proxmox VE PEM:"
         Layout.alignment: Qt.AlignRight | Qt.AlignTop
+        horizontalAlignment: Text.AlignRight
     }
     QQC2.TextArea {
         id: pveTrustedCertPemArea
@@ -126,6 +132,7 @@ GridLayout {
     QQC2.Label {
         text: "Trusted Proxmox VE File:"
         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        horizontalAlignment: Text.AlignRight
     }
     QQC2.TextField {
         id: pveTrustedCertPathField2
@@ -137,6 +144,28 @@ GridLayout {
         }
     }
 
+    QQC2.Label {
+        text: "SSL Verification:"
+        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        horizontalAlignment: Text.AlignRight
+    }
+    ColumnLayout {
+        spacing: 2
+        QQC2.CheckBox {
+            id: ignoreSslCheck
+            text: "Ignore SSL certificate errors"
+        }
+        QQC2.Label {
+            text: "⚠ Disables certificate validation. Only use on trusted networks with self-signed certs."
+            visible: ignoreSslCheck.checked
+            font.pixelSize: 11
+            color: "#ff3333"
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+            Layout.leftMargin: 24
+        }
+    }
+
     Item {
         Layout.columnSpan: 2
         Layout.fillWidth: true
@@ -144,9 +173,10 @@ GridLayout {
     }
 
     QQC2.Label {
-        text: "Proxmox Backup Server"
+        text: "Proxmox Backup Server:"
         font.bold: true
         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        horizontalAlignment: Text.AlignRight
     }
 
     QQC2.CheckBox {
@@ -166,14 +196,14 @@ GridLayout {
             rowSpacing: 10
             Layout.fillWidth: true
 
-            QQC2.Label { text: "PBS Host:" }
+            QQC2.Label { text: "PBS Host:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.TextField {
                 id: pbsHostField
                 Layout.fillWidth: true
                 placeholderText: "backup-server or IP"
             }
 
-            QQC2.Label { text: "PBS Port:" }
+            QQC2.Label { text: "PBS Port:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.SpinBox {
                 id: pbsPortField
                 from: 1
@@ -182,14 +212,14 @@ GridLayout {
                 editable: true
             }
 
-            QQC2.Label { text: "PBS Token ID:" }
+            QQC2.Label { text: "PBS Token ID:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.TextField {
                 id: pbsTokenIdField
                 Layout.fillWidth: true
                 placeholderText: "user@pbs!tokenname"
             }
 
-            QQC2.Label { text: "PBS Token Secret:" }
+            QQC2.Label { text: "PBS Token Secret:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 8
@@ -211,7 +241,7 @@ GridLayout {
                 }
             }
 
-            QQC2.Label { text: "SSL Verification:" }
+            QQC2.Label { text: "SSL Verification:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             ColumnLayout {
                 spacing: 2
                 QQC2.CheckBox {
@@ -229,7 +259,7 @@ GridLayout {
                 }
             }
 
-            QQC2.Label { text: "PBS Trusted Cert PEM:" }
+            QQC2.Label { text: "PBS Trusted Cert PEM:"; Layout.alignment: Qt.AlignRight | Qt.AlignTop; horizontalAlignment: Text.AlignRight }
             QQC2.TextArea {
                 id: pbsTrustedCertPemField
                 Layout.fillWidth: true
@@ -237,16 +267,16 @@ GridLayout {
                 font.family: "JetBrains Mono"
                 implicitHeight: 80
             }
-            QQC2.Label { text: "PBS Trusted Cert Path:" }
+            QQC2.Label { text: "PBS Trusted Cert Path:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.TextField {
                 id: pbsTrustedCertPathField
                 Layout.fillWidth: true
                 placeholderText: "/path/to/cert.pem (optional)"
             }
-            QQC2.Label { text: "PBS Refresh:" }
+            QQC2.Label { text: "PBS Refresh:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.ComboBox {
                 id: pbsRefreshField
-                Layout.fillWidth: true
+                implicitWidth: 90
                 model: [
                     { text: "30 min", value: 1800 },
                     { text: "1 hour", value: 3600 },
@@ -265,7 +295,7 @@ GridLayout {
                 }
             }
 
-            QQC2.Label { text: "Warning threshold:" }
+            QQC2.Label { text: "Warning threshold:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.SpinBox {
                 id: pbsWarningDaysField
                 from: 1
@@ -274,7 +304,7 @@ GridLayout {
                 editable: true
             }
 
-            QQC2.Label { text: "Stale threshold:" }
+            QQC2.Label { text: "Stale threshold:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.SpinBox {
                 id: pbsStaleDaysField
                 from: 1

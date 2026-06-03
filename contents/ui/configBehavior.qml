@@ -163,11 +163,13 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Default Sorting:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                Layout.leftMargin: 35
+                horizontalAlignment: Text.AlignRight
             }
 
             QQC2.ComboBox {
                 id: sortingCombo
-                Layout.fillWidth: true
+                implicitWidth: 180
 
                 model: ListModel {
                     id: sortingModel
@@ -234,11 +236,13 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Compact label:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                Layout.leftMargin: 35
+                horizontalAlignment: Text.AlignRight
             }
 
             QQC2.ComboBox {
                 id: compactModeCombo
-                Layout.fillWidth: true
+                implicitWidth: 150
 
                 model: ListModel {
                     id: compactModeModel
@@ -292,6 +296,7 @@ KCM.SimpleKCM {
             text: "Enable VM/CT console (VNC/TTY)"
             checked: root.cfg_consoleEnabled
             onCheckedChanged: root.cfg_consoleEnabled = checked
+            Layout.leftMargin: 35
         }
 
         QQC2.Label {
@@ -307,6 +312,7 @@ KCM.SimpleKCM {
             text: "Enable power actions (Start / Shutdown / Reboot)"
             checked: root.cfg_powerActionsEnabled
             onCheckedChanged: root.cfg_powerActionsEnabled = checked
+            Layout.leftMargin: 35
         }
 
         QQC2.Label {
@@ -338,6 +344,7 @@ KCM.SimpleKCM {
             text: "Low latency mode (5s request timeout, recommended for LAN)"
             checked: root.cfg_lowLatency
             onCheckedChanged: root.cfg_lowLatency = checked
+            Layout.leftMargin: 35
         }
 
         QQC2.Label {
@@ -380,11 +387,13 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Exclude by tag:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                Layout.leftMargin: 35
+                horizontalAlignment: Text.AlignRight
             }
 
             QQC2.TextField {
                 id: pbsExcludeTagField
-                Layout.fillWidth: true
+                implicitWidth: Math.max(160, contentWidth + leftPadding + rightPadding + 20)
                 placeholderText: "no-pbs"
                 text: root.cfg_pbsExcludeTag
                 onTextChanged: root.cfg_pbsExcludeTag = text
@@ -393,11 +402,13 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Exclude by VM IDs:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                Layout.leftMargin: 35
+                horizontalAlignment: Text.AlignRight
             }
 
             QQC2.TextField {
                 id: pbsExcludeVmidsField
-                Layout.fillWidth: true
+                implicitWidth: Math.max(160, contentWidth + leftPadding + rightPadding + 20)
                 placeholderText: "100, 105, 200"
                 text: root.cfg_pbsExcludeVmids
                 onTextChanged: root.cfg_pbsExcludeVmids = text
@@ -434,6 +445,7 @@ KCM.SimpleKCM {
             text: "Enable desktop notifications"
             checked: root.cfg_enableNotifications
             onCheckedChanged: root.cfg_enableNotifications = checked
+            Layout.leftMargin: 35
         }
 
         // Separator
@@ -460,6 +472,7 @@ KCM.SimpleKCM {
             columnSpacing: 20
             rowSpacing: 8
             Layout.fillWidth: true
+            Layout.leftMargin: 35
             visible: root.cfg_enableNotifications
             opacity: root.cfg_enableNotifications ? 1.0 : 0.5
 
@@ -514,6 +527,7 @@ KCM.SimpleKCM {
             onCheckedChanged: root.cfg_notifyRateLimitEnabled = checked
             enabled: root.cfg_enableNotifications
             visible: root.cfg_enableNotifications
+            Layout.leftMargin: 35
         }
 
         RowLayout {
@@ -577,6 +591,7 @@ KCM.SimpleKCM {
             visible: root.cfg_enableNotifications
             checked: root.cfg_redactNotifyIdentities
             onCheckedChanged: root.cfg_redactNotifyIdentities = checked
+            Layout.leftMargin: 35
         }
 
         QQC2.Label {
@@ -607,6 +622,7 @@ KCM.SimpleKCM {
 
         ColumnLayout {
             Layout.fillWidth: true
+            Layout.leftMargin: 35
             spacing: 8
             visible: root.cfg_enableNotifications
             opacity: root.cfg_enableNotifications ? 1.0 : 0.5

@@ -22,6 +22,7 @@ ColumnLayout {
         id: autoRetryCheck
         text: "Automatically retry on connection errors"
         checked: true
+        Layout.leftMargin: 45
     }
 
     GridLayout {
@@ -35,6 +36,7 @@ ColumnLayout {
         QQC2.Label {
             text: "Start delay:"
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            Layout.leftMargin: 45
         }
         RowLayout {
             spacing: 8
@@ -54,6 +56,7 @@ ColumnLayout {
         QQC2.Label {
             text: "Max delay:"
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+            Layout.leftMargin: 45
         }
         RowLayout {
             spacing: 8

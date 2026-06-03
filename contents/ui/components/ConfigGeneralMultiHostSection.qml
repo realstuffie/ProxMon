@@ -58,6 +58,7 @@ ColumnLayout {
             QQC2.Label {
                 text: "Trusted Proxmox VE PEM:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                horizontalAlignment: Text.AlignRight
             }
             QQC2.TextArea {
                 id: sharedCertPemArea
@@ -75,6 +76,7 @@ ColumnLayout {
             QQC2.Label {
                 text: "Trusted Proxmox VE File:"
                 Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                horizontalAlignment: Text.AlignRight
             }
             QQC2.TextField {
                 id: sharedCertPathField
@@ -135,6 +137,7 @@ ColumnLayout {
                     QQC2.Label {
                         text: "Label:"
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.TextField {
                         Layout.fillWidth: true
@@ -150,6 +153,7 @@ ColumnLayout {
                     QQC2.Label {
                         text: "Host:"
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.TextField {
                         Layout.fillWidth: true
@@ -165,6 +169,7 @@ ColumnLayout {
                     QQC2.Label {
                         text: "Port:"
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.SpinBox {
                         from: 1
@@ -181,6 +186,7 @@ ColumnLayout {
                     QQC2.Label {
                         text: "API Token ID:"
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.TextField {
                         Layout.fillWidth: true
@@ -196,6 +202,7 @@ ColumnLayout {
                     QQC2.Label {
                         text: "API Token Secret:"
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     RowLayout {
                         Layout.fillWidth: true
@@ -243,6 +250,7 @@ ColumnLayout {
                         text: "Trusted Proxmox VE PEM:"
                         visible: !sharedCertToggle.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.TextArea {
                         visible: !sharedCertToggle.checked
@@ -263,6 +271,7 @@ ColumnLayout {
                         text: "Trusted Proxmox VE File:"
                         visible: !sharedCertToggle.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.TextField {
                         visible: !sharedCertToggle.checked
@@ -277,10 +286,40 @@ ColumnLayout {
                     }
 
                     QQC2.Label {
+                        text: "SSL Verification:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
+                    }
+                    ColumnLayout {
+                        spacing: 2
+                        QQC2.CheckBox {
+                            id: ignoreSslCheck
+                            checked: card.entry.ignoreSsl === true
+                            text: "Ignore SSL certificate errors"
+                            onToggled: {
+                                var arr = root.ensureMultiHostsLen(5)
+                                arr[card.index].ignoreSsl = checked
+                                root.saveMultiHosts(arr)
+                            }
+                        }
+                        QQC2.Label {
+                            text: "⚠ Disables certificate validation. Only use on trusted networks with self-signed certs."
+                            visible: ignoreSslCheck.checked
+                            font.pixelSize: 11
+                            color: "#ff3333"
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                            Layout.leftMargin: 24
+                        }
+                    }
+
+                    QQC2.Label {
                         text: "PBS Enabled:"
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.CheckBox {
+                        id: pbsEnabledCheck
                         checked: card.entry.pbsEnabled === true
                         text: checked ? "Enabled" : "Disabled"
                         onToggled: {
@@ -292,9 +331,12 @@ ColumnLayout {
 
                     QQC2.Label {
                         text: "PBS Host:"
+                        visible: pbsEnabledCheck.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.TextField {
+                        visible: pbsEnabledCheck.checked
                         Layout.fillWidth: true
                         text: card.entry.pbsHost || ""
                         placeholderText: "backup-server or IP"
@@ -307,9 +349,12 @@ ColumnLayout {
 
                     QQC2.Label {
                         text: "PBS Port:"
+                        visible: pbsEnabledCheck.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.SpinBox {
+                        visible: pbsEnabledCheck.checked
                         from: 1
                         to: 65535
                         value: card.entry.pbsPort || 8007
@@ -323,9 +368,12 @@ ColumnLayout {
 
                     QQC2.Label {
                         text: "PBS Token ID:"
+                        visible: pbsEnabledCheck.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.TextField {
+                        visible: pbsEnabledCheck.checked
                         Layout.fillWidth: true
                         text: card.entry.pbsTokenId || ""
                         placeholderText: "user@pbs!tokenname"
@@ -338,9 +386,12 @@ ColumnLayout {
 
                     QQC2.Label {
                         text: "PBS Token Secret:"
+                        visible: pbsEnabledCheck.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     RowLayout {
+                        visible: pbsEnabledCheck.checked
                         Layout.fillWidth: true
                         spacing: 8
 
@@ -371,9 +422,12 @@ ColumnLayout {
 
                     QQC2.Label {
                         text: "PBS SSL:"
+                        visible: pbsEnabledCheck.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     ColumnLayout {
+                        visible: pbsEnabledCheck.checked
                         spacing: 2
                         QQC2.CheckBox {
                             id: pbsIgnoreSslCheck
@@ -398,9 +452,12 @@ ColumnLayout {
 
                     QQC2.Label {
                         text: "PBS Warning Days:"
+                        visible: pbsEnabledCheck.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.SpinBox {
+                        visible: pbsEnabledCheck.checked
                         from: 1
                         to: 30
                         value: card.entry.pbsBackupWarningDays || 7
@@ -414,9 +471,12 @@ ColumnLayout {
 
                     QQC2.Label {
                         text: "PBS Stale Days:"
+                        visible: pbsEnabledCheck.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
                     }
                     QQC2.SpinBox {
+                        visible: pbsEnabledCheck.checked
                         from: 1
                         to: 90
                         value: card.entry.pbsBackupStaleDays || 14
