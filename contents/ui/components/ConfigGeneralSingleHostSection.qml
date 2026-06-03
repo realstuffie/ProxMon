@@ -41,7 +41,7 @@ GridLayout {
     }
     QQC2.TextField {
         id: hostField
-        Layout.fillWidth: true
+        implicitWidth: Math.max(100, contentWidth + leftPadding + rightPadding + 20)
         placeholderText: "192.168.1.100 or proxmox.local"
     }
 
@@ -65,7 +65,7 @@ GridLayout {
     }
     QQC2.TextField {
         id: tokenIdField
-        Layout.fillWidth: true
+        implicitWidth: Math.max(200, contentWidth + leftPadding + rightPadding + 20)
         placeholderText: "user@realm!tokenname"
     }
 
@@ -80,7 +80,7 @@ GridLayout {
 
         QQC2.TextField {
             id: tokenSecretField
-            Layout.fillWidth: true
+            implicitWidth: 200
             echoMode: TextInput.Password
             placeholderText: "Stored in keyring after Apply"
         }
@@ -118,7 +118,7 @@ GridLayout {
     }
     QQC2.TextArea {
         id: pveTrustedCertPemArea
-        Layout.fillWidth: true
+        Layout.preferredWidth: 500
         Layout.preferredHeight: 90
         text: root.trustedCertPem
         placeholderText: "Paste PEM certificate here. If set, this takes precedence over cert file path."
@@ -136,7 +136,7 @@ GridLayout {
     }
     QQC2.TextField {
         id: pveTrustedCertPathField2
-        Layout.fillWidth: true
+        implicitWidth: Math.max(200, contentWidth + leftPadding + rightPadding + 20)
         text: root.trustedCertPath
         placeholderText: "/etc/pve/pve-root-ca.pem"
         onTextChanged: {
@@ -199,7 +199,7 @@ GridLayout {
             QQC2.Label { text: "PBS Host:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.TextField {
                 id: pbsHostField
-                Layout.fillWidth: true
+                implicitWidth: Math.max(100, contentWidth + leftPadding + rightPadding + 20)
                 placeholderText: "backup-server or IP"
             }
 
@@ -215,7 +215,7 @@ GridLayout {
             QQC2.Label { text: "PBS Token ID:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.TextField {
                 id: pbsTokenIdField
-                Layout.fillWidth: true
+                implicitWidth: Math.max(200, contentWidth + leftPadding + rightPadding + 20)
                 placeholderText: "user@pbs!tokenname"
             }
 
@@ -226,7 +226,7 @@ GridLayout {
 
                 QQC2.TextField {
                     id: pbsTokenSecretField
-                    Layout.fillWidth: true
+                    implicitWidth: 200
                     echoMode: TextInput.Password
                     placeholderText: "Stored in keyring after Apply"
                 }
@@ -262,7 +262,7 @@ GridLayout {
             QQC2.Label { text: "PBS Trusted Cert PEM:"; Layout.alignment: Qt.AlignRight | Qt.AlignTop; horizontalAlignment: Text.AlignRight }
             QQC2.TextArea {
                 id: pbsTrustedCertPemField
-                Layout.fillWidth: true
+                Layout.preferredWidth: 500
                 placeholderText: "Paste PEM certificate here (optional)"
                 font.family: "JetBrains Mono"
                 implicitHeight: 80
@@ -270,7 +270,7 @@ GridLayout {
             QQC2.Label { text: "PBS Trusted Cert Path:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
             QQC2.TextField {
                 id: pbsTrustedCertPathField
-                Layout.fillWidth: true
+                implicitWidth: Math.max(200, contentWidth + leftPadding + rightPadding + 20)
                 placeholderText: "/path/to/cert.pem (optional)"
             }
             QQC2.Label { text: "PBS Refresh:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }

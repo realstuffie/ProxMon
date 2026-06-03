@@ -62,7 +62,7 @@ ColumnLayout {
             }
             QQC2.TextArea {
                 id: sharedCertPemArea
-                Layout.fillWidth: true
+                Layout.preferredWidth: 500
                 Layout.preferredHeight: 90
                 text: root.trustedCertPem
                 placeholderText: "Paste PEM certificate here. If set, this takes precedence over cert file path."
@@ -80,7 +80,7 @@ ColumnLayout {
             }
             QQC2.TextField {
                 id: sharedCertPathField
-                Layout.fillWidth: true
+                implicitWidth: Math.max(160, contentWidth + leftPadding + rightPadding + 20)
                 text: root.trustedCertPath
                 placeholderText: "/etc/pve/pve-root-ca.pem"
                 onTextChanged: {
@@ -254,7 +254,7 @@ ColumnLayout {
                     }
                     QQC2.TextArea {
                         visible: !sharedCertToggle.checked
-                        Layout.fillWidth: true
+                        Layout.preferredWidth: 500
                         Layout.preferredHeight: 80
                         text: card.entry.trustedCertPem || ""
                         placeholderText: "Paste PEM certificate here (optional)"
@@ -275,7 +275,7 @@ ColumnLayout {
                     }
                     QQC2.TextField {
                         visible: !sharedCertToggle.checked
-                        Layout.fillWidth: true
+                        implicitWidth: Math.max(160, contentWidth + leftPadding + rightPadding + 20)
                         text: card.entry.trustedCertPath || ""
                         placeholderText: "/etc/pve/pve-root-ca.pem (optional)"
                         onTextChanged: {

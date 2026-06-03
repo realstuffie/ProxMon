@@ -253,17 +253,18 @@ KCM.SimpleKCM {
             QQC2.Label {
                 text: "Mode:"
                 Layout.alignment: Qt.AlignVCenter
+                Layout.leftMargin: 122
             }
 
             QQC2.ComboBox {
                 id: connectionModeCombo
+                implicitWidth: 200
                 model: [
                     { text: "Single host", value: "single" },
                     { text: "Multi-host (up to 5)", value: "multiHost" }
                 ]
                 textRole: "text"
                 valueRole: "value"
-                Layout.fillWidth: true
 
                 Component.onCompleted: {
                     var v = root.cfg_connectionMode || "single"
