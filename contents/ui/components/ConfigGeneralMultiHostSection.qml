@@ -66,7 +66,7 @@ ColumnLayout {
                 text: root.trustedCertPem
                 placeholderText: "Paste PEM certificate here. If set, this takes precedence over cert file path."
                 wrapMode: TextEdit.Wrap
-                font.family: "monospace"
+                font.family: "JetBrains Mono"
                 onTextChanged: {
                     if (root.trustedCertPem !== text) root.pveCertPemEdited(text)
                 }
@@ -250,7 +250,7 @@ ColumnLayout {
                         Layout.preferredHeight: 80
                         text: card.entry.trustedCertPem || ""
                         placeholderText: "Paste PEM certificate here (optional)"
-                        font.family: "monospace"
+                        font.family: "JetBrains Mono"
                         wrapMode: TextEdit.Wrap
                         onTextChanged: {
                             var arr = root.ensureMultiHostsLen(5)

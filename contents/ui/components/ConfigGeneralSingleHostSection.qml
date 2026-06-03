@@ -117,7 +117,7 @@ GridLayout {
         text: root.trustedCertPem
         placeholderText: "Paste PEM certificate here. If set, this takes precedence over cert file path."
         wrapMode: TextEdit.Wrap
-        font.family: "monospace"
+        font.family: "JetBrains Mono"
         onTextChanged: {
             if (root.trustedCertPem !== text) root.pveCertPemEdited(text)
         }
@@ -234,7 +234,7 @@ GridLayout {
                 id: pbsTrustedCertPemField
                 Layout.fillWidth: true
                 placeholderText: "Paste PEM certificate here (optional)"
-                font.family: "monospace"
+                font.family: "JetBrains Mono"
                 implicitHeight: 80
             }
             QQC2.Label { text: "PBS Trusted Cert Path:" }
