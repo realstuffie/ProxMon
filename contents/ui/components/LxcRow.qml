@@ -78,12 +78,11 @@ Rectangle {
                 anchors.rightMargin: 4
                 anchors.verticalCenter: parent.verticalCenter
                 width: 32
-                height: font.pixelSize
                 text: root.ctModel && root.ctModel.status === "running"
                     ? (root.ctModel.cpu * 100).toFixed(0) + "%"
                     : ""
                 font.pixelSize: 10
-                font.family: "monospace"
+                font.family: "JetBrains Mono"
                 color: Kirigami.Theme.textColor
                 opacity: 0.7
                 horizontalAlignment: Text.AlignRight
@@ -104,12 +103,11 @@ Rectangle {
                 anchors.leftMargin: 4
                 anchors.verticalCenter: parent.verticalCenter
                 width: 34
-                height: font.pixelSize
                 text: root.ctModel && root.ctModel.status === "running"
                     ? (root.ctModel.mem / root.bytesPerGiB).toFixed(1) + "G"
                     : ""
                 font.pixelSize: 10
-                font.family: "monospace"
+                font.family: "JetBrains Mono"
                 color: Kirigami.Theme.textColor
                 opacity: 0.7
             }
@@ -149,10 +147,10 @@ Rectangle {
                 anchors.left: ctBackupDot.right
                 anchors.leftMargin: 4
                 anchors.verticalCenter: parent.verticalCenter
-                height: font.pixelSize
+                verticalAlignment: Text.AlignVCenter
                 text: root.ctModel ? (root.ctModel.lastBackupDisplay || "") : ""
                 font.pixelSize: 10
-                font.family: "monospace"
+                font.family: "JetBrains Mono"
                 opacity: 0.7
                 visible: parent.hasBackup
                 color: root.ctModel && root.ctModel.verifyState === "failed"
