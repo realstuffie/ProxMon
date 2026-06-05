@@ -1260,6 +1260,9 @@ PlasmoidItem {
         function onDisplayedEndpointsChanged() {
             root.checkStateChanges()
         }
+        function onIsRefreshingChanged() {
+            if (!controller.isRefreshing && root.connectionMode !== "multiHost") root.checkStateChanges()
+        }
         function onErrorMessageChanged() {
             if (controller.errorMessage !== "") root.errorMessage = controller.errorMessage
         }

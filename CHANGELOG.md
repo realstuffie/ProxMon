@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.7.3
+- fix(main): add action busy guard on status change — clears spinner via checkStateChanges if onActionReply never fires
+- fix(config): UI alignment and field sizing across all config tabs for consistent cross-distro rendering
+- fix(configGeneral): move SSL toggles into single/multi-host sections; PBS fields hidden when disabled
+- fix(configGeneral): add Delete Default button to defaults section
+- fix(configBehavior): align labels and dropdowns consistently
+- fix(configAppearance): fix label vertical alignment against spinboxes
+
 ## v0.7.2
 - fix(VmRow/LxcRow): bundle JetBrains Mono for consistent cross-distro font metrics
 - fix(VmRow/LxcRow): fix monospace text vertical centering

@@ -279,4 +279,5 @@ private:
     bool m_lowLatency = false;
     QSet<QNetworkReply *> m_inFlight;
     QSet<QNetworkReply *> m_pbsInFlight;
+    QSet<QNetworkReply *> m_taskInFlight;
 };

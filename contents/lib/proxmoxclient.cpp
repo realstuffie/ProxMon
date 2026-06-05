@@ -759,7 +759,7 @@ void ProxmoxClient::pollTaskStatus(const QString &sessionKey,
                                        m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs
                                                     : ProxmoxConst::Defaults::RequestTimeoutMs);
     QNetworkReply *r = m_nam.get(req);
-    m_inFlight.insert(r);
+    m_taskInFlight.insert(r);
 
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -768,7 +768,7 @@ void ProxmoxClient::pollTaskStatus(const QString &sessionKey,
     }
 
     QObject::connect(r, &QNetworkReply::finished, this, [this, r, sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, trustedCertPem, trustedCertPath, upid, seq, actionKind, node, vmid, action]() {
-        m_inFlight.remove(r);
+        m_taskInFlight.remove(r);
 
         auto emitTaskError = [&](const QString &msg) {
             if (sessionKey.isEmpty()) {

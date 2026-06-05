@@ -211,6 +211,14 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ## Changelog
 
+### v0.7.3
+
+- Fix: clear busy spinner via checkStateChanges safety-net when onActionReply never fires
+- Fix: UI alignment and field sizing across all config tabs for consistent cross-distro rendering
+- Fix: move SSL toggles into single/multi-host sections; hide PBS fields when disabled
+- Fix: add Delete Default button to connection defaults section
+- Fix: label and dropdown alignment in Behavior and Appearance tabs
+
 ### v0.7.2
 
 - Fix: bundle JetBrains Mono for consistent cross-distro font metrics
