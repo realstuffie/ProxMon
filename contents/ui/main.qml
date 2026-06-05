@@ -600,8 +600,8 @@ PlasmoidItem {
         var title = hasVm && !hasCt
             ? (verb === "started" ? "VMs Started" : "VMs Stopped")
             : hasCt && !hasVm
-                ? (verb === "started" ? "LXCs Started" : "LXCs Stopped")
-                : (verb === "started" ? "Workloads Started" : "Workloads Stopped")
+            ? (verb === "started" ? "LXCs Started" : "LXCs Stopped")
+            : (verb === "started" ? "Workloads Started" : "Workloads Stopped")
 
         sendNotification(title, sections.join("; "), iconName, rateLimitKey)
     }
@@ -698,6 +698,8 @@ PlasmoidItem {
                             pushGroupedNotificationEntry(multiStartedEntries, "VM", vmItemMulti)
                         }
                     }
+                        // Safety-net: clear busy spinner if status changed                    if (root.isActionBusy(vmItemMulti.node, "qemu", vmItemMulti.vmid, vmItemMulti.sessionKey))
+                        root.setActionBusy(vmItemMulti.node, "qemu", vmItemMulti.vmid, false, vmItemMulti.sessionKey)
                 }
                 previousVmStates[vmStateKeyMulti] = vmItemMulti.status
             }
@@ -719,6 +721,9 @@ PlasmoidItem {
                             pushGroupedNotificationEntry(multiStartedEntries, "CT", lxcItemMulti)
                         }
                     }
+                    // Safety-net: clear busy spinner if status changed
+                    if (root.isActionBusy(lxcItemMulti.node, "lxc", lxcItemMulti.vmid, lxcItemMulti.sessionKey))
+                        root.setActionBusy(lxcItemMulti.node, "lxc", lxcItemMulti.vmid, false, lxcItemMulti.sessionKey)
                 }
                 previousLxcStates[lxcStateKeyMulti] = lxcItemMulti.status
             }
@@ -809,6 +814,9 @@ PlasmoidItem {
                         pushGroupedNotificationEntry(startedEntries, "VM", vmItem)
                     }
                 }
+                // Safety-net: clear busy spinner if status changed
+                if (root.isActionBusy(vmItem.node, "qemu", vmItem.vmid))
+                    root.setActionBusy(vmItem.node, "qemu", vmItem.vmid, false)
             }
             previousVmStates[vmStateKey] = vmItem.status
         }
@@ -830,6 +838,9 @@ PlasmoidItem {
                         pushGroupedNotificationEntry(startedEntries, "CT", lxcItem)
                     }
                 }
+                // Safety-net: clear busy spinner if status changed
+                if (root.isActionBusy(lxcItem.node, "lxc", lxcItem.vmid))
+                    root.setActionBusy(lxcItem.node, "lxc", lxcItem.vmid, false)
             }
             previousLxcStates[lxcStateKey] = lxcItem.status
         }
@@ -985,10 +996,7 @@ PlasmoidItem {
 
 
     function confirmAndRunAction(kind, nodeName, vmid, displayName, action) {
-        // Plasma sometimes doesn't show QQC2.Popup/Overlay in plasmoids (no window overlay layer).
-        // Use a safe "two-step confirmation" instead:
-        //  - First click arms the action for a short time and changes the icon to "dialog-ok"
-        //  - Second click within the window executes the action
+        // Plasma sometimes doesn't show QQC2.Popup/Overlay sometimes, We Use safe "two-step confirmation" instead.
         logDebug("confirmAndRunAction: " + kind + " " + nodeName + " " + vmid + " " + action)
 
         var key = kind + ":" + nodeName + ":" + vmid + ":" + action
