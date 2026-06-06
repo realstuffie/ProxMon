@@ -1,6 +1,7 @@
 # Changelog
 
 ## v0.7.3
+- fix(proxmoxclient): isolate task poll requests from refresh cancellation to prevent stuck busy spinner
 - fix(main): add action busy guard on status change — clears spinner via checkStateChanges if onActionReply never fires
 - fix(config): UI alignment and field sizing across all config tabs for consistent cross-distro rendering
 - fix(configGeneral): move SSL toggles into single/multi-host sections; PBS fields hidden when disabled

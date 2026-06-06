@@ -280,7 +280,7 @@ private:
     void setSecretsResolved(int value);
     void setSecretsTotal(int value);
     void setMultiSecretHadError(bool value);
-    void startSecretReadCandidates();
+    void startSecretRead();
     void startMultiSecretResolution();
     void readNextMultiSecret();
     QVariantList parseMultiHosts() const;
@@ -382,8 +382,6 @@ private:
     int m_secretQueueIndex = 0;
     QVariantMap m_activeMultiSecretRequest;
     QVariantList m_tempEndpoints;
-    QVariantList m_secretKeyCandidates;
-    int m_secretKeyCandidateIndex = 0;
     bool m_autoRetry = true;
     int m_retryStartMs = 5000;
     int m_retryMaxMs = 300000;

@@ -213,6 +213,7 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ### v0.7.3
 
+- Fix: isolate task poll requests from refresh cancellation to prevent stuck busy spinner
 - Fix: clear busy spinner via checkStateChanges safety-net when onActionReply never fires
 - Fix: UI alignment and field sizing across all config tabs for consistent cross-distro rendering
 - Fix: move SSL toggles into single/multi-host sections; hide PBS fields when disabled
