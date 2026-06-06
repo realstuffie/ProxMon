@@ -79,21 +79,8 @@ ColumnLayout {
                     implicitHeight: 14
                 }
 
-                Kirigami.Icon {
-                    source: "computer"
-                    implicitWidth: 18
-                    implicitHeight: 18
-                }
-
-                PlasmaComponents.Label {
-                    text: root.anonymizeNodeName(root.nodeModel.node, root.nodeIndex)
-                    font.bold: true
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                }
-
                 Rectangle {
-                    implicitWidth: 56
+                    implicitWidth: 46
                     implicitHeight: 16
                     radius: root.uiRadiusL
                     color: root.nodeModel.status === "online"
@@ -108,23 +95,28 @@ ColumnLayout {
                     }
                 }
 
-                Item { }
+                PlasmaComponents.Label {
+                    text: root.anonymizeNodeName(root.nodeModel.node, root.nodeIndex)
+                    font.bold: true
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                    topPadding: -3
+                }
 
                 RowLayout {
                     spacing: 4
-                    visible: root.isCollapsed
 
                     Kirigami.Icon {
                         source: "computer-symbolic"
-                        implicitWidth: 12
-                        implicitHeight: 12
-                        opacity: 0.7
+                        implicitWidth: 14
+                        implicitHeight: 14
                     }
 
                     PlasmaComponents.Label {
                         text: root.getRunningVmsForNode(root.nodeName) + "/" + root.getTotalVmsForNode(root.nodeName)
                         font.pixelSize: 10
-                        opacity: 0.7
+                        font.family: "JetBrains Mono"
+                        opacity: 0.9
                     }
 
                     Item { implicitWidth: 4 }
@@ -133,13 +125,13 @@ ColumnLayout {
                         source: "lxc"
                         implicitWidth: 12
                         implicitHeight: 12
-                        opacity: 0.7
                     }
 
                     PlasmaComponents.Label {
                         text: root.getRunningLxcForNode(root.nodeName) + "/" + root.getTotalLxcForNode(root.nodeName)
                         font.pixelSize: 10
-                        opacity: 0.7
+                        font.family: "JetBrains Mono"
+                        opacity: 0.9
                     }
                 }
             }
@@ -148,6 +140,7 @@ ColumnLayout {
                 spacing: 12
 
                 PlasmaComponents.Label {
+                    Layout.leftMargin: 8
                     text: "CPU: " + root.safeCpuPercent(root.nodeModel.cpu).toFixed(1) + "%"
                     font.pixelSize: 12
                 }
@@ -159,10 +152,22 @@ ColumnLayout {
 
                 Item { Layout.fillWidth: true }
 
-                PlasmaComponents.Label {
-                    text: Math.floor(root.nodeModel.uptime / 86400) + "d " + Math.floor((root.nodeModel.uptime % 86400) / 3600) + "h"
-                    font.pixelSize: 11
-                    opacity: 0.7
+                RowLayout {
+                    spacing: 4
+                    Layout.rightMargin: 7
+
+                    Kirigami.Icon {
+                        source: "alarm-symbolic"
+                        implicitWidth: 14
+                        implicitHeight: 14
+                    }
+
+                    PlasmaComponents.Label {
+                        text: Math.floor(root.nodeModel.uptime / 86400) + "d " + Math.floor((root.nodeModel.uptime % 86400) / 3600) + "h"
+                        font.pixelSize: 11
+                        font.family: "JetBrains Mono"
+                        opacity: 0.85
+                    }
                 }
             }
         }
