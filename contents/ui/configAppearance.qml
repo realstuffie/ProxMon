@@ -9,7 +9,8 @@ import org.kde.kcmutils as KCM
 KCM.SimpleKCM {
     id: root
     /* Connection-tab cfg_* keys are also injected into every KCM page by Plasma.
-       Declare inert placeholders here. */
+       Declare inert placeholders here.
+    */
     property string cfg_proxmoxHost: ""
     property string cfg_proxmoxHostDefault: ""
     property int cfg_proxmoxPort: 8006

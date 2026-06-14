@@ -504,5 +504,13 @@ inline quint32 getKeysym(Qt::Key key, const QString &text, int location)
         }
     }
 
+    // Ctrl+key sets text to a control character (e.g. Ctrl+C → \x03) which
+    // fails the cp >= 0x20 check above. Recover the base keysym from the Qt
+    // key code so the server sees the correct key identity regardless of modifiers.
+    if (key >= Qt::Key_A && key <= Qt::Key_Z)
+        return quint32(key) + 0x20; // Qt Key_A–Z are uppercase; send lowercase keysym
+    if (key >= Qt::Key_Space && key < Qt::Key(0x100))
+        return quint32(key);
+
     return 0;
 }

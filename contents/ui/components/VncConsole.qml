@@ -40,10 +40,11 @@ Window {
     minimumHeight: 480
     visible: true
 
-    // WebSocket-to-TCP shim: libvncclient speaks raw TCP; Proxmox only exposes
-    // a WebSocket endpoint (vncwebsocket). VncWsProxy binds a random local TCP
-    // port, accepts libvncclient's connection, and bridges bytes over a WS
-    // connection to Proxmox — all transparent to libvncclient.
+    /* WebSocket-to-TCP shim: libvncclient speaks raw TCP; Proxmox only exposes
+       a WebSocket endpoint (vncwebsocket). VncWsProxy binds a random local TCP
+       port, accepts libvncclient's connection, and bridges bytes over a WS
+       connection to Proxmox — all transparent to libvncclient.
+    */
     ProxMon.VncWsProxy {
         id: wsProxy
         host:       consoleWindow.host
@@ -104,22 +105,6 @@ Window {
         }
     }
 
-    // Debounce window-resize → SetDesktopSize so we don't spam QEMU during
-    // a drag. Fires 300ms after the last width/height change with the final
-    // dimensions. Connected via Window.onWidthChanged/onHeightChanged below.
-    Timer {
-        id: resizeDebounce
-        interval: 100
-        repeat: false
-        onTriggered: {
-            if (vncClient.state === "connected"
-                && consoleWindow.width > 0 && consoleWindow.height > 0) {
-                vncClient.resizeRemote(consoleWindow.width, consoleWindow.height)
-            }
-        }
-    }
-    onWidthChanged:  resizeDebounce.restart()
-    onHeightChanged: resizeDebounce.restart()
 
     Rectangle {
         anchors.fill: parent
@@ -135,10 +120,11 @@ Window {
                 acceptedButtons: Qt.AllButtons
                 hoverEnabled: true
 
-                // Map canvas (window) coords to framebuffer coords using
-                // the same aspect-preserving fit math as VncFrameView::paint.
-                // Returns null if the cursor is in the letterbox/pillarbox
-                // area outside the rendered framebuffer.
+                /* Map canvas (window) coords to framebuffer coords using
+                   the same aspect-preserving fit math as VncFrameView::paint.
+                   Returns null if the cursor is in the letterbox/pillarbox
+                   area outside the rendered framebuffer.
+                */
                 function mapToFrame(mx, my) {
                     var fbW = vncClient.frameWidth
                     var fbH = vncClient.frameHeight
@@ -241,12 +227,12 @@ Window {
 
     onClosing: {
         reconnectTimer.stop()
-        resizeDebounce.stop()
-        // Stop the proxy first — this aborts the loopback TCP socket so
-        // rfbInitClient (which is blocked waiting for RFB handshake bytes)
-        // sees a connection error and exits promptly. Without this, disconnect()
-        // would block in m_thread->wait() indefinitely because the event loop
-        // is suspended and the proxy can never deliver bytes to unblock the thread.
+        /* Stop the proxy first — this aborts the loopback TCP socket so
+           rfbInitClient (which is blocked waiting for RFB handshake bytes)
+           sees a connection error and exits promptly. Without this, disconnect()
+           would block in m_thread->wait() indefinitely because the event loop
+           is suspended and the proxy can never deliver bytes to unblock the thread.
+        */
         wsProxy.stop()
         vncClient.disconnect()
     }

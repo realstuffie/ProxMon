@@ -35,12 +35,12 @@ public:
     Q_INVOKABLE void sendPointerEvent(int x, int y, int qtButtons);
     Q_INVOKABLE void sendWheelEvent(int x, int y, int steps, bool up, bool horizontal = false);
     Q_INVOKABLE void allKeysUp();
-    Q_INVOKABLE void resizeRemote(int width, int height);
 
-    // Called from the worker-thread updateCallback to mark that new pixel data
-    // arrived. The poll loop copies + emits once after HandleRFBServerMessage
-    // so all dirty-rect tiles in one server message are coalesced into a single
-    // frameUpdated signal instead of N separate copies and paints.
+    /*  Called from the worker-thread updateCallback to mark that new pixel data
+        arrived. The poll loop copies + emits once after HandleRFBServerMessage
+        so all dirty-rect tiles in one server message are coalesced into a single
+        frameUpdated signal instead of N separate copies and paints.
+    */
     void markFrameDirty() noexcept { m_frameDirty.store(true, std::memory_order_relaxed); }
 
 signals:

@@ -114,7 +114,7 @@ ColumnLayout {
                     visible: root.isCollapsed
 
                     Kirigami.Icon {
-                        source: "computer-symbolic"
+                        source: "vm"
                         implicitWidth: 12
                         implicitHeight: 12
                         opacity: 0.7
@@ -184,7 +184,7 @@ ColumnLayout {
                 spacing: 6
 
                 Kirigami.Icon {
-                    source: "computer-symbolic"
+                    source: "vm"
                     implicitWidth: 14
                     implicitHeight: 14
                 }

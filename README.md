@@ -213,6 +213,9 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 
 ### v0.7.3
 
+- Refactor: node card header — status pill replaces computer icon, always-visible VM/CT counts
+- Refactor: uptime now shows alarm icon, JetBrains Mono font, right-aligned in stats row
+- Chore: remove legacy secret key candidate fallback chain
 - Fix: isolate task poll requests from refresh cancellation to prevent stuck busy spinner
 - Fix: clear busy spinner via checkStateChanges safety-net when onActionReply never fires
 - Fix: UI alignment and field sizing across all config tabs for consistent cross-distro rendering

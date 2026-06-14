@@ -80,19 +80,12 @@ ColumnLayout {
                 }
 
                 Rectangle {
-                    implicitWidth: 46
-                    implicitHeight: 16
-                    radius: root.uiRadiusL
+                    implicitWidth: 10
+                    implicitHeight: 10
+                    radius: 5
                     color: root.nodeModel.status === "online"
                         ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
                         : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
-
-                    PlasmaComponents.Label {
-                        anchors.centerIn: parent
-                        text: root.nodeModel.status
-                        color: "white"
-                        font.pixelSize: 9
-                    }
                 }
 
                 PlasmaComponents.Label {
@@ -107,14 +100,14 @@ ColumnLayout {
                     spacing: 4
 
                     Kirigami.Icon {
-                        source: "computer-symbolic"
+                        source: "vm"
                         implicitWidth: 14
                         implicitHeight: 14
                     }
 
                     PlasmaComponents.Label {
                         text: root.getRunningVmsForNode(root.nodeName) + "/" + root.getTotalVmsForNode(root.nodeName)
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.family: "JetBrains Mono"
                         opacity: 0.9
                     }
@@ -123,13 +116,13 @@ ColumnLayout {
 
                     Kirigami.Icon {
                         source: "lxc"
-                        implicitWidth: 12
-                        implicitHeight: 12
+                        implicitWidth: 14
+                        implicitHeight: 14
                     }
 
                     PlasmaComponents.Label {
                         text: root.getRunningLxcForNode(root.nodeName) + "/" + root.getTotalLxcForNode(root.nodeName)
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.family: "JetBrains Mono"
                         opacity: 0.9
                     }
@@ -158,13 +151,13 @@ ColumnLayout {
 
                     Kirigami.Icon {
                         source: "alarm-symbolic"
-                        implicitWidth: 14
-                        implicitHeight: 14
+                        implicitWidth: 16
+                        implicitHeight: 16
                     }
 
                     PlasmaComponents.Label {
                         text: Math.floor(root.nodeModel.uptime / 86400) + "d " + Math.floor((root.nodeModel.uptime % 86400) / 3600) + "h"
-                        font.pixelSize: 11
+                        font.pixelSize: 12
                         font.family: "JetBrains Mono"
                         opacity: 0.85
                     }
@@ -190,7 +183,7 @@ ColumnLayout {
                 spacing: 6
 
                 Kirigami.Icon {
-                    source: "computer-symbolic"
+                    source: "vm"
                     implicitWidth: 14
                     implicitHeight: 14
                 }
@@ -198,7 +191,7 @@ ColumnLayout {
                 PlasmaComponents.Label {
                     text: "VMs (" + root.getRunningVmsForNode(root.nodeName) + "/" + root.nodeVms.length + ")"
                     font.bold: true
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                 }
             }
 
@@ -251,7 +244,7 @@ ColumnLayout {
                 PlasmaComponents.Label {
                     text: "Containers (" + root.getRunningLxcForNode(root.nodeName) + "/" + root.nodeLxc.length + ")"
                     font.bold: true
-                    font.pixelSize: 11
+                    font.pixelSize: 12
                 }
             }
 

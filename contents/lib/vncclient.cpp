@@ -2,6 +2,7 @@
 #include "vnckeysym.h"
 
 #include <rfb/rfbclient.h>
+#include <string.h> // explicit_bzero
 #include <QCoreApplication>
 #include <QDebug>
 
@@ -86,11 +87,7 @@ void VncClient::connectToVnc(const QString &host, int port)
     m_ticket.fill(0);
     m_ticket.clear();
 
-    // "desktopsize" advertises rfbEncodingDesktopSize (-223) so the server knows
-    // the client supports both server- and client-initiated resize (SetDesktopSize
-    // type 251). Without this, QEMU may close the connection on resize rather
-    // than sending an inline DesktopResize pseudo-encoding ack.
-    m_rfb->appData.encodingsString = "tight zrle hextile raw desktopsize";
+    m_rfb->appData.encodingsString = "tight zrle hextile raw";
 
     // RFB session runs on a worker thread — rfbInitClient blocks on I/O.
     // Qt-facing work is marshalled back via QueuedConnection. See docs/ARCHITECTURE.md.
@@ -104,9 +101,10 @@ void VncClient::connectToVnc(const QString &host, int port)
 
         bool ok = rfbInitClient(rfb, nullptr, nullptr);
         if (!ok) {
+            // rfbInitClient freed rfb on failure — do not touch it.
+            // ticketSlot was saved before the call so it's still valid.
             if (ticketSlot) {
-                volatile char *p = ticketSlot;
-                while (*p) *p++ = '\0';
+                explicit_bzero(ticketSlot, strlen(ticketSlot) + 1);
                 free(ticketSlot);
             }
             m_rfb = nullptr;
@@ -119,12 +117,12 @@ void VncClient::connectToVnc(const QString &host, int port)
             return;
         }
 
-        // Handshake complete — zero and free the ticket immediately.
+        // Handshake complete — null out the client-data slot first so
+        // GetPassword cannot race the free, then zero and release.
         if (ticketSlot) {
-            volatile char *p = ticketSlot;
-            while (*p) *p++ = '\0';
-            free(ticketSlot);
             rfbClientSetClientData(rfb, (void*)1, nullptr);
+            explicit_bzero(ticketSlot, strlen(ticketSlot) + 1);
+            free(ticketSlot);
         }
 
         QMetaObject::invokeMethod(this, [this]() {
@@ -211,10 +209,11 @@ void VncClient::disconnect()
         m_thread = nullptr;
     }
 
-    // Purge any QueuedConnection invokeMethod calls the worker thread posted
-    // before it exited. If left in the queue they would fire after this object
-    // is destroyed (use-after-free → crash when closing the window during
-    // connection). Must run after wait() so no new events can be posted.
+    /* Purge any QueuedConnection invokeMethod calls the worker thread posted
+       before it exited. If left in the queue they would fire after this object
+       is destroyed (use-after-free → crash when closing the window during
+       connection). Must run after wait() so no new events can be posted.
+    */
     QCoreApplication::removePostedEvents(this);
 
     if (m_rfb) {
@@ -306,30 +305,4 @@ void VncClient::setFrameSize(int w, int h)
     m_frameWidth  = w;
     m_frameHeight = h;
     emit frameSizeChanged();
-}
-
-void VncClient::resizeRemote(int width, int height)
-{
-    if (!m_rfb || width <= 0 || height <= 0) return;
-
-    // Hand-crafted SetDesktopSize (251) — libvncclient ≤ 0.9.15 truncates the SCREEN array (LibVNC #640).
-    // 8-byte header + 1 × 16-byte SCREEN = 24 bytes. Posted to the worker thread
-    // so the write never races with HandleRFBServerMessage.
-    postCmd([width, height](rfbClient *rfb) {
-        const quint16 w = static_cast<quint16>(width);
-        const quint16 h = static_cast<quint16>(height);
-        char buf[24] = {0};
-        buf[0]  = 251;
-        buf[2]  = static_cast<char>((w >> 8) & 0xFF);
-        buf[3]  = static_cast<char>( w        & 0xFF);
-        buf[4]  = static_cast<char>((h >> 8) & 0xFF);
-        buf[5]  = static_cast<char>( h        & 0xFF);
-        buf[6]  = 1;
-        buf[16] = static_cast<char>((w >> 8) & 0xFF);
-        buf[17] = static_cast<char>( w        & 0xFF);
-        buf[18] = static_cast<char>((h >> 8) & 0xFF);
-        buf[19] = static_cast<char>( h        & 0xFF);
-        if (!WriteToRFBServer(rfb, buf, sizeof(buf)))
-            qWarning() << "VncClient: SetDesktopSize write failed" << width << "x" << height;
-    });
 }

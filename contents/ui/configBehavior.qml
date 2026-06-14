@@ -8,7 +8,8 @@ KCM.SimpleKCM {
     id: root
 
     /* Connection-tab cfg_* keys are also injected into every KCM page by Plasma.
-       Declare inert placeholders here. */
+       Declare inert placeholders here.
+    */
     property string cfg_proxmoxHost: ""
     property string cfg_proxmoxHostDefault: ""
     property int cfg_proxmoxPort: 8006
@@ -69,7 +70,8 @@ KCM.SimpleKCM {
         Avoid adding custom properties directly onto QQC2.ComboBox. Some Plasma/Qt
         versions will throw "Cannot override FINAL property" which prevents the
         entire KCM page (Behavior tab) from loading.
-        Store the selected value in a separate QtObject and alias to it. */
+        Store the selected value in a separate QtObject and alias to it. 
+    */
     QtObject {
         id: sortingValue
         property string value: "status"
@@ -333,7 +335,7 @@ KCM.SimpleKCM {
             opacity: 0.3
         }
 
-        // ==================== NETWORK SECTION ====================
+        //  Network section
         Kirigami.Heading {
             text: "Network"
             level: 2
@@ -364,7 +366,7 @@ KCM.SimpleKCM {
             opacity: 0.3
         }
 
-            // ==================== PBS FILTERING SECTION ====================
+            //  PBS Filtering
         Kirigami.Heading {
             text: "PBS Backup Filtering"
             level: 2
@@ -433,7 +435,7 @@ KCM.SimpleKCM {
             opacity: 0.3
         }
 
-        // ==================== NOTIFICATIONS SECTION ====================
+        //  Notifications section
         Kirigami.Heading {
             text: "Notification Settings"
             level: 2
@@ -781,7 +783,7 @@ KCM.SimpleKCM {
             opacity: 0.3
         }
 
-        // ==================== INFO SECTION ====================
+        // Info section 
         RowLayout {
             spacing: 8
 
