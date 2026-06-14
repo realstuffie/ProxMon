@@ -222,6 +222,10 @@ GPL-3.0 or later. See [LICENSE](LICENSE) for details.
 - Fix: move SSL toggles into single/multi-host sections; hide PBS fields when disabled
 - Fix: add Delete Default button to connection defaults section
 - Fix: label and dropdown alignment in Behavior and Appearance tabs
+- Refactor: drop VNC remote resize (SetDesktopSize); simplify encoding string
+- Fix: ctrl+key keysym recovery in VNC console when modifiers suppress text
+- Fix: use explicit_bzero for ticket zeroization; null client-data slot before free
+- Chore: update lxc/vm icons
 
 ### v0.7.2
 

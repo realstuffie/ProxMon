@@ -8,6 +8,12 @@
 - fix(configGeneral): add Delete Default button to defaults section
 - fix(configBehavior): align labels and dropdowns consistently
 - fix(configAppearance): fix label vertical alignment against spinboxes
+- refactor(NodeSection): node header status pill → 10×10 dot; computer-symbolic → vm icon; font size bumps
+- chore: remove legacy secret key candidate fallback chain
+- refactor(vncclient): drop remote resize (SetDesktopSize) and desktopsize encoding
+- fix(vnckeysym): recover base keysym from Qt key code when modifiers suppress text (ctrl+key)
+- fix(vncclient): use explicit_bzero for ticket zeroization; null client-data slot before free to close GetPassword race
+- chore(icons): update lxc/vm icons
 
 ## v0.7.2
 - fix(VmRow/LxcRow): bundle JetBrains Mono for consistent cross-distro font metrics
