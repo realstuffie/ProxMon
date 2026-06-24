@@ -58,7 +58,7 @@ log "INFO:   stored:  ${STORED_FINGERPRINT:-<none>}"
 log "INFO:   current: $CURRENT_FINGERPRINT"
 log "INFO: Starting rebuild..."
 
-if (cd "$SCRIPT_DIR" && bash "$INSTALL_SCRIPT" --no-deps >> "$LOG_FILE" 2>&1); then
+if (cd "$SCRIPT_DIR" && bash "$INSTALL_SCRIPT" --rebuild >> "$LOG_FILE" 2>&1); then
   printf '%s' "$CURRENT_FINGERPRINT" > "$FINGERPRINT_FILE"
   log "INFO: Rebuild and reinstall succeeded."
 else

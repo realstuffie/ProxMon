@@ -37,8 +37,13 @@ Item {
 
     implicitWidth: compactLayout.implicitWidth
     implicitHeight: compactLayout.implicitHeight
-    width: compactLayout.implicitWidth
-    height: compactLayout.implicitHeight
+    // The panel sizes applets via Layout.* hints and ignores a direct width
+    // binding. Pin all three to content width and disable fill so the panel
+    // can't hand us a wider slot (the trailing gap).
+    Layout.fillWidth: false
+    Layout.minimumWidth: compactLayout.implicitWidth
+    Layout.preferredWidth: compactLayout.implicitWidth
+    Layout.maximumWidth: compactLayout.implicitWidth
 
     function averageCpuText() {
         if (typeof safeCpuPercent !== "function") return "-"
@@ -89,24 +94,18 @@ Item {
         z: 998
     }
 
-    TextMetrics {
-        id: labelMetrics
-        font.pixelSize: 13
-        text: "99%"
-    }
-
     RowLayout {
         id: compactLayout
         anchors.centerIn: parent
-        spacing: 4
-
-        Item { implicitWidth: 3 }
+        spacing: Kirigami.Units.smallSpacing
 
         Kirigami.Icon {
             id: proxmoxIcon
             source: Qt.resolvedUrl("../../icons/proxmox-monitor.svg")
-            implicitWidth: 22
-            implicitHeight: 22
+            Layout.alignment: Qt.AlignVCenter
+            // scales with the user's icon-size setting; ~22px at default scale
+            implicitWidth: Kirigami.Units.iconSizes.smallMedium
+            implicitHeight: Kirigami.Units.iconSizes.smallMedium
 
 
             SequentialAnimation {
@@ -176,7 +175,7 @@ Item {
                 return averageCpuText()
             }
             font.pixelSize: 13
-            Layout.minimumWidth: labelMetrics.width + 2
+            Layout.alignment: Qt.AlignVCenter
             rightPadding: compactRoot.compactMode === "lastUpdate" ? 20 : 0
             color: hoverHandler.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
         }

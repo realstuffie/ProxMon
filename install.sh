@@ -24,10 +24,12 @@ run_root() {
 AUTO_DEPS=1
 INSTALL_STANDALONE_QML_MODULE=0
 INSTALL_WATCHER=1
+REBUILD_ONLY=0
 for arg in "$@"; do
   case "$arg" in
     --no-deps) AUTO_DEPS=0 ;;
     --no-watcher) INSTALL_WATCHER=0 ;;
+    --rebuild) REBUILD_ONLY=1 ; AUTO_DEPS=0 ; INSTALL_WATCHER=0 ;;
     --install-standalone-qml-module) INSTALL_STANDALONE_QML_MODULE=1 ;;
     -h|--help)
       cat <<'EOF'
@@ -263,7 +265,12 @@ if [ ! -d "$PLASMOID_CONTENTS" ]; then
 fi
 
 # Checksum sync contents — skips unchanged files.
-if [ -d "$PLASMOID_CONTENTS" ]; then
+# --rebuild: running from the installed dir so src == dst; install .so directly instead.
+if [ "$REBUILD_ONLY" -eq 1 ]; then
+  mkdir -p "$PLASMOID_CONTENTS/lib/proxmox"
+  cp "$BUILD_DIR/libproxmoxclientplugin.so" "$PLASMOID_CONTENTS/lib/proxmox/"
+  printf '%s\n' "[ install] Plugin installed → $PLASMOID_CONTENTS/lib/proxmox/libproxmoxclientplugin.so"
+elif [ -d "$PLASMOID_CONTENTS" ]; then
   sync_contents "contents" "$PLASMOID_CONTENTS"
 fi
 

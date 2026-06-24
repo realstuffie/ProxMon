@@ -56,9 +56,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 ### Known bugs / limitations
 
-- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
-
-- **VNC console — resize down not honoured**: shrinking the console window sends a VNC `SetDesktopSize` request, but QEMU's VNC server does not honour shrink requests regardless of the video backend. The display will scale to fit the smaller window (letterboxed) while the remote framebuffer stays at the previous resolution. Resize up works correctly. A workaround using the QEMU guest agent is planned.
+- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Legacy keys are no longer auto-migrated and can cause the widget to break. If the widget shows "Missing Token Secret" or behaves unexpectedly, open KWallet and remove any ProxMon-related entries, then re-enter the secret in settings and click **Update Keyring**, then wait a moment, or logout and in.
 
 - **LXC terminal — resize reflow not guaranteed**: resizing the terminal window sends `SIGWINCH` to the running process, but reflow behaviour varies by application. Some programs (e.g. shells and editors) will redraw correctly; others may not reflow their output until the next render or keypress or not at all. This is a quirk of most terminal emulators and is not specific to ProxMon.
 
