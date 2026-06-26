@@ -110,7 +110,7 @@ Item {
 
             SequentialAnimation {
                 id: heartbeatAnimation
-                running: compactRoot.loading || compactRoot.isRefreshing
+                running: false
                 loops: Animation.Infinite
 
                 PropertyAnimation {
@@ -137,12 +137,22 @@ Item {
             Connections {
                 target: compactRoot
                 function onLoadingChanged() {
-                    if (!compactRoot.loading && !compactRoot.isRefreshing)
+                    if (compactRoot.loading) {
+                        heartbeatAnimation.loops = Animation.Infinite
+                        heartbeatAnimation.restart()
+                    } else if (!compactRoot.isRefreshing) {
+                        heartbeatAnimation.stop()
                         proxmoxIcon.scale = 1.0
+                    }
                 }
                 function onIsRefreshingChanged() {
-                    if (!compactRoot.loading && !compactRoot.isRefreshing)
+                    if (compactRoot.isRefreshing && !compactRoot.loading) {
+                        heartbeatAnimation.loops = 1
+                        heartbeatAnimation.restart()
+                    } else if (!compactRoot.isRefreshing && !compactRoot.loading) {
+                        heartbeatAnimation.stop()
                         proxmoxIcon.scale = 1.0
+                    }
                 }
             }
         }
