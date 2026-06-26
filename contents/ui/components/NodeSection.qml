@@ -147,12 +147,12 @@ ColumnLayout {
 
                 RowLayout {
                     spacing: 4
-                    Layout.rightMargin: 7
 
                     Kirigami.Icon {
-                        source: "alarm-symbolic"
-                        implicitWidth: 16
-                        implicitHeight: 16
+                        implicitWidth: 18
+                        implicitHeight: 18
+                        Layout.alignment: Qt.AlignVCenter
+                        source: "chronometer"
                     }
 
                     PlasmaComponents.Label {
