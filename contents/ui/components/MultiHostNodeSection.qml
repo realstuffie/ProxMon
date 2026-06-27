@@ -50,7 +50,6 @@ ColumnLayout {
 
     Rectangle {
         Layout.fillWidth: true
-        Layout.rightMargin: root.scrollbarReserve
         Layout.preferredHeight: 70
         radius: root.uiRadiusL
         color: Qt.rgba(root.uiNodeColor.r, root.uiNodeColor.g, root.uiNodeColor.b, root.uiNodeCardOpacity * root.uiWindowOpacity)
@@ -91,24 +90,6 @@ ColumnLayout {
                     elide: Text.ElideRight
                 }
 
-                Rectangle {
-                    implicitWidth: 52
-                    implicitHeight: 16
-                    radius: root.uiRadiusL
-                    color: root.nodeModel && root.nodeModel.status === "online"
-                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
-                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
-
-                    PlasmaComponents.Label {
-                        anchors.centerIn: parent
-                        text: root.nodeModel ? root.nodeModel.status : ""
-                        color: "white"
-                        font.pixelSize: 9
-                    }
-                }
-
-                Item { }
-
                 RowLayout {
                     spacing: 4
                     visible: root.isCollapsed
@@ -141,6 +122,22 @@ ColumnLayout {
                         opacity: 0.7
                     }
                 }
+
+                Rectangle {
+                    implicitWidth: 52
+                    implicitHeight: 16
+                    radius: root.uiRadiusL
+                    color: root.nodeModel && root.nodeModel.status === "online"
+                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
+                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
+
+                    PlasmaComponents.Label {
+                        anchors.centerIn: parent
+                        text: root.nodeModel ? root.nodeModel.status : ""
+                        color: "white"
+                        font.pixelSize: 9
+                    }
+                }
             }
 
             RowLayout {
@@ -158,10 +155,22 @@ ColumnLayout {
 
                 Item { Layout.fillWidth: true }
 
-                PlasmaComponents.Label {
-                    text: root.nodeModel ? (Math.floor(root.nodeModel.uptime / 86400) + "d " + Math.floor((root.nodeModel.uptime % 86400) / 3600) + "h") : ""
-                    font.pixelSize: 11
-                    opacity: 0.7
+                RowLayout {
+                    spacing: 4
+
+                    Kirigami.Icon {
+                        implicitWidth: 18
+                        implicitHeight: 18
+                        Layout.alignment: Qt.AlignVCenter
+                        source: "chronometer"
+                    }
+
+                    PlasmaComponents.Label {
+                        text: root.nodeModel ? (Math.floor(root.nodeModel.uptime / 86400) + "d " + Math.floor((root.nodeModel.uptime % 86400) / 3600) + "h") : ""
+                        font.pixelSize: 12
+                        font.family: "JetBrains Mono"
+                        opacity: 0.85
+                    }
                 }
             }
         }

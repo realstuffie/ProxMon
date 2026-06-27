@@ -171,8 +171,8 @@ public:
                                const QString &node,
                                int vmid,
                                const QString &action);
-    Q_INVOKABLE void deliverConsoleAuth(const QString &sessionKey, QObject *target);
-    Q_INVOKABLE void deliverConsoleTicket(const QString &sessionKey,
+    Q_INVOKABLE void deliverConsoleAuth(const QString &requestId, QObject *target);
+    Q_INVOKABLE void deliverConsoleTicket(const QString &requestId,
                                           QObject *primary,
                                           QObject *secondary = nullptr);
     Q_INVOKABLE void openConsole(const QString &sessionKey,
@@ -247,6 +247,7 @@ signals:
                      const QString &message);
 
     void consoleReady(const QString &sessionKey,
+                  const QString &requestId,
                   const QString &host,
                   const QString &node,
                   const QString &kind,
@@ -259,6 +260,7 @@ signals:
     // so the LxcTerminal can complete the "user:ticket\n" handshake.
     // Auth header is delivered out-of-band via deliverConsoleAuth().
     void lxcConsoleReady(const QString &sessionKey,
+                         const QString &requestId,
                          const QString &host,
                          int apiPort,
                          const QString &node,
@@ -303,6 +305,8 @@ private:
     void resetTransientStateForModeChange();
     void resetMultiTempData();
     void dispatchSingleFetchWithSecret(const QString &secret);
+    void dispatchSingleNodeChildrenWithSecret(const QVariantList &nodeNames,
+                                              const QString &secret);
     bool dispatchSingleActionWithSecret(const QString &kind,
                                         const QString &node,
                                         int vmid,
@@ -380,6 +384,7 @@ private:
     bool m_multiSecretHadError = false;
     QVariantList m_secretQueue;
     int m_secretQueueIndex = 0;
+    quint64 m_secretResolutionGeneration = 0;
     QVariantMap m_activeMultiSecretRequest;
     QVariantList m_tempEndpoints;
     bool m_autoRetry = true;
@@ -398,10 +403,9 @@ private:
     QVariant m_proxmoxData;
     QVariantList m_vmData;
     QVariantList m_lxcData;
-    // Stash for vmName between openConsole() and the matching ttyProxy/
-    // vncProxy reply. Keyed "kind:node:vmid". Populated in readSingle/
-    // MultiSecretFor's "console" branches; drained in the ttyProxyReady/
-    // vncProxyReady lambdas. Bounded by in-flight console requests.
+    // Console handoff state is keyed by a unique request ID so concurrent
+    // consoles on the same endpoint cannot consume each other's metadata,
+    // auth header, or proxy ticket.
     QHash<QString, QString> m_pendingConsoleNames;
     QVariant m_displayedProxmoxData;
     QVariantList m_displayedVmData;

@@ -11,6 +11,7 @@ Window {
     property string nodeName: ""
     property int vmid: 0
     property string sessionKey: ""
+    property string consoleRequestId: ""
     property string kind: ""
     property string host: ""
     property int vncPort: 0
@@ -27,8 +28,8 @@ Window {
         wsProxy.vncPort = port
         // Deliver auth header and ticket from C++ registry — never touches JS heap.
         if (controller) {
-            controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
-            controller.deliverConsoleTicket(consoleWindow.sessionKey, wsProxy, vncClient)
+            controller.deliverConsoleAuth(consoleWindow.consoleRequestId, wsProxy)
+            controller.deliverConsoleTicket(consoleWindow.consoleRequestId, wsProxy, vncClient)
         }
         wsProxy.start()
     }
@@ -219,8 +220,8 @@ Window {
     Component.onCompleted: {
         // Deliver auth header and ticket from C++ registry before starting proxy.
         if (controller) {
-            controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
-            controller.deliverConsoleTicket(consoleWindow.sessionKey, wsProxy, vncClient)
+            controller.deliverConsoleAuth(consoleWindow.consoleRequestId, wsProxy)
+            controller.deliverConsoleTicket(consoleWindow.consoleRequestId, wsProxy, vncClient)
         }
         wsProxy.start()
     }

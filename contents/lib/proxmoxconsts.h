@@ -11,6 +11,7 @@ namespace ProxmoxConst {
 namespace Kind {
     inline const QString Qemu     = QStringLiteral("qemu");
     inline const QString Lxc      = QStringLiteral("lxc");
+    inline const QString Node     = QStringLiteral("node");
     inline const QString Nodes    = QStringLiteral("nodes");
     inline const QString Children = QStringLiteral("children"); // internal multi-host dispatch
     inline const QString Action   = QStringLiteral("action");   // internal dispatch

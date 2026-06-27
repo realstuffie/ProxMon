@@ -134,6 +134,10 @@ PlasmoidItem {
     }
     property var openConsoles: ({})
 
+    function consoleWindowKey(sessionKey, kind, node, vmid) {
+        return String(sessionKey || "single") + "::" + String(kind) + "::" + String(node) + "::" + String(vmid)
+    }
+
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl === true
     property bool pbsEnabled: Plasmoid.configuration.pbsEnabled === true
@@ -241,7 +245,7 @@ PlasmoidItem {
         return hasCoreConfig && controller.refreshResolvingSecrets
     }
     property bool defaultsLoaded: false
-    property bool devMode: false
+    property bool devMode: true
     readonly property bool debugLogToJournal: true
     property int footerClickCount: 0
 
@@ -332,20 +336,6 @@ PlasmoidItem {
         return x * 100
     }
  
-        ProxMon.ProxmoxClient {
-        id: api
-        // For multi-host fetching we use requestNodesFor/requestQemuFor/requestLxcFor.
-        host: root.proxmoxHost
-        port: root.proxmoxPort
-        tokenId: root.apiTokenId
-        tokenSecret: ""
-        ignoreSslErrors: root.ignoreSsl
-        lowLatency: Plasmoid.configuration.lowLatency !== false
-
-
-    }
-
-
     // Redact sensitive identity fragments in debug logs / copied debug output.
     // Matches "user@realm" and "!tokenid"
     property string secretRedactRegex: "([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)|!([A-Za-z0-9._:-]+)"
@@ -1030,15 +1020,6 @@ PlasmoidItem {
         armedTimer.restart()
     }
 
-    // Backwards-compatible helper (no longer used by action flow, but kept to avoid dangling references)
-    function runPendingAction() {
-        if (!pendingAction) return
-        var a = pendingAction
-        pendingAction = null
-        setActionBusy(a.node, a.kind, a.vmid, true)
-        api.requestAction(a.kind, a.node, a.vmid, a.action, ++actionSeq)
-    }
-
     // Toggle node collapsed state
     function toggleNodeCollapsed(nodeName, sessionKey) {
         var k = (connectionMode === "multiHost" && sessionKey) ? endpointNodeKey(sessionKey, nodeName) : nodeName
@@ -1149,12 +1130,6 @@ PlasmoidItem {
         // Atomically swap displayed data when all requests finish
 
 
-    // Sequencing for actions
-    property int actionSeq: 0
-
-    // Confirmation prompt state
-    property var pendingAction: null
-
     // Confirm is two-click (see confirmAndRunAction()); QQC2.Popup overlays are unreliable in plasmoids.
 
     Timer {
@@ -1185,7 +1160,7 @@ PlasmoidItem {
     function triggerRefreshFromConfigChange(reason) {
         logDebug("config change: " + (reason || "unknown"))
         // Cancel in-flight requests and retry timers so we restart cleanly.
-        api.cancelAll()
+        controller.cancelRefresh()
         errorMessage = ""
         retryStatusText = ""
         armedActionKey = ""
@@ -1217,18 +1192,6 @@ PlasmoidItem {
     function fetchData() {
         errorMessage = ""
         controller.fetchData()
-    }
-
-    function fetchVMs(nodeName) {
-        if (!nodeName) return
-        logDebug("fetchVMs: Requesting VMs for node: " + nodeName)
-        api.requestQemu(nodeName, root.refreshSeq)
-    }
-
-    function fetchLXC(nodeName) {
-        if (!nodeName) return
-        logDebug("fetchLXC: Requesting LXCs for node: " + nodeName)
-        api.requestLxc(nodeName, root.refreshSeq)
     }
 
     // Use displayed data for counts
@@ -1272,10 +1235,11 @@ PlasmoidItem {
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             root.setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
-        function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, apiPort, ignoreSsl) {
-            var key = kind + ":" + vmid
+        function onConsoleReady(sessionKey, requestId, host, node, kind, vmid, vmName, vncPort, apiPort, ignoreSsl) {
+            var key = root.consoleWindowKey(sessionKey, kind, node, vmid)
             if (root.openConsoles[key]) {
                 // Auth header and ticket for reconnect are stashed in controller registry.
+                root.openConsoles[key].consoleRequestId = requestId
                 root.openConsoles[key].connectWithTicket(vncPort)
                 root.openConsoles[key].raise()
                 root.openConsoles[key].requestActivate()
@@ -1289,6 +1253,7 @@ PlasmoidItem {
                 vmName: vmName || (kind + " " + vmid),
                 vncPort: vncPort,
                 sessionKey: sessionKey,
+                consoleRequestId: requestId,
                 kind: kind,
                 apiPort: apiPort,
                 ignoreSsl: ignoreSsl
@@ -1299,13 +1264,14 @@ PlasmoidItem {
                 controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
             })
         }
-        function onLxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl) {
-            var key = "lxc:" + vmid
-            var label = vmName || ("lxc " + vmid)
+        function onLxcConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl) {
+            var kind = vmid === 0 ? "node" : "lxc"
+            var key = root.consoleWindowKey(sessionKey, kind, node, vmid)
+            var label = vmid === 0 ? (vmName || node) : (vmName || ("lxc " + vmid))
             if (root.openConsoles[key]) {
                 // Deliver fresh auth header and ticket from C++ registry.
-                controller.deliverConsoleAuth(sessionKey, root.openConsoles[key])
-                controller.deliverConsoleTicket(sessionKey, root.openConsoles[key])
+                controller.deliverConsoleAuth(requestId, root.openConsoles[key])
+                controller.deliverConsoleTicket(requestId, root.openConsoles[key])
                 root.openConsoles[key].connectWithTicket(proxyPort, user, ignoreSsl)
                 root.openConsoles[key].raise()
                 return
@@ -1329,11 +1295,16 @@ PlasmoidItem {
                 term.destroy()
             })
             term.requestReconnect.connect(function() {
-                controller.openConsole(capturedSession, "lxc", capturedNode, capturedVmid, capturedLabel)
+                if (capturedVmid === 0) {
+                    controller.openConsole(capturedSession, "node", capturedNode, 0, capturedLabel)
+                } else {
+                    controller.openConsole(capturedSession, "lxc", capturedNode, capturedVmid, capturedLabel)
+                }
             })
             // Deliver auth header and ticket from C++ registry before open().
-            controller.deliverConsoleAuth(sessionKey, term)
-            controller.deliverConsoleTicket(sessionKey, term)
+            controller.deliverConsoleAuth(requestId, term)
+            controller.deliverConsoleTicket(requestId, term)
+            term.windowPreset = Plasmoid.configuration.terminalSize || "medium"
             term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl)
         }
         function onConsoleError(node, kind, vmid, message) {
@@ -1522,7 +1493,7 @@ PlasmoidItem {
     }
 
     // DataSource for running local commands (notifications + reading defaults).
-    // NOTE: API calls are handled by the native ProxMon.ProxmoxClient (QNetworkAccessManager),
+    // NOTE: API calls are handled by the native ProxmoxController (QNetworkAccessManager),
     // so we intentionally do NOT fetch Proxmox data via "executable" anymore.
     Plasma5Support.DataSource {
         id: executable
@@ -1630,6 +1601,23 @@ PlasmoidItem {
                 visible: root.isRefreshing
                 implicitWidth: 20
                 implicitHeight: 20
+            }
+
+            PlasmaComponents.Button {
+                icon.name: "utilities-terminal"
+                visible: Plasmoid.configuration.consoleEnabled !== false
+                      && root.connectionMode === "single"
+                      && root.configured
+                      && root.displayedProxmoxData
+                      && root.displayedProxmoxData.data
+                      && root.displayedProxmoxData.data.length > 0
+                implicitHeight: 28
+                implicitWidth: 28
+                onClicked: {
+                    var node = root.displayedProxmoxData.data[0].node
+                    controller.openConsole("", "node", node, 0, node)
+                }
+                PlasmaComponents.ToolTip { text: "Open host shell" }
             }
 
             PlasmaComponents.Button {
@@ -1755,12 +1743,10 @@ PlasmoidItem {
                 clip: true
 
                 QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
-                QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
+                QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AlwaysOff
 
-                // Reserve width for overlay scrollbar so right-side actions aren't covered.
-                // Keep this small; we also reserve it inside each row.
-                readonly property int __scrollbarGap: 2
-                readonly property int __scrollbarReserve: 2 + __scrollbarGap
+                readonly property int __scrollbarGap: 0
+                readonly property int __scrollbarReserve: 10
 
                 ColumnLayout {
                     id: mainContentColumn

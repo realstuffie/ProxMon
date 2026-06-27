@@ -145,7 +145,10 @@ void LxcTerminal::ensureWindow(const QString &vmName, const QString &nodeName)
     auto *win = new TerminalWindow();
     win->setAttribute(Qt::WA_DeleteOnClose, false);  // we manage lifetime
     win->setWindowTitle(QStringLiteral("Console — %1 (%2)").arg(vmName, nodeName));
-    win->resize(900, 560);
+    QSize winSize = {900, 560};
+    if (m_windowPreset == QStringLiteral("small"))  winSize = {700, 420};
+    if (m_windowPreset == QStringLiteral("large"))  winSize = {1200, 720};
+    win->resize(winSize);
 
     auto *central = new QWidget(win);
     auto *layout = new QVBoxLayout(central);
@@ -155,7 +158,7 @@ void LxcTerminal::ensureWindow(const QString &vmName, const QString &nodeName)
     // 0 = don't auto-start an internal shell; we drive it via sendText.
     auto *term = new QTermWidget(0, central);
     term->setColorScheme(QStringLiteral("DarkPastels"));
-    term->setScrollBarPosition(QTermWidget::ScrollBarRight);
+    term->setScrollBarPosition(QTermWidget::NoScrollBar);
     term->setTerminalFont(QFont(QStringLiteral("Monospace"), 11));
 
     // Clipboard support: Ctrl+Shift+C to copy, Ctrl+Shift+V to paste.
@@ -231,8 +234,13 @@ void LxcTerminal::openSocket()
     url.setScheme(QStringLiteral("wss"));
     url.setHost(m_host);
     url.setPort(m_apiPort);
-    url.setPath(QStringLiteral("/api2/json/nodes/%1/lxc/%2/vncwebsocket")
-                    .arg(m_node).arg(m_vmid));
+    if (m_vmid == 0) {
+        // Node-level shell: vmid=0 is the sentinel for host console
+        url.setPath(QStringLiteral("/api2/json/nodes/%1/vncwebsocket").arg(m_node));
+    } else {
+        url.setPath(QStringLiteral("/api2/json/nodes/%1/lxc/%2/vncwebsocket")
+                        .arg(m_node).arg(m_vmid));
+    }
 
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("port"), QString::number(m_proxyPort));
@@ -352,12 +360,16 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
         QTimer::singleShot(120, this, [this]() { sendCurrentResize(); });
 
         m_postAuthBytes = 0;
-        QTimer::singleShot(500, this, [this]() {
-            const int threshold = 24;
-            if (m_phase == Phase::Connected && m_ws && m_postAuthBytes < threshold) {
-                m_ws->sendTextMessage(QStringLiteral("0:1:\r"));
-            }
-        });
+        // Skip the silent-getty wake CR for node consoles (vmid==0) — it
+        // would fire mid-login-prompt and prepend a spurious newline.
+        if (m_vmid != 0) {
+            QTimer::singleShot(500, this, [this]() {
+                const int threshold = 24;
+                if (m_phase == Phase::Connected && m_ws && m_postAuthBytes < threshold) {
+                    m_ws->sendTextMessage(QStringLiteral("0:1:\r"));
+                }
+            });
+        }
         return;
     }
 

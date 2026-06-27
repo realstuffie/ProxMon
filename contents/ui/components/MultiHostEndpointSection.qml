@@ -92,6 +92,23 @@ ColumnLayout {
                 opacity: 0.7
                 font.pixelSize: 10
             }
+
+            PlasmaComponents.ToolButton {
+                flat: true
+                icon.name: "utilities-terminal"
+                visible: root.consoleEnabled && root.nodes.length === 1
+                enabled: !root.endpointOffline
+                implicitWidth: 24
+                implicitHeight: 24
+                onClicked: {
+                    var node = root.nodes[0]
+                    if (node && typeof root.onConsole === "function") {
+                        root.onConsole(root.sessionKey, "node", node.node, 0, node.node)
+                    }
+                }
+
+                PlasmaComponents.ToolTip { text: "Open host shell" }
+            }
         }
     }
 

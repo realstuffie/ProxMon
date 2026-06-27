@@ -50,25 +50,29 @@ void SecretStore::setKey(const QString &v) {
     emit keyChanged();
 }
 
-void SecretStore::readSecret() {
+void SecretStore::readSecret(const QString &key,
+                             SecretHandler onReady,
+                             ErrorHandler onError) {
     auto *job = new ReadPasswordJob(m_service, this);
-    job->setKey(m_key);
-    connect(job, &Job::finished, this, [this, job]() {
+    job->setKey(key);
+    connect(job, &Job::finished, this,
+            [job, onReady = std::move(onReady), onError = std::move(onError)]() mutable {
         if (job->error()) {
             // NotFound is common on first run; emit empty secret and no hard error.
             if (job->error() == QKeychain::EntryNotFound) {
-                emit secretReady(QString());
+                if (onReady) onReady(QString());
                 job->deleteLater();
                 return;
             }
 
             // Hard keyring failures must not be reported as an empty/missing secret,
             // otherwise multi-host resolution can misclassify them as legacy/missing state.
-            emit error(job->errorString());
+            if (onError) onError(job->errorString());
             job->deleteLater();
             return;
         }
-        emit secretReady(job->textData());
+        const QString secret = job->textData();
+        if (onReady) onReady(secret);
         job->deleteLater();
     });
     job->start();

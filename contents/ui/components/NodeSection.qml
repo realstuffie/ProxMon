@@ -51,7 +51,6 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         Layout.leftMargin: 12
-        Layout.rightMargin: root.scrollbarReserve
         Layout.preferredHeight: 70
         radius: root.uiRadiusL
         color: Qt.rgba(root.uiNodeColor.r, root.uiNodeColor.g, root.uiNodeColor.b, root.uiNodeCardOpacity * root.uiWindowOpacity)
@@ -77,15 +76,6 @@ ColumnLayout {
                     source: root.isCollapsed ? "arrow-right" : "arrow-down"
                     implicitWidth: 14
                     implicitHeight: 14
-                }
-
-                Rectangle {
-                    implicitWidth: 10
-                    implicitHeight: 10
-                    radius: 5
-                    color: root.nodeModel.status === "online"
-                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
-                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
                 }
 
                 PlasmaComponents.Label {
@@ -125,6 +115,22 @@ ColumnLayout {
                         font.pixelSize: 11
                         font.family: "JetBrains Mono"
                         opacity: 0.9
+                    }
+                }
+
+                Rectangle {
+                    implicitWidth: 52
+                    implicitHeight: 16
+                    radius: root.uiRadiusL
+                    color: root.nodeModel.status === "online"
+                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
+                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
+
+                    PlasmaComponents.Label {
+                        anchors.centerIn: parent
+                        text: root.nodeModel.status
+                        color: "white"
+                        font.pixelSize: 9
                     }
                 }
             }

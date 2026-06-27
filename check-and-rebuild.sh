@@ -21,10 +21,10 @@ notify_error() {
   fi
 }
 
-# Hash of all resolved libplasma + libQt6 paths — distro-agnostic via ldconfig.
+# Hash of all watched runtime library paths — distro-agnostic via ldconfig.
 get_fingerprint() {
   ldconfig -p 2>/dev/null \
-    | grep -E 'libplasma|libQt6' \
+    | grep -iE 'libplasma|libQt6|libvncclient|libqtermwidget' \
     | awk '{print $NF}' \
     | sort \
     | xargs -r md5sum 2>/dev/null \

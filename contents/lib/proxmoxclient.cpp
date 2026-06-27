@@ -52,70 +52,14 @@ void ProxmoxClient::cancelPBS() {
     }
 }
 
-void ProxmoxClient::setHost(const QString &v) {
-    if (m_host == v) return;
-    m_host = v;
-    emit hostChanged();
-}
-
-void ProxmoxClient::setPort(int v) {
-    if (m_port == v) return;
-    m_port = v;
-    emit portChanged();
-}
-
-void ProxmoxClient::setTokenId(const QString &v) {
-    if (m_tokenId == v) return;
-    m_tokenId = v;
-    emit tokenIdChanged();
-}
-
-void ProxmoxClient::setTokenSecret(const QString &v) {
-    if (m_tokenSecret == v) return;
-    m_tokenSecret = v;
-    emit tokenSecretChanged();
-}
-
-void ProxmoxClient::setIgnoreSslErrors(bool v) {
-    if (m_ignoreSslErrors == v) return;
-    m_ignoreSslErrors = v;
-    emit ignoreSslErrorsChanged();
-}
-
 void ProxmoxClient::setDebugEnabled(bool value) {
     if (m_debugEnabled == value) return;
     m_debugEnabled = value;
-    emit debugEnabledChanged();
-}
-
-void ProxmoxClient::setTrustedCertPem(const QString &v) {
-    if (m_trustedCertPem == v) return;
-    m_trustedCertPem = v;
-    emit trustedCertPemChanged();
-}
-
-void ProxmoxClient::setTrustedCertPath(const QString &v) {
-    if (m_trustedCertPath == v) return;
-    m_trustedCertPath = v;
-    emit trustedCertPathChanged();
-}
-
-void ProxmoxClient::requestNodes(int seq) {
-    request(QStringLiteral("/nodes"), seq, ProxmoxConst::Kind::Nodes, QString());
-}
-
-void ProxmoxClient::requestQemu(const QString &node, int seq) {
-    request(QStringLiteral("/nodes/%1/qemu").arg(node), seq, ProxmoxConst::Kind::Qemu, node);
-}
-
-void ProxmoxClient::requestLxc(const QString &node, int seq) {
-    request(QStringLiteral("/nodes/%1/lxc").arg(node), seq, ProxmoxConst::Kind::Lxc, node);
 }
 
 void ProxmoxClient::setLowLatency(bool v) {
     if (m_lowLatency == v) return;
     m_lowLatency = v;
-    emit lowLatencyChanged();
 }
 
 void ProxmoxClient::requestNodesFor(const QString &sessionKey,
@@ -160,26 +104,6 @@ void ProxmoxClient::requestLxcFor(const QString &sessionKey,
     requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors,
                trustedCertPem, trustedCertPath,
                QStringLiteral("/nodes/%1/lxc").arg(node), seq, ProxmoxConst::Kind::Lxc, node);
-}
-
-void ProxmoxClient::requestAction(const QString &kind, const QString &node, int vmid, const QString &action, int seq) {
-    if (kind != ProxmoxConst::Kind::Qemu && kind != ProxmoxConst::Kind::Lxc) {
-        emit actionError(seq, kind, node, vmid, action, QStringLiteral("Invalid kind"));
-        return;
-    }
-    if (action != ProxmoxConst::VmAction::Start
-        && action != ProxmoxConst::VmAction::Shutdown
-        && action != ProxmoxConst::VmAction::Reboot) {
-        emit actionError(seq, kind, node, vmid, action, QStringLiteral("Invalid action"));
-        return;
-    }
-
-    post(QStringLiteral("/nodes/%1/%2/%3/status/%4").arg(node).arg(kind).arg(vmid).arg(action),
-         seq,
-         kind,
-         node,
-         vmid,
-         action);
 }
 
 void ProxmoxClient::requestActionFor(const QString &sessionKey,
@@ -394,21 +318,6 @@ void handleFinishedReply(QNetworkReply *r,
 
 } // namespace
 
-void ProxmoxClient::request(const QString &path, int seq, const QString &kind, const QString &node) {
-    requestFor(QString(),
-               m_host,
-               m_port,
-               m_tokenId,
-               m_tokenSecret,
-               m_ignoreSslErrors,
-               m_trustedCertPem.toUtf8(),
-               m_trustedCertPath,
-               path,
-               seq,
-               kind,
-               node);
-}
-
 void ProxmoxClient::requestFor(const QString &sessionKey,
                                const QString &host,
                                int port,
@@ -465,23 +374,6 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
 
         handleFinishedReply(r, seq, kind, node, sessionKey, emitErr, emitOk);
     });
-}
-
-void ProxmoxClient::post(const QString &path, int seq, const QString &actionKind, const QString &node, int vmid, const QString &action) {
-    postFor(QString(),
-            m_host,
-            m_port,
-            m_tokenId,
-            m_tokenSecret,
-            m_ignoreSslErrors,
-            m_trustedCertPem.toUtf8(),
-            m_trustedCertPath,
-            path,
-            seq,
-            actionKind,
-            node,
-            vmid,
-            action);
 }
 
 void ProxmoxClient::postFor(const QString &sessionKey,
@@ -822,6 +714,7 @@ void ProxmoxClient::pollTaskStatus(const QString &sessionKey,
 }
 
 void ProxmoxClient::requestVncProxy(const QString &sessionKey,
+                                     const QString &requestId,
                                      const QString &host,
                                      int port,
                                      const QString &tokenId,
@@ -831,10 +724,10 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
                                      const QString &trustedCertPath,
                                      const QString &node,
                                      const QString &kind,
-                                     int vmid)
+    int vmid)
 {
     if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
-        emit vncProxyError(sessionKey, node, kind, vmid, QStringLiteral("Not configured"));
+        emit vncProxyError(sessionKey, requestId, node, kind, vmid, QStringLiteral("Not configured"));
         return;
     }
 
@@ -862,7 +755,7 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
                                   + "=" + tokenSecret.toUtf8();
 
     QObject::connect(r, &QNetworkReply::finished, this,
-        [this, r, sessionKey, host, port, node, kind, vmid, authHeader, ignoreSslErrors]() {
+        [this, r, sessionKey, requestId, host, port, node, kind, vmid, authHeader, ignoreSslErrors]() {
             m_inFlight.remove(r);
 
             const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
@@ -870,7 +763,7 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
             const QByteArray body = r->readAll();
 
             auto fail = [&](const QString &msg) {
-                emit vncProxyError(sessionKey, node, kind, vmid,
+                emit vncProxyError(sessionKey, requestId, node, kind, vmid,
                                    QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
                 r->deleteLater();
             };
@@ -906,13 +799,14 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
                 return;
             }
 
-            emit vncProxyReady(sessionKey, host, node, kind, vmid, vncPort, ticket,
+            emit vncProxyReady(sessionKey, requestId, host, node, kind, vmid, vncPort, ticket,
                                port, authHeader, ignoreSslErrors);
             r->deleteLater();
         });
 }
 
 void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
+                                    const QString &requestId,
                                     const QString &host,
                                     int port,
                                     const QString &tokenId,
@@ -924,7 +818,7 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
                                     int vmid)
 {
     if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
-        emit ttyProxyError(sessionKey, node, vmid, QStringLiteral("Not configured"));
+        emit ttyProxyError(sessionKey, requestId, node, vmid, QStringLiteral("Not configured"));
         return;
     }
 
@@ -955,7 +849,7 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
                                   + "=" + tokenSecret.toUtf8();
 
     QObject::connect(r, &QNetworkReply::finished, this,
-        [this, r, sessionKey, host, node, vmid, authHeader]() {
+        [this, r, sessionKey, requestId, host, node, vmid, authHeader]() {
             m_inFlight.remove(r);
 
             const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
@@ -963,7 +857,7 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
             const QByteArray body = r->readAll();
 
             auto fail = [&](const QString &msg) {
-                emit ttyProxyError(sessionKey, node, vmid,
+                emit ttyProxyError(sessionKey, requestId, node, vmid,
                                    QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
                 r->deleteLater();
             };
@@ -1000,7 +894,94 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
                 return;
             }
 
-            emit ttyProxyReady(sessionKey, host, node, vmid, ttyPort, ticket, user, authHeader);
+            emit ttyProxyReady(sessionKey, requestId, host, node, vmid, ttyPort, ticket, user, authHeader);
+            r->deleteLater();
+        });
+}
+
+void ProxmoxClient::requestNodeTermProxy(const QString &sessionKey,
+                                         const QString &requestId,
+                                         const QString &host,
+                                         int port,
+                                         const QString &tokenId,
+                                         const QString &tokenSecret,
+                                         bool ignoreSslErrors,
+                                         const QByteArray &trustedCertPem,
+                                         const QString &trustedCertPath,
+                                         const QString &node)
+{
+    if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
+        emit nodeTermProxyError(sessionKey, requestId, node, QStringLiteral("Not configured"));
+        return;
+    }
+
+    const QString path = QStringLiteral("/nodes/%1/termproxy").arg(node);
+
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,
+                                       trustedCertPem, trustedCertPath);
+
+    QByteArray body;
+    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
+
+    QNetworkReply *r = m_nam.post(req, body);
+    m_inFlight.insert(r);
+
+    if (ignoreSslErrors) {
+        QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
+            r->ignoreSslErrors();
+        });
+    }
+
+    const QByteArray authHeader = QByteArray("PVEAPIToken=") + tokenId.toUtf8()
+                                  + "=" + tokenSecret.toUtf8();
+
+    QObject::connect(r, &QNetworkReply::finished, this,
+        [this, r, sessionKey, requestId, host, node, authHeader]() {
+            m_inFlight.remove(r);
+
+            const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+            const int httpStatus = httpAttr.isValid() ? httpAttr.toInt() : 0;
+            const QByteArray body = r->readAll();
+
+            auto fail = [&](const QString &msg) {
+                emit nodeTermProxyError(sessionKey, requestId, node,
+                                        QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+                r->deleteLater();
+            };
+
+            if (r->error() != QNetworkReply::NoError) {
+                if (r->error() == QNetworkReply::OperationCanceledError) {
+                    r->deleteLater();
+                    return;
+                }
+                fail(r->errorString());
+                return;
+            }
+
+            if (httpStatus >= 400) {
+                fail(QStringLiteral("HTTP error"));
+                return;
+            }
+
+            QJsonParseError pe;
+            const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+            if (pe.error != QJsonParseError::NoError || doc.isNull()) {
+                fail(QStringLiteral("JSON parse error: %1").arg(pe.errorString()));
+                return;
+            }
+
+            const QVariantMap data = doc.toVariant().toMap()
+                                         .value(QStringLiteral("data")).toMap();
+            const int ttyPort    = data.value(QStringLiteral("port")).toInt();
+            const QString ticket = data.value(QStringLiteral("ticket")).toString();
+            const QString user   = data.value(QStringLiteral("user")).toString();
+
+            if (ticket.isEmpty() || ttyPort == 0) {
+                fail(QStringLiteral("Invalid termproxy response"));
+                return;
+            }
+
+            emit nodeTermProxyReady(sessionKey, requestId, host, node, ttyPort, ticket, user, authHeader);
             r->deleteLater();
         });
 }

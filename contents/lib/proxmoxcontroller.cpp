@@ -14,6 +14,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QUuid>
 #include <QVariantList>
 #include <QtGlobal>
 
@@ -49,7 +50,7 @@ ProxmoxController::ProxmoxController(QObject *parent)
     connect(m_api, &ProxmoxClient::actionErrorFor, this, [this](int, const QString &sessionKey, const QString &actionKind, const QString &node, int vmid, const QString &action, const QString &message) {
         emit actionError(sessionKey, actionKind, node, vmid, action, message);
     });
-    connect(m_api, &ProxmoxClient::vncProxyReady, this, [this](const QString &sessionKey, const QString &host, const QString &node, const QString &kind, int vmid, int vncPort, const QString &ticket, int apiPort, const QByteArray &authHeader, bool ignoreSsl) {
+    connect(m_api, &ProxmoxClient::vncProxyReady, this, [this](const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, const QString &kind, int vmid, int vncPort, const QString &ticket, int apiPort, const QByteArray &authHeader, bool ignoreSsl) {
         // Resolve per-session overrides (multi-host), falling back to controller-wide settings.
         int resolvedApiPort = apiPort;
         bool resolvedIgnoreSsl = ignoreSsl;
@@ -60,18 +61,35 @@ ProxmoxController::ProxmoxController(QObject *parent)
                 resolvedIgnoreSsl  = endpoint.value(QStringLiteral("ignoreSsl"), ignoreSsl).toBool();
             }
         }
-        const QString vmKey = QStringLiteral("%1:%2:%3").arg(kind, node).arg(vmid);
-        const QString vmName = m_pendingConsoleNames.take(vmKey);
-        m_pendingConsoleAuth[sessionKey]  = authHeader;
-        m_pendingConsoleTicket[sessionKey] = ticket.toUtf8();
-        emit consoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort,
+        const QString vmName = m_pendingConsoleNames.take(requestId);
+        m_pendingConsoleAuth[requestId] = authHeader;
+        m_pendingConsoleTicket[requestId] = ticket.toUtf8();
+        emit consoleReady(sessionKey, requestId, host, node, kind, vmid, vmName, vncPort,
                           resolvedApiPort, resolvedIgnoreSsl);
     });
-    connect(m_api, &ProxmoxClient::vncProxyError, this, [this](const QString &, const QString &node, const QString &kind, int vmid, const QString &message) {
-        m_pendingConsoleNames.remove(QStringLiteral("%1:%2:%3").arg(kind, node).arg(vmid));
+    connect(m_api, &ProxmoxClient::vncProxyError, this, [this](const QString &, const QString &requestId, const QString &node, const QString &kind, int vmid, const QString &message) {
+        m_pendingConsoleNames.remove(requestId);
         emit consoleError(node, kind, vmid, message);
     });
-    connect(m_api, &ProxmoxClient::ttyProxyReady, this, [this](const QString &sessionKey, const QString &host, const QString &node, int vmid, int proxyPort, const QString &ticket, const QString &user, const QByteArray &authHeader) {
+    connect(m_api, &ProxmoxClient::nodeTermProxyReady, this, [this](const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int proxyPort, const QString &ticket, const QString &user, const QByteArray &authHeader) {
+        int apiPort = m_port;
+        bool ignoreSsl = m_ignoreSsl;
+        if (!sessionKey.isEmpty()) {
+            const QVariantMap endpoint = endpointBySession(sessionKey);
+            apiPort   = endpoint.value(QStringLiteral("port"), m_port).toInt();
+            ignoreSsl = endpoint.value(QStringLiteral("ignoreSsl"), m_ignoreSsl).toBool();
+        }
+        m_pendingConsoleAuth[requestId] = authHeader;
+        m_pendingConsoleTicket[requestId] = ticket.toUtf8();
+        // vmid=0 is the sentinel for node-level console (Proxmox vmids start at 100)
+        emit lxcConsoleReady(sessionKey, requestId, host, apiPort, node, 0, node,
+                             proxyPort, user, ignoreSsl);
+    });
+    connect(m_api, &ProxmoxClient::nodeTermProxyError, this, [this](const QString &, const QString &requestId, const QString &node, const QString &message) {
+        m_pendingConsoleNames.remove(requestId);
+        emit consoleError(node, ProxmoxConst::Kind::Node, 0, message);
+    });
+    connect(m_api, &ProxmoxClient::ttyProxyReady, this, [this](const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int vmid, int proxyPort, const QString &ticket, const QString &user, const QByteArray &authHeader) {
         // Resolve api port + ignoreSsl + vmName: for single-host fall back to
         // the controller-wide settings; for multi-host pull from the endpoint.
         int apiPort = m_port;
@@ -81,15 +99,14 @@ ProxmoxController::ProxmoxController(QObject *parent)
             apiPort   = endpoint.value(QStringLiteral("port"), m_port).toInt();
             ignoreSsl = endpoint.value(QStringLiteral("ignoreSsl"), m_ignoreSsl).toBool();
         }
-        const QString vmKey = QStringLiteral("lxc:%1:%2").arg(node).arg(vmid);
-        const QString vmName = m_pendingConsoleNames.take(vmKey);
-        m_pendingConsoleAuth[sessionKey]  = authHeader;
-        m_pendingConsoleTicket[sessionKey] = ticket.toUtf8();
-        emit lxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName,
+        const QString vmName = m_pendingConsoleNames.take(requestId);
+        m_pendingConsoleAuth[requestId] = authHeader;
+        m_pendingConsoleTicket[requestId] = ticket.toUtf8();
+        emit lxcConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName,
                              proxyPort, user, ignoreSsl);
     });
-    connect(m_api, &ProxmoxClient::ttyProxyError, this, [this](const QString &, const QString &node, int vmid, const QString &message) {
-        m_pendingConsoleNames.remove(QStringLiteral("lxc:%1:%2").arg(node).arg(vmid));
+    connect(m_api, &ProxmoxClient::ttyProxyError, this, [this](const QString &, const QString &requestId, const QString &node, int vmid, const QString &message) {
+        m_pendingConsoleNames.remove(requestId);
         emit consoleError(node, ProxmoxConst::Kind::Lxc, vmid, message);
     });
     connect(m_api, &ProxmoxClient::pbsSnapshotsReceived, this, [this](const QString &pbsHost, const QString &, const QList<PBSSnapshot> &snapshots) {
@@ -158,39 +175,6 @@ ProxmoxController::ProxmoxController(QObject *parent)
     m_pbsDebounceTimer->setInterval(500);
     connect(m_pbsDebounceTimer, &QTimer::timeout, this, &ProxmoxController::refreshPBSNow);
 
-    connect(m_singleSecretStore, &SecretStore::secretReady, this, [this](const QString &secret) {
-        if (!secret.isEmpty()) {
-            const QString currentKey = keyFor(m_host, m_port, m_tokenId);
-            if (!m_activeSingleSecretKey.isEmpty() && m_activeSingleSecretKey != currentKey) {
-                m_singleSecretStore->setKey(currentKey);
-                m_singleSecretStore->writeSecret(secret);
-                m_singleSecretStore->setKey(m_activeSingleSecretKey);
-            }
-            m_api->setHost(m_host);
-            m_api->setPort(m_port);
-            m_api->setTokenId(m_tokenId);
-            m_api->setTokenSecret(secret);
-            m_api->setIgnoreSslErrors(m_ignoreSsl);
-            m_api->setTrustedCertPem(m_trustedCertPem);
-            m_api->setTrustedCertPath(m_trustedCertPath);
-            setSecretState(QStringLiteral("ready"));
-            setRefreshResolvingSecrets(false);
-            if (m_pbsTimer && !m_pbsTimer->isActive()) {
-                refreshPBS();
-            }
-            return;
-        }
-
-        setRefreshResolvingSecrets(false);
-        setSecretState(QStringLiteral("missing"));
-    });
-
-    connect(m_singleSecretStore, &SecretStore::error, this, [this](const QString &) {
-        setRefreshResolvingSecrets(false);
-        setSecretState(QStringLiteral("error"));
-    });
-
-
     connect(m_singleSecretStore, &SecretStore::keysReady, this, [this](const QStringList &keys) {
         if (keys.isEmpty()) {
             return;
@@ -225,52 +209,6 @@ ProxmoxController::ProxmoxController(QObject *parent)
 
     connect(m_singleSecretStore, &SecretStore::keyListError, this, &ProxmoxController::keyListError);
 
-    connect(m_multiSecretStore, &SecretStore::secretReady, this, [this](const QString &secret) {
-        if (m_activeMultiSecretRequest.isEmpty()) {
-            return;
-        }
-
-        const QVariantMap item = m_activeMultiSecretRequest.value(QStringLiteral("item")).toMap();
-        const QString sessionKey = m_activeMultiSecretRequest.value(QStringLiteral("sessionKey")).toString();
-
-        if (!secret.isEmpty()) {
-            QVariantMap endpoint;
-            endpoint.insert(QStringLiteral("sessionKey"), sessionKey);
-            endpoint.insert(QStringLiteral("label"), item.value(QStringLiteral("label")));
-            endpoint.insert(QStringLiteral("host"), item.value(QStringLiteral("host")));
-            endpoint.insert(QStringLiteral("port"), item.value(QStringLiteral("port")));
-            endpoint.insert(QStringLiteral("tokenId"), item.value(QStringLiteral("tokenId")));
-            endpoint.insert(QStringLiteral("ignoreSsl"), m_ignoreSsl);
-            // Per-endpoint cert: use shared global cert if multiHostSharedCert is true,
-            // otherwise use the cert stored per-endpoint in the JSON config.
-            const QString epCertPem  = m_multiHostSharedCert
-                ? m_trustedCertPem
-                : item.value(QStringLiteral("trustedCertPem")).toString();
-            const QString epCertPath = m_multiHostSharedCert
-                ? m_trustedCertPath
-                : item.value(QStringLiteral("trustedCertPath")).toString();
-            endpoint.insert(QStringLiteral("trustedCertPem"),  epCertPem);
-            endpoint.insert(QStringLiteral("trustedCertPath"), epCertPath);
-            m_tempEndpoints.push_back(endpoint);
-        }
-
-        setSecretsResolved(m_secretsResolved + 1);
-        m_secretQueueIndex += 1;
-        m_activeMultiSecretRequest.clear();
-        readNextMultiSecret();
-    });
-
-    connect(m_multiSecretStore, &SecretStore::error, this, [this](const QString &) {
-        if (m_activeMultiSecretRequest.isEmpty()) {
-            return;
-        }
-        setMultiSecretHadError(true);
-        setSecretsResolved(m_secretsResolved + 1);
-        m_secretQueueIndex += 1;
-        m_activeMultiSecretRequest.clear();
-        readNextMultiSecret();
-    });
-
 }
 
 void ProxmoxController::setConnectionMode(const QString &value) {
@@ -302,14 +240,12 @@ void ProxmoxController::setTokenId(const QString &value) {
 void ProxmoxController::setTrustedCertPem(const QString &value) {
     if (m_trustedCertPem == value) return;
     m_trustedCertPem = value;
-    m_api->setTrustedCertPem(value);
     emit trustedCertPemChanged();
 }
 
 void ProxmoxController::setTrustedCertPath(const QString &value) {
     if (m_trustedCertPath == value) return;
     m_trustedCertPath = value;
-    m_api->setTrustedCertPath(value);
     emit trustedCertPathChanged();
 }
 
@@ -415,8 +351,10 @@ void ProxmoxController::resolveSecretsIfNeeded() {
         .arg(m_connectionMode, hasCoreConfig ? QStringLiteral("true") : QStringLiteral("false"), m_host, m_tokenId.isEmpty() ? QStringLiteral("true") : QStringLiteral("false")));
 
     if (!hasCoreConfig) {
+        m_secretResolutionGeneration += 1;
+        m_activeSingleSecretKey.clear();
+        m_activeMultiSecretRequest.clear();
         setEndpoints({});
-        m_api->setTokenSecret(QString());
         setRefreshResolvingSecrets(false);
         setSecretState(QStringLiteral("idle"));
         return;
@@ -432,7 +370,6 @@ void ProxmoxController::resolveSecretsIfNeeded() {
     }
 
     setSecretState(QStringLiteral("loading"));
-    m_api->setTokenSecret(QString());
     startSecretRead();
 }
 
@@ -548,6 +485,7 @@ void ProxmoxController::fetchData() {
             readMultiSecretFor({
                 {QStringLiteral("kind"), ProxmoxConst::Kind::Nodes},
                 {QStringLiteral("sessionKey"), endpoint.value(QStringLiteral("sessionKey")).toString()},
+                {QStringLiteral("seq"), m_refreshSeq},
             });
         }
         return;
@@ -555,6 +493,7 @@ void ProxmoxController::fetchData() {
 
     readSingleSecretFor({
         {QStringLiteral("kind"), ProxmoxConst::Kind::Fetch},
+        {QStringLiteral("seq"), m_refreshSeq},
     });
 }
 
@@ -595,9 +534,9 @@ bool ProxmoxController::runAction(const QString &sessionKey,
     return true;
 }
 
-void ProxmoxController::deliverConsoleAuth(const QString &sessionKey, QObject *target)
+void ProxmoxController::deliverConsoleAuth(const QString &requestId, QObject *target)
 {
-    auto it = m_pendingConsoleAuth.find(sessionKey);
+    auto it = m_pendingConsoleAuth.find(requestId);
     if (it == m_pendingConsoleAuth.end() || !target) return;
     QByteArray header = it.value();
     it.value().fill(0);
@@ -608,11 +547,11 @@ void ProxmoxController::deliverConsoleAuth(const QString &sessionKey, QObject *t
     header.fill(0);
 }
 
-void ProxmoxController::deliverConsoleTicket(const QString &sessionKey,
+void ProxmoxController::deliverConsoleTicket(const QString &requestId,
                                               QObject *primary,
                                               QObject *secondary)
 {
-    auto it = m_pendingConsoleTicket.find(sessionKey);
+    auto it = m_pendingConsoleTicket.find(requestId);
     if (it == m_pendingConsoleTicket.end() || !primary) return;
     QByteArray ticket = it.value();
     it.value().fill(0);
@@ -634,9 +573,11 @@ void ProxmoxController::openConsole(const QString &sessionKey,
                                      int vmid,
                                      const QString &vmName)
 {
+    const QString requestId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     if (sessionKey.isEmpty()) {
         readSingleSecretFor({
             {QStringLiteral("kind"), ProxmoxConst::Kind::Console},
+            {QStringLiteral("requestId"), requestId},
             {QStringLiteral("actionKind"), kind},
             {QStringLiteral("node"), node},
             {QStringLiteral("vmid"), vmid},
@@ -651,6 +592,7 @@ void ProxmoxController::openConsole(const QString &sessionKey,
     }
     readMultiSecretFor({
         {QStringLiteral("kind"), ProxmoxConst::Kind::Console},
+        {QStringLiteral("requestId"), requestId},
         {QStringLiteral("sessionKey"), sessionKey},
         {QStringLiteral("actionKind"), kind},
         {QStringLiteral("node"), node},
@@ -854,12 +796,39 @@ void ProxmoxController::startSecretRead() {
     }
 
     setRefreshResolvingSecrets(true);
+    const quint64 generation = ++m_secretResolutionGeneration;
     m_activeSingleSecretKey = key;
-    m_singleSecretStore->setKey(m_activeSingleSecretKey);
-    m_singleSecretStore->readSecret();
+    m_singleSecretStore->readSecret(
+        key,
+        [this, key, generation](const QString &secret) {
+            // Configuration may have changed while the keyring job was active.
+            // Never apply a credential result to a different endpoint identity.
+            if (m_secretResolutionGeneration != generation
+                || m_activeSingleSecretKey != key) return;
+            m_activeSingleSecretKey.clear();
+
+            setRefreshResolvingSecrets(false);
+            if (secret.isEmpty()) {
+                setSecretState(QStringLiteral("missing"));
+                return;
+            }
+
+            setSecretState(QStringLiteral("ready"));
+            if (m_pbsTimer && !m_pbsTimer->isActive()) {
+                refreshPBS();
+            }
+        },
+        [this, key, generation](const QString &) {
+            if (m_secretResolutionGeneration != generation
+                || m_activeSingleSecretKey != key) return;
+            m_activeSingleSecretKey.clear();
+            setRefreshResolvingSecrets(false);
+            setSecretState(QStringLiteral("error"));
+        });
 }
 
 void ProxmoxController::startMultiSecretResolution() {
+    m_secretResolutionGeneration += 1;
     setSecretsResolved(0);
     setSecretsTotal(0);
     setMultiSecretHadError(false);
@@ -900,11 +869,65 @@ void ProxmoxController::readNextMultiSecret() {
         {QStringLiteral("sessionKey"), item.value(QStringLiteral("sessionKey"))},
         {QStringLiteral("item"), item},
     };
-    m_multiSecretStore->setKey(item.value(QStringLiteral("sessionKey")).toString());
-    m_multiSecretStore->readSecret();
+    const QString sessionKey = item.value(QStringLiteral("sessionKey")).toString();
+    const quint64 generation = m_secretResolutionGeneration;
+    m_multiSecretStore->readSecret(
+        sessionKey,
+        [this, sessionKey, item, generation](const QString &secret) {
+            if (m_secretResolutionGeneration != generation
+                || m_activeMultiSecretRequest.value(QStringLiteral("sessionKey")).toString() != sessionKey) {
+                return;
+            }
+
+            if (!secret.isEmpty()) {
+                QVariantMap endpoint;
+                endpoint.insert(QStringLiteral("sessionKey"), sessionKey);
+                endpoint.insert(QStringLiteral("label"), item.value(QStringLiteral("label")));
+                endpoint.insert(QStringLiteral("host"), item.value(QStringLiteral("host")));
+                endpoint.insert(QStringLiteral("port"), item.value(QStringLiteral("port")));
+                endpoint.insert(QStringLiteral("tokenId"), item.value(QStringLiteral("tokenId")));
+                endpoint.insert(QStringLiteral("ignoreSsl"), m_ignoreSsl);
+                endpoint.insert(QStringLiteral("pbsEnabled"), item.value(QStringLiteral("pbsEnabled")));
+                endpoint.insert(QStringLiteral("pbsHost"), item.value(QStringLiteral("pbsHost")));
+                endpoint.insert(QStringLiteral("pbsPort"), item.value(QStringLiteral("pbsPort")));
+                endpoint.insert(QStringLiteral("pbsTokenId"), item.value(QStringLiteral("pbsTokenId")));
+                endpoint.insert(QStringLiteral("pbsIgnoreSsl"), item.value(QStringLiteral("pbsIgnoreSsl")));
+                endpoint.insert(QStringLiteral("pbsBackupWarningDays"), item.value(QStringLiteral("pbsBackupWarningDays")));
+                endpoint.insert(QStringLiteral("pbsBackupStaleDays"), item.value(QStringLiteral("pbsBackupStaleDays")));
+                // Per-endpoint cert: use shared global cert if multiHostSharedCert is true,
+                // otherwise use the cert stored per-endpoint in the JSON config.
+                const QString epCertPem = m_multiHostSharedCert
+                    ? m_trustedCertPem
+                    : item.value(QStringLiteral("trustedCertPem")).toString();
+                const QString epCertPath = m_multiHostSharedCert
+                    ? m_trustedCertPath
+                    : item.value(QStringLiteral("trustedCertPath")).toString();
+                endpoint.insert(QStringLiteral("trustedCertPem"), epCertPem);
+                endpoint.insert(QStringLiteral("trustedCertPath"), epCertPath);
+                m_tempEndpoints.push_back(endpoint);
+            }
+
+            setSecretsResolved(m_secretsResolved + 1);
+            m_secretQueueIndex += 1;
+            m_activeMultiSecretRequest.clear();
+            readNextMultiSecret();
+        },
+        [this, sessionKey, generation](const QString &) {
+            if (m_secretResolutionGeneration != generation
+                || m_activeMultiSecretRequest.value(QStringLiteral("sessionKey")).toString() != sessionKey) {
+                return;
+            }
+            setMultiSecretHadError(true);
+            setSecretsResolved(m_secretsResolved + 1);
+            m_secretQueueIndex += 1;
+            m_activeMultiSecretRequest.clear();
+            readNextMultiSecret();
+        });
 }
 
 void ProxmoxController::resetTransientStateForModeChange() {
+    m_secretResolutionGeneration += 1;
+    m_activeSingleSecretKey.clear();
     m_secretQueue.clear();
     m_secretQueueIndex = 0;
     m_activeMultiSecretRequest.clear();
@@ -920,7 +943,6 @@ void ProxmoxController::resetTransientStateForModeChange() {
     resetRetryState();
 
     setEndpoints({});
-    m_api->setTokenSecret(QString());
     setDisplayedEndpoints({});
     setDisplayedNodeList({});
     setDisplayedVmData({});
@@ -963,69 +985,117 @@ void ProxmoxController::dispatchSingleFetchWithSecret(const QString &secret) {
                            m_refreshSeq);
 }
 
-void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
-    m_singleSecretStore->setKey(keyFor(m_host, m_port, m_tokenId));
-    connect(m_singleSecretStore, &SecretStore::secretReady, this, [this, request](const QString &secret) {
-        const QString kind = request.value(QStringLiteral("kind")).toString();
-        if (kind == ProxmoxConst::Kind::Fetch) {
-            dispatchSingleFetchWithSecret(secret);
-            return;
-        }
-        if (kind == ProxmoxConst::Kind::Action) {
-            dispatchSingleActionWithSecret(request.value(QStringLiteral("actionKind")).toString(),
-                                           request.value(QStringLiteral("node")).toString(),
-                                           request.value(QStringLiteral("vmid")).toInt(),
-                                           request.value(QStringLiteral("action")).toString(),
-                                           secret);
-        }
-        if (kind == ProxmoxConst::Kind::Console) {
-            QString actionKind = request.value(QStringLiteral("actionKind")).toString();
-            QString node = request.value(QStringLiteral("node")).toString();
-            int vmid = request.value(QStringLiteral("vmid")).toInt();
-            QString vmName = request.value(QStringLiteral("vmName")).toString();
+void ProxmoxController::dispatchSingleNodeChildrenWithSecret(const QVariantList &nodeNames,
+                                                             const QString &secret) {
+    if (secret.isEmpty()) {
+        setErrorMessage(QStringLiteral("credentials unavailable"));
+        setPartialFailure(true);
+        m_pendingNodeRequests -= nodeNames.size() * 2;
+        if (m_pendingNodeRequests < 0) m_pendingNodeRequests = 0;
+        checkRequestsComplete();
+        return;
+    }
 
-            // Stash vmName so the ttyProxyReady/vncProxyReady forwarder can
-            // attach it to consoleReady (the underlying API doesn't carry it).
+    for (const QVariant &nodeNameValue : nodeNames) {
+        const QString nodeName = nodeNameValue.toString();
+        m_api->requestQemuFor(QString(), m_host, m_port, m_tokenId, secret,
+                              m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
+                              nodeName, m_refreshSeq);
+        m_api->requestLxcFor(QString(), m_host, m_port, m_tokenId, secret,
+                             m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
+                             nodeName, m_refreshSeq);
+    }
+}
+
+void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
+    const QString key = keyFor(m_host, m_port, m_tokenId);
+    m_singleSecretStore->readSecret(
+        key,
+        [this, request, key](const QString &secret) {
+            if (m_connectionMode != QStringLiteral("single")
+                || key != keyFor(m_host, m_port, m_tokenId)) {
+                return;
+            }
+            const QVariant requestSeq = request.value(QStringLiteral("seq"));
+            if (requestSeq.isValid() && requestSeq.toInt() != m_refreshSeq) return;
+
+            const QString kind = request.value(QStringLiteral("kind")).toString();
+            if (kind == ProxmoxConst::Kind::Fetch) {
+                dispatchSingleFetchWithSecret(secret);
+                return;
+            }
+            if (kind == ProxmoxConst::Kind::Children) {
+                dispatchSingleNodeChildrenWithSecret(
+                    request.value(QStringLiteral("nodeNames")).toList(), secret);
+                return;
+            }
+            if (kind == ProxmoxConst::Kind::Action) {
+                dispatchSingleActionWithSecret(request.value(QStringLiteral("actionKind")).toString(),
+                                               request.value(QStringLiteral("node")).toString(),
+                                               request.value(QStringLiteral("vmid")).toInt(),
+                                               request.value(QStringLiteral("action")).toString(),
+                                               secret);
+                return;
+            }
+            if (kind != ProxmoxConst::Kind::Console) return;
+
+            const QString actionKind = request.value(QStringLiteral("actionKind")).toString();
+            const QString requestId = request.value(QStringLiteral("requestId")).toString();
+            const QString node = request.value(QStringLiteral("node")).toString();
+            const int vmid = request.value(QStringLiteral("vmid")).toInt();
+            const QString vmName = request.value(QStringLiteral("vmName")).toString();
+
             if (!vmName.isEmpty()) {
-                m_pendingConsoleNames.insert(
-                    QStringLiteral("%1:%2:%3").arg(actionKind, node).arg(vmid), vmName);
+                m_pendingConsoleNames.insert(requestId, vmName);
             }
 
-        if (actionKind == ProxmoxConst::Kind::Lxc) {
-            m_api->requestTtyProxy(QString(), m_host, m_port, m_tokenId, secret,
-                                   m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
-                                   node, vmid);
-        } else {
-            m_api->requestVncProxy(QString(), m_host, m_port, m_tokenId, secret,
-                                   m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
-                                   node, actionKind, vmid);
-        }
-        }
-    
+            if (actionKind == ProxmoxConst::Kind::Node) {
+                m_api->requestNodeTermProxy(QString(), requestId, m_host, m_port, m_tokenId, secret,
+                                            m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
+                                            node);
+            } else if (actionKind == ProxmoxConst::Kind::Lxc) {
+                m_api->requestTtyProxy(QString(), requestId, m_host, m_port, m_tokenId, secret,
+                                       m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
+                                       node, vmid);
+            } else {
+                m_api->requestVncProxy(QString(), requestId, m_host, m_port, m_tokenId, secret,
+                                       m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
+                                       node, actionKind, vmid);
+            }
+        },
+        [this, request, key](const QString &) {
+            if (m_connectionMode != QStringLiteral("single")
+                || key != keyFor(m_host, m_port, m_tokenId)) {
+                return;
+            }
+            const QVariant requestSeq = request.value(QStringLiteral("seq"));
+            if (requestSeq.isValid() && requestSeq.toInt() != m_refreshSeq) return;
 
-    }, Qt::SingleShotConnection);
-    connect(m_singleSecretStore, &SecretStore::error, this, [this, request](const QString &) {
-        const QString kind = request.value(QStringLiteral("kind")).toString();
-        if (kind == ProxmoxConst::Kind::Fetch) {
-            dispatchSingleFetchWithSecret(QString());
-            return;
-        }
-        if (kind == ProxmoxConst::Kind::Console) {
-            emit consoleError(request.value(QStringLiteral("node")).toString(),
-                              request.value(QStringLiteral("actionKind")).toString(),
-                              request.value(QStringLiteral("vmid")).toInt(),
-                              QStringLiteral("credentials unavailable"));
-        }
-        if (kind == ProxmoxConst::Kind::Action) {
-            emit actionError(QString(),
-                             request.value(QStringLiteral("actionKind")).toString(),
-                             request.value(QStringLiteral("node")).toString(),
-                             request.value(QStringLiteral("vmid")).toInt(),
-                             request.value(QStringLiteral("action")).toString(),
-                             QStringLiteral("credentials unavailable"));
-        }
-    }, Qt::SingleShotConnection);
-    m_singleSecretStore->readSecret();
+            const QString kind = request.value(QStringLiteral("kind")).toString();
+            if (kind == ProxmoxConst::Kind::Fetch) {
+                dispatchSingleFetchWithSecret(QString());
+                return;
+            }
+            if (kind == ProxmoxConst::Kind::Children) {
+                dispatchSingleNodeChildrenWithSecret(
+                    request.value(QStringLiteral("nodeNames")).toList(), QString());
+                return;
+            }
+            if (kind == ProxmoxConst::Kind::Console) {
+                m_pendingConsoleNames.remove(request.value(QStringLiteral("requestId")).toString());
+                emit consoleError(request.value(QStringLiteral("node")).toString(),
+                                  request.value(QStringLiteral("actionKind")).toString(),
+                                  request.value(QStringLiteral("vmid")).toInt(),
+                                  QStringLiteral("credentials unavailable"));
+            } else if (kind == ProxmoxConst::Kind::Action) {
+                emit actionError(QString(),
+                                 request.value(QStringLiteral("actionKind")).toString(),
+                                 request.value(QStringLiteral("node")).toString(),
+                                 request.value(QStringLiteral("vmid")).toInt(),
+                                 request.value(QStringLiteral("action")).toString(),
+                                 QStringLiteral("credentials unavailable"));
+            }
+        });
 }
 
 bool ProxmoxController::dispatchSingleActionWithSecret(const QString &kind,
@@ -1060,10 +1130,11 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
         return;
     }
 
-    m_multiSecretStore->setKey(sessionKey);
-    connect(m_multiSecretStore, &SecretStore::secretReady, this, [this, request](const QString &secret) {
+    m_multiSecretStore->readSecret(sessionKey, [this, request](const QString &secret) {
         const QString kind = request.value(QStringLiteral("kind")).toString();
         const QString sessionKey = request.value(QStringLiteral("sessionKey")).toString();
+        const QVariant requestSeq = request.value(QStringLiteral("seq"));
+        if (requestSeq.isValid() && requestSeq.toInt() != m_refreshSeq) return;
         const QVariantMap endpoint = endpointBySession(sessionKey);
 
         if (kind == ProxmoxConst::Kind::Nodes) {
@@ -1105,6 +1176,7 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
 
         if (kind == ProxmoxConst::Kind::Console) {
             const QString actionKind = request.value(QStringLiteral("actionKind")).toString();
+            const QString requestId  = request.value(QStringLiteral("requestId")).toString();
             const QString node       = request.value(QStringLiteral("node")).toString();
             const int vmid           = request.value(QStringLiteral("vmid")).toInt();
             const QString vmName     = request.value(QStringLiteral("vmName")).toString();
@@ -1117,8 +1189,7 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
             // Stash vmName so the ttyProxyReady/vncProxyReady forwarder can
             // attach it to consoleReady (the underlying API doesn't carry it).
             if (!vmName.isEmpty()) {
-                m_pendingConsoleNames.insert(
-                    QStringLiteral("%1:%2:%3").arg(actionKind, node).arg(vmid), vmName);
+                m_pendingConsoleNames.insert(requestId, vmName);
             }
 
             const QString epHost     = endpoint.value(QStringLiteral("host")).toString();
@@ -1128,18 +1199,22 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
             const QByteArray epCertPem  = endpoint.value(QStringLiteral("trustedCertPem")).toString().toUtf8();
             const QString    epCertPath = endpoint.value(QStringLiteral("trustedCertPath")).toString();
 
-            if (actionKind == ProxmoxConst::Kind::Lxc) {
-                m_api->requestTtyProxy(sessionKey, epHost, epPort, epTokenId, secret,
+            if (actionKind == ProxmoxConst::Kind::Node) {
+                m_api->requestNodeTermProxy(sessionKey, requestId, epHost, epPort, epTokenId, secret,
+                                            epIgnore, epCertPem, epCertPath, node);
+            } else if (actionKind == ProxmoxConst::Kind::Lxc) {
+                m_api->requestTtyProxy(sessionKey, requestId, epHost, epPort, epTokenId, secret,
                                        epIgnore, epCertPem, epCertPath, node, vmid);
             } else {
-                m_api->requestVncProxy(sessionKey, epHost, epPort, epTokenId, secret,
+                m_api->requestVncProxy(sessionKey, requestId, epHost, epPort, epTokenId, secret,
                                        epIgnore, epCertPem, epCertPath, node, actionKind, vmid);
             }
         }
-    }, Qt::SingleShotConnection);
-    connect(m_multiSecretStore, &SecretStore::error, this, [this, request](const QString &) {
+    }, [this, request](const QString &) {
         const QString kind = request.value(QStringLiteral("kind")).toString();
         const QString sessionKey = request.value(QStringLiteral("sessionKey")).toString();
+        const QVariant requestSeq = request.value(QStringLiteral("seq"));
+        if (requestSeq.isValid() && requestSeq.toInt() != m_refreshSeq) return;
 
         if (kind == ProxmoxConst::Kind::Nodes) {
             dispatchMultiNodesWithSecret(sessionKey, endpointBySession(sessionKey), QString());
@@ -1167,13 +1242,13 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
         }
 
         if (kind == ProxmoxConst::Kind::Console) {
+            m_pendingConsoleNames.remove(request.value(QStringLiteral("requestId")).toString());
             emit consoleError(request.value(QStringLiteral("node")).toString(),
                               request.value(QStringLiteral("actionKind")).toString(),
                               request.value(QStringLiteral("vmid")).toInt(),
                               QStringLiteral("endpoint credentials unavailable"));
         }
-    }, Qt::SingleShotConnection);
-    m_multiSecretStore->readSecret();
+    });
 }
 
 void ProxmoxController::dispatchMultiNodesWithSecret(const QString &sessionKey,
@@ -1363,11 +1438,11 @@ void ProxmoxController::handleSingleReply(int seq, const QString &kind, const QS
             m_tempVmData.clear();
             m_tempLxcData.clear();
             m_pendingNodeRequests = m_nodeList.size() * 2;
-            for (const QVariant &nodeValue : m_nodeList) {
-                const QString nodeName = nodeValue.toString();
-                m_api->requestQemu(nodeName, m_refreshSeq);
-                m_api->requestLxc(nodeName, m_refreshSeq);
-            }
+            readSingleSecretFor({
+                {QStringLiteral("kind"), ProxmoxConst::Kind::Children},
+                {QStringLiteral("nodeNames"), m_nodeList},
+                {QStringLiteral("seq"), m_refreshSeq},
+            });
         } else {
             setDisplayedProxmoxData(m_proxmoxData);
             setDisplayedNodeList({});
@@ -1468,6 +1543,7 @@ void ProxmoxController::handleMultiReply(int seq, const QString &sessionKey, con
             {QStringLiteral("kind"), ProxmoxConst::Kind::Children},
             {QStringLiteral("sessionKey"), sessionKey},
             {QStringLiteral("nodeNames"), nodeNames},
+            {QStringLiteral("seq"), m_refreshSeq},
         });
         m_pendingNodeRequests -= 1;
         checkMultiRequestsComplete();
@@ -1596,6 +1672,15 @@ QVariantList ProxmoxController::buildSecretQueue() const {
         item.insert(QStringLiteral("host"), host);
         item.insert(QStringLiteral("port"), port);
         item.insert(QStringLiteral("tokenId"), tokenId);
+        item.insert(QStringLiteral("pbsEnabled"), entry.value(QStringLiteral("pbsEnabled"), false));
+        item.insert(QStringLiteral("pbsHost"), entry.value(QStringLiteral("pbsHost")).toString().trimmed());
+        int pbsPort = entry.value(QStringLiteral("pbsPort"), ProxmoxConst::Defaults::PbsPort).toInt();
+        if (pbsPort <= 0) pbsPort = ProxmoxConst::Defaults::PbsPort;
+        item.insert(QStringLiteral("pbsPort"), pbsPort);
+        item.insert(QStringLiteral("pbsTokenId"), entry.value(QStringLiteral("pbsTokenId")).toString().trimmed());
+        item.insert(QStringLiteral("pbsIgnoreSsl"), entry.value(QStringLiteral("pbsIgnoreSsl"), false));
+        item.insert(QStringLiteral("pbsBackupWarningDays"), std::max(1, entry.value(QStringLiteral("pbsBackupWarningDays"), 7).toInt()));
+        item.insert(QStringLiteral("pbsBackupStaleDays"), std::max(1, entry.value(QStringLiteral("pbsBackupStaleDays"), 14).toInt()));
         queue.push_back(item);
     }
     return queue;
@@ -1629,7 +1714,6 @@ void ProxmoxController::refreshPBSNow() {
             const QString pbsHost = m_pbsHost.trimmed();
             const QString key = pbsKeyForHost(pbsHost);
             appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single readKey host=%1 key=%2").arg(pbsHost, key));
-            store->setKey(key);
             const int pbsPort = m_pbsPort > 0 ? m_pbsPort : ProxmoxConst::Defaults::PbsPort;
             const QString pbsTokenId = m_pbsTokenId.trimmed();
             const bool pbsEnabled = m_pbsEnabled;
@@ -1644,10 +1728,11 @@ void ProxmoxController::refreshPBSNow() {
                 .arg(pbsTokenId.isEmpty() ? QStringLiteral("true") : QStringLiteral("false"))
                 .arg(m_pbsRefreshInterval));
             if (!pbsEnabled || pbsHost.isEmpty() || pbsTokenId.isEmpty()) {
+                store->deleteLater();
                 correlateBackups();
                 return;
             }
-            connect(store, &SecretStore::secretReady, this, [this, store, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl](const QString &secret) {
+            store->readSecret(key, [this, store, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl](const QString &secret) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretReady host=%1 secretEmpty=%2")
                     .arg(pbsHost, secret.isEmpty() ? QStringLiteral("true") : QStringLiteral("false")));
                 store->deleteLater();
@@ -1657,8 +1742,7 @@ void ProxmoxController::refreshPBSNow() {
                 }
                 m_pendingPbsEndpoints = 1;
                 m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
-            });
-            connect(store, &SecretStore::error, this, [this, store, pbsHost](const QString &message) {
+            }, [this, store, pbsHost](const QString &message) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretError host=%1 message=%2").arg(pbsHost, message));
                 store->deleteLater();
                 if (m_pbsRefreshError != message) {
@@ -1672,7 +1756,6 @@ void ProxmoxController::refreshPBSNow() {
                     correlateBackups();
                 }
             });
-            store->readSecret();
             return;
         }
         correlateBackups();
@@ -1693,11 +1776,16 @@ void ProxmoxController::refreshPBSNow() {
         const QString key = pbsKeyForHost(pbsHost);
         appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi readKey host=%1 key=%2").arg(pbsHost, key));
         store->setService(QStringLiteral("ProxMon"));
-        store->setKey(key);
         m_pendingPbsEndpoints += 1;
         const int pbsPort = entry.value(QStringLiteral("pbsPort"), ProxmoxConst::Defaults::PbsPort).toInt() > 0 ? entry.value(QStringLiteral("pbsPort"), ProxmoxConst::Defaults::PbsPort).toInt() : ProxmoxConst::Defaults::PbsPort;
         const bool pbsIgnoreSsl = entry.value(QStringLiteral("pbsIgnoreSsl"), false).toBool();
-        connect(store, &SecretStore::secretReady, this, [this, store, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl](const QString &secret) {
+        const QString pbsTrustedCertPem = entry.contains(QStringLiteral("pbsTrustedCertPem"))
+            ? entry.value(QStringLiteral("pbsTrustedCertPem")).toString()
+            : m_pbsTrustedCertPem;
+        const QString pbsTrustedCertPath = entry.contains(QStringLiteral("pbsTrustedCertPath"))
+            ? entry.value(QStringLiteral("pbsTrustedCertPath")).toString().trimmed()
+            : m_pbsTrustedCertPath;
+        store->readSecret(key, [this, store, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl, pbsTrustedCertPem, pbsTrustedCertPath](const QString &secret) {
             store->deleteLater();
             if (secret.isEmpty()) {
                 if (m_pendingPbsEndpoints > 0) {
@@ -1708,9 +1796,8 @@ void ProxmoxController::refreshPBSNow() {
                 }
                 return;
             }
-            m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
-        });
-        connect(store, &SecretStore::error, this, [this, store, pbsHost](const QString &message) {
+            m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, pbsTrustedCertPem.toUtf8(), pbsTrustedCertPath);
+        }, [this, store, pbsHost](const QString &message) {
             appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi secretError host=%1 message=%2").arg(pbsHost, message));
             store->deleteLater();
             if (m_pbsRefreshError != message) {
@@ -1724,7 +1811,6 @@ void ProxmoxController::refreshPBSNow() {
                 correlateBackups();
             }
         });
-        store->readSecret();
     }
 
     if (!anyConfigured) {
@@ -1850,6 +1936,26 @@ void ProxmoxController::correlateBackups() {
     for (const QVariant &endpointValue : m_displayedEndpoints) {
         const QVariantMap endpoint = endpointValue.toMap();
         endpointMap.insert(endpoint.value(QStringLiteral("sessionKey")).toString(), endpoint);
+    }
+
+    // Multi-host delegates render the nested endpoint lists, not the flattened
+    // aggregate models below. Keep both representations correlated.
+    QVariantList endpoints = m_displayedEndpoints;
+    for (QVariant &endpointValue : endpoints) {
+        QVariantMap endpoint = endpointValue.toMap();
+
+        QVariantList endpointVms = endpoint.value(QStringLiteral("vms")).toList();
+        applyBackupState(endpointVms, endpointMap, false, anyChanged);
+        endpoint.insert(QStringLiteral("vms"), endpointVms);
+
+        QVariantList endpointLxcs = endpoint.value(QStringLiteral("lxcs")).toList();
+        applyBackupState(endpointLxcs, endpointMap, true, anyChanged);
+        endpoint.insert(QStringLiteral("lxcs"), endpointLxcs);
+
+        endpointValue = endpoint;
+    }
+    if (endpoints != m_displayedEndpoints) {
+        setDisplayedEndpoints(endpoints);
     }
 
     QVariantList vms = m_displayedVmData;

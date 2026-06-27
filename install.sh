@@ -383,7 +383,7 @@ fi
 
 PLASMOID_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
 FINGERPRINT_FILE="$PLASMOID_DIR/.build_fingerprint"
-{ ldconfig -p 2>/dev/null | grep -iE 'libplasma|libQt6' || true; } \
+{ ldconfig -p 2>/dev/null | grep -iE 'libplasma|libQt6|libvncclient|libqtermwidget' || true; } \
   | awk '{print $NF}' \
   | sort \
   | xargs -r md5sum 2>/dev/null \

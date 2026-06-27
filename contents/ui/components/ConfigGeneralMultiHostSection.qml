@@ -451,6 +451,45 @@ ColumnLayout {
                     }
 
                     QQC2.Label {
+                        text: "PBS Trusted Cert PEM:"
+                        visible: pbsEnabledCheck.checked
+                        Layout.alignment: Qt.AlignRight | Qt.AlignTop
+                        horizontalAlignment: Text.AlignRight
+                    }
+                    QQC2.TextArea {
+                        visible: pbsEnabledCheck.checked
+                        Layout.preferredWidth: 500
+                        Layout.preferredHeight: 80
+                        text: card.entry.pbsTrustedCertPem || ""
+                        placeholderText: "Paste this PBS server's PEM certificate here (optional)"
+                        font.family: "JetBrains Mono"
+                        wrapMode: TextEdit.Wrap
+                        onTextChanged: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[card.index].pbsTrustedCertPem = text
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
+                        text: "PBS Trusted Cert File:"
+                        visible: pbsEnabledCheck.checked
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
+                    }
+                    QQC2.TextField {
+                        visible: pbsEnabledCheck.checked
+                        Layout.fillWidth: true
+                        text: card.entry.pbsTrustedCertPath || ""
+                        placeholderText: "/path/to/this-pbs-cert.pem (optional)"
+                        onTextChanged: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[card.index].pbsTrustedCertPath = text
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
                         text: "PBS Warning Days:"
                         visible: pbsEnabledCheck.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter

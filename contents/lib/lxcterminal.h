@@ -17,12 +17,15 @@ class LxcTerminal : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
+    Q_PROPERTY(QString windowPreset READ windowPreset WRITE setWindowPreset)
 
 public:
     explicit LxcTerminal(QObject *parent = nullptr);
     ~LxcTerminal() override;
 
     QString state() const { return m_state; }
+    QString windowPreset() const { return m_windowPreset; }
+    void setWindowPreset(const QString &preset) { m_windowPreset = preset; }
 
     // Show the window and start the connection. Safe to call again to
     // reconnect with fresh termproxy params on the same window instance.
@@ -116,5 +119,6 @@ protected:
     int m_postAuthBytes = 0;
     Phase m_phase = Phase::Disconnected;
     QString m_state = QStringLiteral("disconnected");
+    QString m_windowPreset = QStringLiteral("medium");
     QByteArray m_authBuffer;
 };
