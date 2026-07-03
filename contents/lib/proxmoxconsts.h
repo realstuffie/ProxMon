@@ -41,6 +41,7 @@ namespace Defaults {
     constexpr int SecondsPerDay        = 86400;
     constexpr int RequestTimeoutMs     = 10000;
     constexpr int LowLatencyTimeoutMs  = 5000;
+    constexpr int TaskPollIntervalMs   = 200;
 } // namespace Defaults
 
 } // namespace ProxmoxConst

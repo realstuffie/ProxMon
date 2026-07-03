@@ -180,9 +180,7 @@ void SecretStore::listKWalletKeys() {
             QStringLiteral("proxmox-monitor")
         };
 
-        connect(proc,
-                QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                this,
+        connect(proc,QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),this,
                 [this, proc](int, QProcess::ExitStatus) {
                     if (m_kwalletListProcess != proc) {
                         proc->deleteLater();
@@ -193,10 +191,7 @@ void SecretStore::listKWalletKeys() {
                     proc->deleteLater();
                 });
 
-        connect(proc,
-                &QProcess::errorOccurred,
-                this,
-                [this, proc](QProcess::ProcessError) {
+        connect(proc,&QProcess::errorOccurred,this,[this, proc](QProcess::ProcessError) {
                     if (m_kwalletListProcess != proc) {
                         proc->deleteLater();
                         return;

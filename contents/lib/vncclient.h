@@ -30,6 +30,7 @@ public:
 
     Q_INVOKABLE void connectToVnc(const QString &host, int port);
     Q_INVOKABLE void setTicketSecure(const QByteArray &ticket);
+    Q_INVOKABLE void clearCredentials();
     Q_INVOKABLE void disconnect();
     Q_INVOKABLE void sendKeyEvent(int qtKey, const QString &text, int location, bool pressed);
     Q_INVOKABLE void sendPointerEvent(int x, int y, int qtButtons);
@@ -54,7 +55,6 @@ private:
     void setState(const QString &state);
     void postCmd(std::function<void(rfbClient*)> fn);
 
-    rfbClient        *m_rfb     = nullptr;
     QThread          *m_thread  = nullptr;  // owns rfbInitClient + poll loop
     std::atomic<bool> m_running  { false };
     std::atomic<bool> m_frameDirty { false };

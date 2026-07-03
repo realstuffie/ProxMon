@@ -69,7 +69,8 @@ private slots:
     void onWsDisconnected();
 
 private:
-    void cleanup();
+    void cleanupTransport();
+    void clearCredentials();
     QUrl buildWsUrl() const;
 
     QString m_host;

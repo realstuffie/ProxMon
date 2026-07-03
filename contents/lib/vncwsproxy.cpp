@@ -14,16 +14,20 @@ VncWsProxy::VncWsProxy(QObject *parent)
 
 VncWsProxy::~VncWsProxy()
 {
-    cleanup();
+    cleanupTransport();
+    clearCredentials();
 }
 
 // Public API
 void VncWsProxy::start()
 {
     // Clean up any prior session before re-starting.
-    cleanup();
+    // Credentials may already contain the fresh reconnect handoff, so only
+    // tear down transport state here.
+    cleanupTransport();
 
     if (!m_server->listen(QHostAddress::LocalHost, 0)) {
+        clearCredentials();
         emit errorOccurred(QStringLiteral("VncWsProxy: failed to bind local TCP server: %1")
                                .arg(m_server->errorString()));
         return;
@@ -34,16 +38,21 @@ void VncWsProxy::start()
 
 void VncWsProxy::stop()
 {
-    cleanup();
+    cleanupTransport();
+    clearCredentials();
 }
 
 void VncWsProxy::setAuthHeaderSecure(const QByteArray &header)
 {
+    m_authHeader.fill(0);
+    m_authHeader.clear();
     m_authHeader = header;
 }
 
 void VncWsProxy::setTicketSecure(const QByteArray &ticket)
 {
+    m_ticket.fill(0);
+    m_ticket.clear();
     m_ticket = ticket;
 }
 
@@ -54,7 +63,9 @@ QUrl VncWsProxy::buildWsUrl() const
     // wss://host:apiPort/api2/json/nodes/{node}/{kind}/{vmid}/vncwebsocket
     //   ?port={vncPort}&vncticket={urlEncoded(ticket)}
     QUrl url;
-    url.setScheme(m_ignoreSsl ? QStringLiteral("ws") : QStringLiteral("wss"));
+    // Transport encryption is mandatory. ignoreSsl only controls peer
+    // certificate verification; it must never downgrade the connection.
+    url.setScheme(QStringLiteral("wss"));
     url.setHost(m_host);
     url.setPort(m_apiPort);
     url.setPath(QStringLiteral("/api2/json/nodes/%1/%2/%3/vncwebsocket")
@@ -71,7 +82,7 @@ QUrl VncWsProxy::buildWsUrl() const
     return url;
 }
 
-void VncWsProxy::cleanup()
+void VncWsProxy::cleanupTransport()
 {
     if (m_tcp) {
         m_tcp->disconnect(this);
@@ -88,6 +99,14 @@ void VncWsProxy::cleanup()
     if (m_server->isListening()) {
         m_server->close();
     }
+}
+
+void VncWsProxy::clearCredentials()
+{
+    m_authHeader.fill(0);
+    m_authHeader.clear();
+    m_ticket.fill(0);
+    m_ticket.clear();
 }
 
 // Slots — incoming TCP connection from libvncclient
@@ -119,7 +138,15 @@ void VncWsProxy::onNewConnection()
     // Build the upgrade request with the auth header.
     // Do NOT set Sec-WebSocket-Protocol: Proxmox doesn't advertise "binary"
     // in its 101 response, which causes Qt to reject the handshake.
-    QNetworkRequest req(buildWsUrl());
+    const QUrl wsUrl = buildWsUrl();
+    if (!wsUrl.isValid() || wsUrl.scheme().compare(QStringLiteral("wss"), Qt::CaseInsensitive) != 0) {
+        cleanupTransport();
+        clearCredentials();
+        emit errorOccurred(QStringLiteral("Refusing non-TLS VNC WebSocket connection"));
+        return;
+    }
+
+    QNetworkRequest req(wsUrl);
     if (!m_authHeader.isEmpty()) {
         req.setRawHeader("Authorization", m_authHeader);
     }
@@ -132,10 +159,7 @@ void VncWsProxy::onWsConnected()
 {
     // HTTP upgrade complete — auth header and ticket were sent in the
     // handshake request and are no longer needed. Zero then clear both.
-    m_authHeader.fill(0);
-    m_authHeader.clear();
-    m_ticket.fill(0);
-    m_ticket.clear();
+    clearCredentials();
     // Flush any bytes libvncclient already wrote while WS was connecting.
     if (m_tcp && m_tcp->bytesAvailable() > 0) {
         onTcpReadyRead();
@@ -154,8 +178,9 @@ void VncWsProxy::onWsError(QAbstractSocket::SocketError /*error*/)
 {
     const QString msg = m_ws ? m_ws->errorString() : QStringLiteral("unknown WS error");
     qWarning() << "[VncWsProxy] WebSocket error:" << msg;
+    cleanupTransport();
+    clearCredentials();
     emit errorOccurred(QStringLiteral("WebSocket error: %1").arg(msg));
-    cleanup();
 }
 
 void VncWsProxy::onWsSslErrors(const QList<QSslError> &errors)
@@ -167,6 +192,7 @@ void VncWsProxy::onWsSslErrors(const QList<QSslError> &errors)
 
 void VncWsProxy::onWsDisconnected()
 {
+    clearCredentials();
     // Close the TCP side so libvncclient sees EOF.
     if (m_tcp) m_tcp->disconnectFromHost();
 }

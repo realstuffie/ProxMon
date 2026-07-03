@@ -62,6 +62,7 @@ Window {
             vncClient.connectToVnc("127.0.0.1", localPort)
         }
         onErrorOccurred: function(message) {
+            vncClient.clearCredentials()
             statusLabel.text = "Proxy error: " + message
         }
     }
@@ -236,5 +237,6 @@ Window {
         */
         wsProxy.stop()
         vncClient.disconnect()
+        vncClient.clearCredentials()
     }
 }

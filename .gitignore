@@ -11,6 +11,7 @@ Thumbs.db
 # Prefer out-of-source builds, but ignore any in-tree build dirs too.
 build/
 **/build/
+build-tests/
 
 CMakeCache.txt
 CMakeFiles/

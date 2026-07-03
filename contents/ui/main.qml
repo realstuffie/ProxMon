@@ -8,7 +8,9 @@ import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.plasma.core as PlasmaCore
 import "components"
+// qmllint disable unused-imports
 import "../lib/proxmox" as ProxMon
+// qmllint enable unused-imports
 
 
 PlasmoidItem {
@@ -146,7 +148,10 @@ PlasmoidItem {
     property string pbsTokenId: Plasmoid.configuration.pbsTokenId || ""
     property string pbsTrustedCertPem: Plasmoid.configuration.pbsTrustedCertPem || ""
     property string pbsTrustedCertPath: Plasmoid.configuration.pbsTrustedCertPath || ""
-    property string pbsTokenSecretBuffer: ""
+    // Temporary KConfig handoff from the settings page. Keep this bound so a
+    // newly saved secret is migrated immediately rather than waiting for the
+    // plasmoid to restart. The change handler below clears KConfig first.
+    property string pbsTokenSecretBuffer: Plasmoid.configuration.pbsTokenSecretBuffer || ""
     property bool pbsIgnoreSsl: Plasmoid.configuration.pbsIgnoreSsl === true
     property int pbsBackupWarningDays: Math.max(1, Plasmoid.configuration.pbsBackupWarningDays || 7)
     property int pbsBackupStaleDays: Math.max(1, Plasmoid.configuration.pbsBackupStaleDays || 14)
@@ -245,7 +250,7 @@ PlasmoidItem {
         return hasCoreConfig && controller.refreshResolvingSecrets
     }
     property bool defaultsLoaded: false
-    property bool devMode: true
+    property bool devMode: false
     readonly property bool debugLogToJournal: true
     property int footerClickCount: 0
 
@@ -1259,7 +1264,10 @@ PlasmoidItem {
                 ignoreSsl: ignoreSsl
             })
             root.openConsoles[key] = win
-            win.closing.connect(function() { delete root.openConsoles[key] })
+            win.closing.connect(function() {
+                delete root.openConsoles[key]
+                win.destroy()
+            })
             win.requestReconnect.connect(function() {
                 controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
             })
@@ -1327,6 +1335,17 @@ PlasmoidItem {
         controller.resolveSecretsIfNeeded()
     }
 
+    function migratePbsTokenSecretBuffer() {
+        const secret = String(Plasmoid.configuration.pbsTokenSecretBuffer || "")
+        const host = String(Plasmoid.configuration.pbsHost || "").trim()
+        if (!controller || !secret.trim() || !host) return
+
+        // Remove the plaintext handoff before starting the asynchronous
+        // keychain write. The local QML value dies when this call returns.
+        Plasmoid.configuration.pbsTokenSecretBuffer = ""
+        controller.storeSinglePBSSecret(host, secret)
+    }
+
     onProxmoxHostChanged: {
         if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("proxmoxHost")
@@ -1348,14 +1367,7 @@ PlasmoidItem {
         if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("apiTokenSecret")
     }
-    onPbsTokenSecretBufferChanged: {
-        const secret = pbsTokenSecretBuffer
-        if (!secret || !secret.trim()) return
-        Plasmoid.configuration.pbsTokenSecretBuffer = ""
-        if (connectionMode === "single" && pbsHost && pbsHost.trim() !== "") {
-            controller.storeSinglePBSSecret(pbsHost, secret)
-        }
-    }
+    onPbsTokenSecretBufferChanged: migratePbsTokenSecretBuffer()
     onTrustedCertPemChanged: triggerRefreshFromConfigChange("trustedCertPem")
     onTrustedCertPathChanged: triggerRefreshFromConfigChange("trustedCertPath")
     onPbsTrustedCertPemChanged: triggerRefreshFromConfigChange("pbsTrustedCertPem")
@@ -1412,7 +1424,10 @@ PlasmoidItem {
     onRefreshIntervalChanged: triggerRefreshFromConfigChange("refreshInterval")
     onIgnoreSslChanged: triggerRefreshFromConfigChange("ignoreSsl")
     onPbsEnabledChanged: triggerRefreshFromConfigChange("pbsEnabled")
-    onPbsHostChanged: triggerRefreshFromConfigChange("pbsHost")
+    onPbsHostChanged: {
+        migratePbsTokenSecretBuffer()
+        triggerRefreshFromConfigChange("pbsHost")
+    }
     onPbsPortChanged: triggerRefreshFromConfigChange("pbsPort")
     onPbsTokenIdChanged: triggerRefreshFromConfigChange("pbsTokenId")
     onPbsIgnoreSslChanged: triggerRefreshFromConfigChange("pbsIgnoreSsl")
@@ -1436,13 +1451,7 @@ PlasmoidItem {
     onCompactModeChanged: triggerRefreshFromConfigChange("compactMode")
 
     Component.onCompleted: {
-        const pendingPbsSecret = Plasmoid.configuration.pbsTokenSecretBuffer
-        if (pendingPbsSecret && pendingPbsSecret.trim() !== "") {
-            Plasmoid.configuration.pbsTokenSecretBuffer = ""
-            if (pbsHost && pbsHost.trim() !== "") {
-                controller.storeSinglePBSSecret(pbsHost, pendingPbsSecret)
-            }
-        }
+        migratePbsTokenSecretBuffer()
 
         logDebug("Component.onCompleted: Plasmoid initialized")
         resolveSecretIfNeeded()
@@ -1596,13 +1605,6 @@ PlasmoidItem {
                 }
             }
 
-            PlasmaComponents.BusyIndicator {
-                running: root.isRefreshing
-                visible: root.isRefreshing
-                implicitWidth: 20
-                implicitHeight: 20
-            }
-
             PlasmaComponents.Button {
                 icon.name: "utilities-terminal"
                 visible: Plasmoid.configuration.consoleEnabled !== false
@@ -1620,12 +1622,27 @@ PlasmoidItem {
                 PlasmaComponents.ToolTip { text: "Open host shell" }
             }
 
-            PlasmaComponents.Button {
-                icon.name: "view-refresh"
-                onClicked: root.fetchData()
-                visible: root.configured && !root.isRefreshing
+            Item {
+                visible: root.configured
                 implicitHeight: 28
                 implicitWidth: 28
+                Layout.preferredHeight: 28
+                Layout.preferredWidth: 28
+
+                PlasmaComponents.Button {
+                    anchors.fill: parent
+                    icon.name: "view-refresh"
+                    onClicked: root.fetchData()
+                    visible: !root.isRefreshing
+                }
+
+                PlasmaComponents.BusyIndicator {
+                    anchors.centerIn: parent
+                    running: root.isRefreshing
+                    visible: root.isRefreshing
+                    implicitWidth: 20
+                    implicitHeight: 20
+                }
             }
         }
 
@@ -1814,8 +1831,11 @@ PlasmoidItem {
                     }
 
                     delegate: MultiHostEndpointSection {
+                        required property int index
                         required property var modelData
                         endpoint: modelData
+                        endpointIndex: index
+                        anonymized: root.devMode
                         uiRadiusL: root.uiRadiusL
                         uiBorderOpacity: root.uiBorderOpacity
                         uiMutedTextOpacity: root.uiMutedTextOpacity

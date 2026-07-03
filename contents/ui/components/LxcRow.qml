@@ -266,8 +266,8 @@ Rectangle {
             Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: root.consoleEnabled && (!root.ctModel || root.ctModel.status !== "running") }
 
         Item {
-            Layout.preferredWidth: root.scrollbarReserve
-            Layout.minimumWidth: root.scrollbarReserve
+            Layout.preferredWidth: 2
+            Layout.minimumWidth: 2
         }
     }
 }

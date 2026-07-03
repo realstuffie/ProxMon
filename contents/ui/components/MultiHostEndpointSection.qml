@@ -9,8 +9,12 @@ ColumnLayout {
     id: root
 
     required property var endpoint
+    property int endpointIndex: 0
+    property bool anonymized: false
     property string sessionKey: endpoint ? endpoint.sessionKey : ""
-    property string endpointLabel: endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : "")
+    property string endpointLabel: anonymized
+        ? ("Endpoint " + (endpointIndex + 1))
+        : (endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : ""))
     property string endpointError: endpoint && endpoint.error ? endpoint.error : ""
     property bool endpointOffline: endpoint ? !!endpoint.offline : false
     property var nodes: endpoint && endpoint.nodes ? endpoint.nodes : []
@@ -62,20 +66,17 @@ ColumnLayout {
 
         RowLayout {
             anchors.fill: parent
-            anchors.margins: 8
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
             spacing: 6
-
-            Kirigami.Icon {
-                source: "server-database"
-                implicitWidth: 16
-                implicitHeight: 16
-                opacity: root.uiMutedTextOpacity
-            }
 
             PlasmaComponents.Label {
                 text: root.endpointLabel
                 font.bold: true
+                font.family: "JetBrains Mono"
                 Layout.fillWidth: true
+                Layout.fillHeight: true
+                verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
             }
 
@@ -85,12 +86,16 @@ ColumnLayout {
                 color: Kirigami.Theme.negativeTextColor
                 font.bold: true
                 font.pixelSize: 10
+                Layout.alignment: Qt.AlignVCenter
             }
 
             PlasmaComponents.Label {
-                text: root.endpoint ? (root.endpoint.host + ":" + root.endpoint.port) : ""
+                text: root.endpoint
+                    ? ((root.anonymized ? "192.168.x.x" : root.endpoint.host) + ":" + root.endpoint.port)
+                    : ""
                 opacity: 0.7
                 font.pixelSize: 10
+                Layout.alignment: Qt.AlignVCenter
             }
 
             PlasmaComponents.ToolButton {
@@ -100,6 +105,7 @@ ColumnLayout {
                 enabled: !root.endpointOffline
                 implicitWidth: 24
                 implicitHeight: 24
+                Layout.alignment: Qt.AlignVCenter
                 onClicked: {
                     var node = root.nodes[0]
                     if (node && typeof root.onConsole === "function") {

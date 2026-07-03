@@ -64,6 +64,7 @@ class ProxmoxController : public QObject {
 
 public:
     explicit ProxmoxController(QObject *parent = nullptr);
+    ~ProxmoxController() override;
 
     QString connectionMode() const { return m_connectionMode; }
     void setConnectionMode(const QString &value);
@@ -304,6 +305,8 @@ private:
     void scheduleRetry(const QString &reason);
     void resetTransientStateForModeChange();
     void resetMultiTempData();
+    void discardConsoleCredentials(const QString &requestId);
+    void clearPendingConsoleCredentials();
     void dispatchSingleFetchWithSecret(const QString &secret);
     void dispatchSingleNodeChildrenWithSecret(const QVariantList &nodeNames,
                                               const QString &secret);
@@ -339,6 +342,7 @@ private:
     QVariantMap endpointBySession(const QString &sessionKey) const;
     void refreshPBS();
     void refreshPBSNow();
+    void checkPBSRequestsComplete();
     void applyBackupState(QVariantList &items, const QVariantMap &endpointMap, bool isLxc, bool &anyChanged);
     BackupStatus evaluateBackupStatus(qint64 lastBackupTime, int warningDays, int staleDays) const;
     QString lastBackupDisplay(qint64 backupTime) const;

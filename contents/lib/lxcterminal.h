@@ -80,6 +80,7 @@ private:
     void ensureWindow(const QString &vmName, const QString &nodeName);
     void destroyWindow();
     void openSocket();
+    void clearCredentials();
     void deliverToTerminal(const QByteArray &data);
 
     // WebSocket frame handlers

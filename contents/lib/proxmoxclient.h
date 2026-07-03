@@ -10,6 +10,8 @@
 
 #include "pbstypes.h"
 
+class QTimer;
+
 class ProxmoxClient : public QObject {
     Q_OBJECT
 
@@ -105,7 +107,7 @@ public:
 
     // Abort any in-flight network requests (useful when refreshing or timing out).
     void cancelAll();
-    void cancelPVE();
+    void cancelRefreshRequests();
     void cancelPBS();
     void fetchPBSDatastores(const QString &pbsHost,
                                         int port,
@@ -183,7 +185,10 @@ signals:
     void pbsSnapshotsReceived(const QString &pbsHost,
                               const QString &datastore,
                               const QList<PBSSnapshot> &snapshots);
-    void pbsError(const QString &pbsHost, const QString &message);
+    void pbsDatastoresError(const QString &pbsHost, const QString &message);
+    void pbsSnapshotsError(const QString &pbsHost,
+                           const QString &datastore,
+                           const QString &message);
 
 private:
     void requestFor(const QString &sessionKey,
@@ -231,7 +236,9 @@ private:
     QNetworkAccessManager m_nam;
     bool m_debugEnabled = false;
     bool m_lowLatency = false;
-    QSet<QNetworkReply *> m_inFlight;
+    QSet<QNetworkReply *> m_refreshInFlight;
+    QSet<QNetworkReply *> m_interactiveInFlight;
     QSet<QNetworkReply *> m_pbsInFlight;
     QSet<QNetworkReply *> m_taskInFlight;
+    QSet<QTimer *> m_taskPollTimers;
 };

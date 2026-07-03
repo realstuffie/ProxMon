@@ -203,6 +203,16 @@ rm -f ~/.local/share/icons/hicolor/scalable/apps/lxc.svg
 
 Open an issue with your KDE Plasma version (`plasmashell --version`), Proxmox VE version, steps to reproduce, and relevant log output.
 
+### Unit tests
+
+Build and run the native Qt tests separately from the production plugin build:
+
+```bash
+cmake -S contents/lib -B build-tests -DPROXMON_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug
+cmake --build build-tests --parallel
+ctest --test-dir build-tests --output-on-failure
+```
+
 ## License
 
 GPL-3.0 or later. See [LICENSE](LICENSE) for details.

@@ -1,5 +1,6 @@
 #include "proxmoxclient.h"
 #include "proxmoxconsts.h"
+#include "proximoxtaskutils.h"
 
 #include <QFile>
 #include <QJsonArray>
@@ -8,7 +9,10 @@
 #include <QNetworkReply>
 #include <QSslCertificate>
 #include <QSslConfiguration>
+#include <QTimer>
 #include <QUrl>
+
+#include <utility>
 
 ProxmoxClient::ProxmoxClient(QObject *parent)
     : QObject(parent) {}
@@ -21,23 +25,38 @@ void ProxmoxClient::cancelAll() {
     // Abort any outstanding requests to avoid late reply storms and wasted work.
     //
     // QNetworkReply::abort() emits finished() (Qt docs), so snapshot first to avoid
-    // iterating while callbacks remove from m_inFlight / m_pbsInFlight.
+    // iterating while callbacks remove from the tracking sets.
     const auto pbsReplies = m_pbsInFlight.values();
     m_pbsInFlight.clear();
-    const auto replies = m_inFlight.values();
-    m_inFlight.clear();
+    const auto refreshReplies = m_refreshInFlight.values();
+    m_refreshInFlight.clear();
+    const auto interactiveReplies = m_interactiveInFlight.values();
+    m_interactiveInFlight.clear();
+    const auto taskReplies = m_taskInFlight.values();
+    m_taskInFlight.clear();
+    const auto taskPollTimers = m_taskPollTimers.values();
+    m_taskPollTimers.clear();
 
-    for (QNetworkReply *r : replies) {
+    for (QNetworkReply *r : refreshReplies) {
+        if (r) r->abort();
+    }
+    for (QNetworkReply *r : interactiveReplies) {
         if (r) r->abort();
     }
     for (QNetworkReply *r : pbsReplies) {
         if (r) r->abort();
     }
+    for (QNetworkReply *r : taskReplies) {
+        if (r) r->abort();
+    }
+    for (QTimer *timer : taskPollTimers) {
+        delete timer;
+    }
 }
 
-void ProxmoxClient::cancelPVE() {
-    const auto replies = m_inFlight.values();
-    m_inFlight.clear();
+void ProxmoxClient::cancelRefreshRequests() {
+    const auto replies = m_refreshInFlight.values();
+    m_refreshInFlight.clear();
     for (QNetworkReply *r : replies) {
         if (r) r->abort();
     }
@@ -215,43 +234,6 @@ QString extractJsonMessage(const QByteArray &body) {
     return msg;
 }
 
-QString extractTaskUpid(const QVariant &data) {
-    const QVariantMap map = data.toMap();
-    const QVariant value = map.value(QStringLiteral("data"));
-    if (value.metaType().id() == QMetaType::QString) {
-        return value.toString().trimmed();
-    }
-    return {};
-}
-
-QString extractTaskExitMessage(const QVariant &data) {
-    const QVariantMap root = data.toMap();
-    const QVariantMap payload = root.value(QStringLiteral("data")).toMap();
-    QString exitStatus = payload.value(QStringLiteral("exitstatus")).toString().trimmed();
-    QString status = payload.value(QStringLiteral("status")).toString().trimmed();
-
-    if (exitStatus.compare(QStringLiteral("OK"), Qt::CaseInsensitive) == 0
-        || exitStatus.compare(QStringLiteral("TASK OK"), Qt::CaseInsensitive) == 0
-        || exitStatus.startsWith(QStringLiteral("TASK WARNINGS"), Qt::CaseInsensitive)) {
-        return {};
-    }
-    if (!exitStatus.isEmpty()) {
-        return exitStatus;
-    }
-    if (status.compare(ProxmoxConst::Status::Stopped, Qt::CaseInsensitive) == 0) {
-        return QStringLiteral("Task stopped without success");
-    }
-    return {};
-}
-
-bool taskStillRunning(const QVariant &data) {
-    const QVariantMap root = data.toMap();
-    const QVariantMap payload = root.value(QStringLiteral("data")).toMap();
-    const QString status = payload.value(QStringLiteral("status")).toString().trimmed();
-    return status.compare(ProxmoxConst::Status::Running, Qt::CaseInsensitive) == 0;
-}
-
-
 template <typename EmitErr, typename EmitOk>
 void handleFinishedReply(QNetworkReply *r,
                          int seq,
@@ -345,7 +327,7 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
                                                     : ProxmoxConst::Defaults::RequestTimeoutMs);
     QNetworkReply *r = m_nam.get(req);
 
-    m_inFlight.insert(r);
+    m_refreshInFlight.insert(r);
 
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -355,7 +337,7 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
 
     QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, sessionKey, kind, node]() {
         // Remove early so cancelAll() never sees a finished reply.
-        m_inFlight.remove(r);
+        m_refreshInFlight.remove(r);
 
         auto emitErr = [&](const QString &msg) {
             if (sessionKey.isEmpty()) {
@@ -405,7 +387,7 @@ void ProxmoxClient::postFor(const QString &sessionKey,
                                                     : ProxmoxConst::Defaults::RequestTimeoutMs);
 
     QNetworkReply *r = m_nam.post(req, QByteArray());
-    m_inFlight.insert(r);
+    m_interactiveInFlight.insert(r);
 
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -414,7 +396,7 @@ void ProxmoxClient::postFor(const QString &sessionKey,
     }
 
     QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors, trustedCertPem, trustedCertPath, actionKind, node, vmid, action]() {
-        m_inFlight.remove(r);
+        m_interactiveInFlight.remove(r);
 
         const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
         const int httpStatus = httpAttr.isValid() ? httpAttr.toInt() : 0;
@@ -471,7 +453,7 @@ void ProxmoxClient::postFor(const QString &sessionKey,
         }
 
         const QVariant data = doc.toVariant();
-        const QString upid = extractTaskUpid(data);
+        const QString upid = ProxmoxTaskUtils::extractUpid(data);
         if (upid.isEmpty()) {
             if (sessionKey.isEmpty()) {
                 emit actionReply(seq, actionKind, node, vmid, action, data);
@@ -517,7 +499,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
                     ignoreSslErrors       ? QStringLiteral("true") : QStringLiteral("false"));
     }
     if (pbsHost.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
-        emit pbsError(pbsHost, QStringLiteral("Not configured"));
+        emit pbsDatastoresError(pbsHost, QStringLiteral("Not configured"));
         return;
     }
 
@@ -528,14 +510,18 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
         ? [&]() -> QByteArray {
               QFile f(trustedCertPath.trimmed());
               return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
-          }()
+        }()
         : trustedCertPem;
+    QByteArray pbsSecret = tokenSecret.toUtf8();
 
     QNetworkRequest req = buildRequest(pbsHost, port, QStringLiteral("/admin/datastore"),
-                                       tokenId, tokenSecret, resolvedCertPem, QString(),
+                                       tokenId, QString(), resolvedCertPem, QString(),
                                        m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs
                                                     : ProxmoxConst::Defaults::RequestTimeoutMs);
-    req.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
+    QByteArray authorization = QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + pbsSecret;
+    req.setRawHeader("Authorization", authorization);
+    authorization.fill(0);
+    authorization.clear();
 
     QNetworkReply *r = m_nam.get(req);
     m_pbsInFlight.insert(r);
@@ -546,12 +532,22 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
         });
     }
 
-    QObject::connect(r, &QNetworkReply::finished, this, [this, r, pbsHost, port, tokenId, tokenSecret, ignoreSslErrors, resolvedCertPem]() {
-        m_pbsInFlight.remove(r);
+    QObject::connect(r, &QNetworkReply::finished, this,
+                     [this, r, pbsHost, port, tokenId, pbsSecret = std::move(pbsSecret),
+                      ignoreSslErrors, resolvedCertPem]() mutable {
+        auto clearSecret = [&pbsSecret]() {
+            pbsSecret.fill(0);
+            pbsSecret.clear();
+        };
+        if (!m_pbsInFlight.remove(r)) {
+            clearSecret();
+            r->deleteLater();
+            return;
+        }
 
         auto emitErr = [&](const QString &msg) {
             if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSDatastores error host=%1 message=%2").arg(pbsHost, msg);
-            emit pbsError(pbsHost, msg);
+            emit pbsDatastoresError(pbsHost, msg);
         };
         auto emitOk = [&](const QVariant &data) {
             if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSDatastores ok host=%1").arg(pbsHost);
@@ -570,11 +566,14 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
                                                            port,
                                                            QStringLiteral("/admin/datastore/%1/snapshots").arg(QString::fromUtf8(QUrl::toPercentEncoding(datastore))),
                                                            tokenId,
-                                                           tokenSecret,
+                                                           QString(),
                                                            resolvedCertPem,
                                                            QString(),
                                                            m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
-                snapshotReq.setRawHeader("Authorization", QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + tokenSecret.toUtf8());
+                QByteArray snapshotAuthorization = QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + pbsSecret;
+                snapshotReq.setRawHeader("Authorization", snapshotAuthorization);
+                snapshotAuthorization.fill(0);
+                snapshotAuthorization.clear();
 
                 QNetworkReply *snapshotReply = m_nam.get(snapshotReq);
                 m_pbsInFlight.insert(snapshotReply);
@@ -585,10 +584,13 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
                 }
 
                 QObject::connect(snapshotReply, &QNetworkReply::finished, this, [this, snapshotReply, pbsHost, datastore]() {
-                    m_pbsInFlight.remove(snapshotReply);
+                    if (!m_pbsInFlight.remove(snapshotReply)) {
+                        snapshotReply->deleteLater();
+                        return;
+                    }
                     auto emitSnapErr = [&](const QString &msg) {
                         if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSSnapshots error host=%1 datastore=%2 message=%3").arg(pbsHost, datastore, msg);
-                        emit pbsError(pbsHost, msg);
+                        emit pbsSnapshotsError(pbsHost, datastore, msg);
                     };
                     auto emitSnapOk = [&](const QVariant &snapData) {
                         if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSSnapshots ok host=%1 datastore=%2").arg(pbsHost, datastore);
@@ -619,6 +621,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
         };
 
         handleFinishedReply(r, 0, QStringLiteral("pbs-datastores"), QString(), QString(), emitErr, emitOk);
+        clearSecret();
     });
 }
 
@@ -684,25 +687,40 @@ void ProxmoxClient::pollTaskStatus(const QString &sessionKey,
                             sessionKey,
                             emitTaskError,
                             [&, this](const QVariant &data) {
-                                if (taskStillRunning(data)) {
-                                    pollTaskStatus(sessionKey,
-                                                   host,
-                                                   port,
-                                                   tokenId,
-                                                   tokenSecret,
-                                                   ignoreSslErrors,
-                                                   trustedCertPem,
-                                                   trustedCertPath,
-                                                   upid,
-                                                   seq,
-                                                   actionKind,
-                                                   node,
-                                                   vmid,
-                                                   action);
+                                if (ProxmoxTaskUtils::isRunning(data)) {
+                                    auto *timer = new QTimer(this);
+                                    timer->setSingleShot(true);
+                                    timer->setInterval(ProxmoxConst::Defaults::TaskPollIntervalMs);
+                                    m_taskPollTimers.insert(timer);
+                                    QObject::connect(timer,
+                                                     &QTimer::timeout,
+                                                     this,
+                                                     [this, timer, sessionKey, host, port, tokenId,
+                                                      tokenSecret, ignoreSslErrors, trustedCertPem,
+                                                      trustedCertPath, upid, seq, actionKind, node,
+                                                      vmid, action]() {
+                                        m_taskPollTimers.remove(timer);
+                                        timer->deleteLater();
+                                        pollTaskStatus(sessionKey,
+                                                       host,
+                                                       port,
+                                                       tokenId,
+                                                       tokenSecret,
+                                                       ignoreSslErrors,
+                                                       trustedCertPem,
+                                                       trustedCertPath,
+                                                       upid,
+                                                       seq,
+                                                       actionKind,
+                                                       node,
+                                                       vmid,
+                                                       action);
+                                    });
+                                    timer->start();
                                     return;
                                 }
 
-                                const QString exitMessage = extractTaskExitMessage(data);
+                                const QString exitMessage = ProxmoxTaskUtils::exitMessage(data);
                                 if (!exitMessage.isEmpty()) {
                                     emitTaskError(exitMessage);
                                     return;
@@ -741,7 +759,7 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
     QNetworkReply *r = m_nam.post(req, body);
-    m_inFlight.insert(r);
+    m_interactiveInFlight.insert(r);
 
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -756,7 +774,7 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
 
     QObject::connect(r, &QNetworkReply::finished, this,
         [this, r, sessionKey, requestId, host, port, node, kind, vmid, authHeader, ignoreSslErrors]() {
-            m_inFlight.remove(r);
+            m_interactiveInFlight.remove(r);
 
             const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
             const int httpStatus = httpAttr.isValid() ? httpAttr.toInt() : 0;
@@ -835,7 +853,7 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
     QNetworkReply *r = m_nam.post(req, body);
-    m_inFlight.insert(r);
+    m_interactiveInFlight.insert(r);
 
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -850,7 +868,7 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
 
     QObject::connect(r, &QNetworkReply::finished, this,
         [this, r, sessionKey, requestId, host, node, vmid, authHeader]() {
-            m_inFlight.remove(r);
+            m_interactiveInFlight.remove(r);
 
             const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
             const int httpStatus = httpAttr.isValid() ? httpAttr.toInt() : 0;
@@ -924,7 +942,7 @@ void ProxmoxClient::requestNodeTermProxy(const QString &sessionKey,
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
     QNetworkReply *r = m_nam.post(req, body);
-    m_inFlight.insert(r);
+    m_interactiveInFlight.insert(r);
 
     if (ignoreSslErrors) {
         QObject::connect(r, &QNetworkReply::sslErrors, r, [r](const QList<QSslError> &) {
@@ -937,7 +955,7 @@ void ProxmoxClient::requestNodeTermProxy(const QString &sessionKey,
 
     QObject::connect(r, &QNetworkReply::finished, this,
         [this, r, sessionKey, requestId, host, node, authHeader]() {
-            m_inFlight.remove(r);
+            m_interactiveInFlight.remove(r);
 
             const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
             const int httpStatus = httpAttr.isValid() ? httpAttr.toInt() : 0;

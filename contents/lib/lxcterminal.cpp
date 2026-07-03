@@ -96,11 +96,15 @@ void LxcTerminal::connectWithTicket(int proxyPort,
 
 void LxcTerminal::setAuthHeaderSecure(const QByteArray &header)
 {
+    m_authHeader.fill(0);
+    m_authHeader.clear();
     m_authHeader = header;
 }
 
 void LxcTerminal::setTicketSecure(const QByteArray &ticket)
 {
+    m_ticket.fill(0);
+    m_ticket.clear();
     m_ticket = ticket;
 }
 
@@ -120,11 +124,20 @@ void LxcTerminal::disconnect()
         m_ws->deleteLater();
         m_ws = nullptr;
     }
+    clearCredentials();
     m_phase = Phase::Disconnected;
     m_authBuffer.clear();
     if (m_state != QStringLiteral("disconnected")) {
         setState(QStringLiteral("disconnected"));
     }
+}
+
+void LxcTerminal::clearCredentials()
+{
+    m_authHeader.fill(0);
+    m_authHeader.clear();
+    m_ticket.fill(0);
+    m_ticket.clear();
 }
 
 void LxcTerminal::closeWindow()
@@ -213,6 +226,7 @@ void LxcTerminal::destroyWindow()
 void LxcTerminal::openSocket()
 {
     if (m_host.isEmpty() || m_ticket.isEmpty() || m_user.isEmpty()) {
+        clearCredentials();
         emit errorOccurred(QStringLiteral("Missing host/ticket/user for LXC terminal"));
         setState(QStringLiteral("error"));
         return;
@@ -248,6 +262,14 @@ void LxcTerminal::openSocket()
                    QString::fromLatin1(m_ticket.toPercentEncoding()));
     url.setQuery(q);
 
+    if (!url.isValid() || url.scheme().compare(QStringLiteral("wss"), Qt::CaseInsensitive) != 0) {
+        clearCredentials();
+        m_phase = Phase::Errored;
+        setState(QStringLiteral("error"));
+        emit errorOccurred(QStringLiteral("Refusing non-TLS terminal WebSocket connection"));
+        return;
+    }
+
     m_ws = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
 
     if (m_ignoreSsl) {
@@ -269,12 +291,13 @@ void LxcTerminal::openSocket()
             QByteArray ba = m_user.toUtf8() + ':' + m_ticket + '\n';
             m_ws->sendTextMessage(QString::fromUtf8(ba));
             ba.fill(0);
-            m_ticket.fill(0);
-            m_ticket.clear();
         }
+        m_ticket.fill(0);
+        m_ticket.clear();
     });
 
     QObject::connect(m_ws, &QWebSocket::disconnected, this, [this]() {
+        clearCredentials();
         if (m_phase == Phase::Errored) return;
         setState(QStringLiteral("disconnected"));
         m_phase = Phase::Disconnected;
@@ -284,6 +307,12 @@ void LxcTerminal::openSocket()
         [this](QAbstractSocket::SocketError) {
             if (!m_ws) return;
             const QString msg = m_ws->errorString();
+            QWebSocket *failedSocket = m_ws;
+            m_ws = nullptr;
+            failedSocket->disconnect(this);
+            failedSocket->abort();
+            failedSocket->deleteLater();
+            clearCredentials();
             m_phase = Phase::Errored;
             setState(QStringLiteral("error"));
             emit errorOccurred(msg.isEmpty() ? QStringLiteral("LXC terminal error") : msg);

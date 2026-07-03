@@ -54,47 +54,59 @@ VncClient::VncClient(QObject *parent)
 
 void VncClient::setTicketSecure(const QByteArray &ticket)
 {
+    clearCredentials();
     m_ticket = ticket;
 }
 
 VncClient::~VncClient()
 {
     disconnect();
+    clearCredentials();
+}
+
+void VncClient::clearCredentials()
+{
+    m_ticket.fill(0);
+    m_ticket.clear();
 }
 
 void VncClient::connectToVnc(const QString &host, int port)
 {
-    if (m_rfb || m_thread)
+    if (m_thread)
         disconnect();
 
     setState(QStringLiteral("connecting"));
 
-    m_rfb = rfbGetClient(8, 3, 4); // 8 bits/sample, 3 samples/pixel, 4 bytes/pixel
-    rfbClientSetClientData(m_rfb, nullptr, this);
+    rfbClient *rfb = rfbGetClient(8, 3, 4); // 8 bits/sample, 3 samples/pixel, 4 bytes/pixel
+    if (!rfb) {
+        clearCredentials();
+        setState(QStringLiteral("error"));
+        emit errorOccurred(QStringLiteral("Failed to allocate VNC client"));
+        return;
+    }
+    rfbClientSetClientData(rfb, nullptr, this);
 
-    m_rfb->MallocFrameBuffer    = resizeCallback;
-    m_rfb->GotFrameBufferUpdate = updateCallback;
-    m_rfb->serverHost           = strdup(host.toUtf8().constData());
-    m_rfb->serverPort           = port;
+    rfb->MallocFrameBuffer    = resizeCallback;
+    rfb->GotFrameBufferUpdate = updateCallback;
+    rfb->serverHost           = strdup(host.toUtf8().constData());
+    rfb->serverPort           = port;
 
     // Ticket stored in client-data slot 1; burned here after strdup.
     // C-side copy is zeroed by the worker thread after handshake.
-    m_rfb->GetPassword = [](rfbClient *client) -> char* {
+    rfb->GetPassword = [](rfbClient *client) -> char* {
         char *t = static_cast<char *>(rfbClientGetClientData(client, (void*)1));
         return t ? strdup(t) : strdup("");
     };
-    rfbClientSetClientData(m_rfb, (void*)1, strdup(m_ticket.constData()));
+    rfbClientSetClientData(rfb, (void*)1, strdup(m_ticket.constData()));
     m_ticket.fill(0);
     m_ticket.clear();
 
-    m_rfb->appData.encodingsString = "tight zrle hextile raw";
+    rfb->appData.encodingsString = "tight zrle hextile raw";
 
     // RFB session runs on a worker thread — rfbInitClient blocks on I/O.
     // Qt-facing work is marshalled back via QueuedConnection. See docs/ARCHITECTURE.md.
     m_running.store(true);
-    m_thread = QThread::create([this]() {
-        rfbClient *rfb = m_rfb;
-
+    m_thread = QThread::create([this, rfb]() {
         // Grab the ticket before rfbInitClient — it frees rfb on failure so
         // we can't read client data afterward.
         char *ticketSlot = static_cast<char *>(rfbClientGetClientData(rfb, (void*)1));
@@ -107,7 +119,7 @@ void VncClient::connectToVnc(const QString &host, int port)
                 explicit_bzero(ticketSlot, strlen(ticketSlot) + 1);
                 free(ticketSlot);
             }
-            m_rfb = nullptr;
+            m_running.store(false);
             QMetaObject::invokeMethod(this, [this]() {
                 if (m_state != QStringLiteral("disconnected")) {
                     setState(QStringLiteral("error"));
@@ -192,7 +204,7 @@ void VncClient::connectToVnc(const QString &host, int port)
         }
 
         rfbClientCleanup(rfb);
-        m_rfb = nullptr;
+        m_running.store(false);
     });
     m_thread->start();
 }
@@ -216,11 +228,6 @@ void VncClient::disconnect()
     */
     QCoreApplication::removePostedEvents(this);
 
-    if (m_rfb) {
-        rfbClientCleanup(m_rfb);
-        m_rfb = nullptr;
-    }
-
     {
         QMutexLocker lk(&m_cmdMutex);
         m_cmdQueue.clear();
@@ -231,7 +238,7 @@ void VncClient::disconnect()
 
 void VncClient::sendKeyEvent(int qtKey, const QString &text, int location, bool pressed)
 {
-    if (!m_rfb) return;
+    if (!m_running.load()) return;
     quint32 keysym = getKeysym(static_cast<Qt::Key>(qtKey), text, location);
     if (!keysym) return;
     quint32 trackKey = (quint32(qtKey) << 2) | (location & 3);
@@ -248,7 +255,7 @@ void VncClient::sendKeyEvent(int qtKey, const QString &text, int location, bool 
 
 void VncClient::allKeysUp()
 {
-    if (!m_rfb) return;
+    if (!m_running.load()) return;
     const QList<quint32> keysyms = m_keyDownList.values();
     m_keyDownList.clear();
     postCmd([keysyms](rfbClient *rfb) {
@@ -259,7 +266,7 @@ void VncClient::allKeysUp()
 
 void VncClient::sendPointerEvent(int x, int y, int qtButtons)
 {
-    if (!m_rfb) return;
+    if (!m_running.load()) return;
     // Qt:  Left=0x01, Right=0x02, Middle=0x04, Back=0x08, Forward=0x10
     // VNC: Left=bit0, Middle=bit1, Right=bit2, Back=bit7, Forward=bit8
     int vncMask = 0;
@@ -275,7 +282,7 @@ void VncClient::sendPointerEvent(int x, int y, int qtButtons)
 
 void VncClient::sendWheelEvent(int x, int y, int steps, bool up, bool horizontal)
 {
-    if (!m_rfb) return;
+    if (!m_running.load()) return;
     // VNC scroll: up=bit3, down=bit4, left=bit5, right=bit6
     int btn = horizontal ? (up ? (1 << 5) : (1 << 6))
                          : (up ? (1 << 3) : (1 << 4));
