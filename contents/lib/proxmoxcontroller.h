@@ -404,6 +404,11 @@ private:
     QString m_retryStatusText;
     QString m_pbsRefreshError;
     int m_pendingPbsEndpoints = 0;
+    // Bumped by every refreshPBSNow() run; PBS keychain callbacks capture the
+    // value and drop themselves when a newer cycle (or a config change that
+    // retriggers PBS refresh) has superseded them. Keychain reads cannot be
+    // cancelled, so this is the only way to invalidate them.
+    quint64 m_pbsRefreshGeneration = 0;
     QVariant m_proxmoxData;
     QVariantList m_vmData;
     QVariantList m_lxcData;

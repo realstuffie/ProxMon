@@ -122,6 +122,7 @@ KCM.SimpleKCM {
 
     // Terminal size preset
     property string cfg_terminalSize: "medium"
+    property string cfg_terminalSizeDefault: "medium"
 
     // Power actions toggle
     property alias cfg_powerActionsEnabled: powerActionsEnabledCheck.checked

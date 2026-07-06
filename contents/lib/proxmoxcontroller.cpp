@@ -84,6 +84,9 @@ ProxmoxController::ProxmoxController(QObject *parent)
             apiPort   = endpoint.value(QStringLiteral("port"), m_port).toInt();
             ignoreSsl = endpoint.value(QStringLiteral("ignoreSsl"), m_ignoreSsl).toBool();
         }
+        // Node consoles are labelled with the node name directly, but openConsole
+        // still stashed a name entry for this request — drain it here too.
+        m_pendingConsoleNames.remove(requestId);
         discardConsoleCredentials(requestId);
         m_pendingConsoleAuth[requestId] = authHeader;
         m_pendingConsoleTicket[requestId] = ticket.toUtf8();
@@ -1707,6 +1710,10 @@ void ProxmoxController::checkPBSRequestsComplete() {
 
 void ProxmoxController::refreshPBSNow() {
     m_api->cancelPBS();
+    // Keychain reads started by an earlier cycle cannot be cancelled; bumping
+    // the generation makes their callbacks drop themselves instead of fetching
+    // with stale settings or clobbering this cycle's counters.
+    const quint64 generation = ++m_pbsRefreshGeneration;
     appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS mode=%1").arg(m_connectionMode));
     m_latestBackups.clear();
     m_pendingPbsSnapshotRequests = 0;
@@ -1749,19 +1756,21 @@ void ProxmoxController::refreshPBSNow() {
                 correlateBackups();
                 return;
             }
-            store->readSecret(key, [this, store, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl](const QString &secret) {
+            store->readSecret(key, [this, store, generation, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl](const QString &secret) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretReady host=%1 secretEmpty=%2")
                     .arg(pbsHost, secret.isEmpty() ? QStringLiteral("true") : QStringLiteral("false")));
                 store->deleteLater();
+                if (generation != m_pbsRefreshGeneration) return;
                 if (secret.isEmpty()) {
                     correlateBackups();
                     return;
                 }
                 m_pendingPbsEndpoints = 1;
                 m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
-            }, [this, store, pbsHost](const QString &message) {
+            }, [this, store, generation, pbsHost](const QString &message) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretError host=%1 message=%2").arg(pbsHost, message));
                 store->deleteLater();
+                if (generation != m_pbsRefreshGeneration) return;
                 if (m_pbsRefreshError != message) {
                     m_pbsRefreshError = message;
                     emit pbsLastErrorChanged();
@@ -1800,8 +1809,9 @@ void ProxmoxController::refreshPBSNow() {
         const QString pbsTrustedCertPath = entry.contains(QStringLiteral("pbsTrustedCertPath"))
             ? entry.value(QStringLiteral("pbsTrustedCertPath")).toString().trimmed()
             : m_pbsTrustedCertPath;
-        store->readSecret(key, [this, store, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl, pbsTrustedCertPem, pbsTrustedCertPath](const QString &secret) {
+        store->readSecret(key, [this, store, generation, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl, pbsTrustedCertPem, pbsTrustedCertPath](const QString &secret) {
             store->deleteLater();
+            if (generation != m_pbsRefreshGeneration) return;
             if (secret.isEmpty()) {
                 if (m_pendingPbsEndpoints > 0) {
                     m_pendingPbsEndpoints -= 1;
@@ -1810,9 +1820,10 @@ void ProxmoxController::refreshPBSNow() {
                 return;
             }
             m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, pbsTrustedCertPem.toUtf8(), pbsTrustedCertPath);
-        }, [this, store, pbsHost](const QString &message) {
+        }, [this, store, generation, pbsHost](const QString &message) {
             appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi secretError host=%1 message=%2").arg(pbsHost, message));
             store->deleteLater();
+            if (generation != m_pbsRefreshGeneration) return;
             if (m_pbsRefreshError != message) {
                 m_pbsRefreshError = message;
                 emit pbsLastErrorChanged();
