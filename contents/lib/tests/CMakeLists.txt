@@ -41,20 +41,20 @@ target_link_libraries(tst_consolecredentials PRIVATE
 
 add_test(NAME consolecredentials COMMAND tst_consolecredentials)
 
-qt_add_executable(tst_proximoxtaskutils
-    tst_proximoxtaskutils.cpp
-    ../proximoxtaskutils.cpp
-    ../proximoxtaskutils.h
+qt_add_executable(tst_proxmoxtaskutils
+    tst_proxmoxtaskutils.cpp
+    ../proxmoxtaskutils.cpp
+    ../proxmoxtaskutils.h
 )
 
-target_include_directories(tst_proximoxtaskutils PRIVATE ..)
+target_include_directories(tst_proxmoxtaskutils PRIVATE ..)
 
-target_link_libraries(tst_proximoxtaskutils PRIVATE
+target_link_libraries(tst_proxmoxtaskutils PRIVATE
     Qt6::Core
     Qt6::Test
 )
 
-add_test(NAME proximoxtaskutils COMMAND tst_proximoxtaskutils)
+add_test(NAME proxmoxtaskutils COMMAND tst_proxmoxtaskutils)
 
 qt_add_executable(tst_debugsanitizer
     tst_debugsanitizer.cpp

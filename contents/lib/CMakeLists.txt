@@ -42,8 +42,8 @@ qt_add_library(proxmoxclientplugin SHARED
     proxmoxclient.h
     proxmoxdatautils.cpp
     proxmoxdatautils.h
-    proximoxtaskutils.cpp
-    proximoxtaskutils.h
+    proxmoxtaskutils.cpp
+    proxmoxtaskutils.h
     proxmoxcontroller.cpp
     proxmoxcontroller.h
     pbstypes.h

@@ -1,6 +1,6 @@
 #include <QtTest>
 
-#include "proximoxtaskutils.h"
+#include "proxmoxtaskutils.h"
 
 namespace {
 
@@ -91,4 +91,4 @@ void ProxmoxTaskUtilsTest::interpretsTaskExit() {
 
 QTEST_APPLESS_MAIN(ProxmoxTaskUtilsTest)
 
-#include "tst_proximoxtaskutils.moc"
+#include "tst_proxmoxtaskutils.moc"

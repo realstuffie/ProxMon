@@ -188,9 +188,19 @@ cmake --build "$BUILD_DIR" -- -j"$JOBS" || exit 1
 BUILD_END="$(date +%s)"
 printf '%s\n' "[ build] Done in $(( BUILD_END - BUILD_START ))s"
 
+# Replace dst atomically via rename(2). A plain cp truncates and rewrites the
+# existing inode in place — if a running plasmashell has that .so mmap'd, its
+# code pages are corrupted under it and it segfaults (reliably so with VNC
+# console worker threads executing plugin code during the copy).
+atomic_cp() {
+  local src="$1" dst="$2"
+  [ -d "$dst" ] && dst="$dst/$(basename "$src")"
+  cp "$src" "$dst.tmp.$$" && mv -f "$dst.tmp.$$" "$dst"
+}
+
 # Stage .so into the plasmoid package — main.qml uses a relative import
 # resolved to contents/lib/proxmox/, which kpackagetool installs verbatim.
-cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/
+atomic_cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/
 printf '%s\n' "[ build] Plugin staged → contents/lib/proxmox/libproxmoxclientplugin.so"
 
 detect_qt6_qml_user_dir() {
@@ -209,8 +219,8 @@ QT6_QML_USER_DIR="$(detect_qt6_qml_user_dir)"
 QML_MODULE_USER_DIR="$QT6_QML_USER_DIR/org/kde/plasma/proxmox"
 if [ "$INSTALL_STANDALONE_QML_MODULE" -eq 1 ]; then
   mkdir -p "$QML_MODULE_USER_DIR"
-  cp "$BUILD_DIR/libproxmoxclientplugin.so" "$QML_MODULE_USER_DIR/"
-  cp contents/lib/proxmox/qmldir "$QML_MODULE_USER_DIR/"
+  atomic_cp "$BUILD_DIR/libproxmoxclientplugin.so" "$QML_MODULE_USER_DIR/"
+  atomic_cp contents/lib/proxmox/qmldir "$QML_MODULE_USER_DIR/"
   printf '%s\n' "[ qml  ] Standalone module copied → $QML_MODULE_USER_DIR"
 fi
 
@@ -225,19 +235,17 @@ ICON_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
 ICON_DIR="$ICON_BASE/hicolor/scalable/apps"
 
 # Checksum-based sync: copy only files whose md5 differs from the installed copy.
-# Falls back to cp -r if md5sum is unavailable.
+# Copies everything unconditionally if md5sum is unavailable.
 sync_contents() {
   local src="$1" dst="$2"
-  if ! command -v md5sum >/dev/null 2>&1; then
-    cp -r "$src/." "$dst/"
-    return
-  fi
+  local have_md5=1
+  command -v md5sum >/dev/null 2>&1 || have_md5=0
   local copied=0
   while IFS= read -r -d '' srcfile; do
     local rel="${srcfile#$src/}"
     local dstfile="$dst/$rel"
     local copy=1
-    if [ -f "$dstfile" ]; then
+    if [ "$have_md5" -eq 1 ] && [ -f "$dstfile" ]; then
       local src_sum dst_sum
       src_sum="$(md5sum "$srcfile" | cut -d' ' -f1)"
       dst_sum="$(md5sum "$dstfile" | cut -d' ' -f1)"
@@ -245,7 +253,7 @@ sync_contents() {
     fi
     if [ "$copy" -eq 1 ]; then
       mkdir -p "$(dirname "$dstfile")"
-      cp "$srcfile" "$dstfile"
+      atomic_cp "$srcfile" "$dstfile"
       copied=$(( copied + 1 ))
     fi
   done < <(find "$src" -type f -print0)
@@ -268,7 +276,7 @@ fi
 # --rebuild: running from the installed dir so src == dst; install .so directly instead.
 if [ "$REBUILD_ONLY" -eq 1 ]; then
   mkdir -p "$PLASMOID_CONTENTS/lib/proxmox"
-  cp "$BUILD_DIR/libproxmoxclientplugin.so" "$PLASMOID_CONTENTS/lib/proxmox/"
+  atomic_cp "$BUILD_DIR/libproxmoxclientplugin.so" "$PLASMOID_CONTENTS/lib/proxmox/"
   printf '%s\n' "[ install] Plugin installed → $PLASMOID_CONTENTS/lib/proxmox/libproxmoxclientplugin.so"
 elif [ -d "$PLASMOID_CONTENTS" ]; then
   sync_contents "contents" "$PLASMOID_CONTENTS"

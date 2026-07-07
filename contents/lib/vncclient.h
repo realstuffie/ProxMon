@@ -40,9 +40,14 @@ public:
     /*  Called from the worker-thread updateCallback to mark that new pixel data
         arrived. The poll loop copies + emits once after HandleRFBServerMessage
         so all dirty-rect tiles in one server message are coalesced into a single
-        frameUpdated signal instead of N separate copies and paints.
+        frameUpdated signal carrying only the bounding rect of what changed.
+        m_dirtyRect is worker-thread-only state (written here, consumed in the
+        poll loop, reset on the main thread only while no worker is running).
     */
-    void markFrameDirty() noexcept { m_frameDirty.store(true, std::memory_order_relaxed); }
+    void markFrameDirty(int x, int y, int w, int h) noexcept {
+        m_dirtyRect |= QRect(x, y, w, h);
+        m_frameDirty.store(true, std::memory_order_relaxed);
+    }
 
 signals:
     void stateChanged();
@@ -58,6 +63,10 @@ private:
     QThread          *m_thread  = nullptr;  // owns rfbInitClient + poll loop
     std::atomic<bool> m_running  { false };
     std::atomic<bool> m_frameDirty { false };
+    // True while a frame event is queued to the main thread; bounds the
+    // worker→main frame queue to one entry (latest-frame-wins).
+    std::atomic<bool> m_framePending { false };
+    QRect m_dirtyRect;  // bounding box of undelivered updates — worker thread only
 
     QMutex m_cmdMutex;
     QQueue<std::function<void(rfbClient*)>> m_cmdQueue;

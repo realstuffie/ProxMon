@@ -41,10 +41,9 @@ static rfbBool resizeCallback(rfbClient *client)
 // the poll loop emits one coalesced signal after the full message is processed.
 static void updateCallback(rfbClient *client, int x, int y, int w, int h)
 {
-    Q_UNUSED(x) Q_UNUSED(y) Q_UNUSED(w) Q_UNUSED(h)
     VncClient *self = static_cast<VncClient *>(rfbClientGetClientData(client, nullptr));
     if (!self || !client->frameBuffer) return;
-    self->markFrameDirty();
+    self->markFrameDirty(x, y, w, h);
 }
 
 VncClient::VncClient(QObject *parent)
@@ -105,6 +104,8 @@ void VncClient::connectToVnc(const QString &host, int port)
 
     // RFB session runs on a worker thread — rfbInitClient blocks on I/O.
     // Qt-facing work is marshalled back via QueuedConnection. See docs/ARCHITECTURE.md.
+    m_dirtyRect = QRect();  // safe: no worker thread is running here
+    m_frameDirty.store(false, std::memory_order_relaxed);
     m_running.store(true);
     m_thread = QThread::create([this, rfb]() {
         // Grab the ticket before rfbInitClient — it frees rfb on failure so
@@ -188,17 +189,42 @@ void VncClient::connectToVnc(const QString &host, int port)
                     }, Qt::QueuedConnection);
                     break;
                 }
-                // One coalesced frame signal per server message.
-                if (m_frameDirty.exchange(false, std::memory_order_relaxed)
-                        && rfb->frameBuffer) {
-                    QImage frame(rfb->frameBuffer,
-                                 rfb->width, rfb->height,
-                                 rfb->width * 4,
-                                 QImage::Format_RGB32);
-                    QMetaObject::invokeMethod(this,
-                        [this, img = frame.convertToFormat(QImage::Format_ARGB32_Premultiplied)]() {
-                            emit frameUpdated(img, 0, 0, img.width(), img.height());
-                        }, Qt::QueuedConnection);
+            }
+
+            // One coalesced frame signal per server message, bounded to a
+            // single in-flight frame. If the main thread hasn't consumed the
+            // previous one, the dirty flag and rect stay accumulated and go
+            // out on a later pass (latest-frame-wins) — including timeout
+            // passes, so a held frame flushes within one WaitForMessage
+            // interval. Only the dirty bounding rect is converted and shipped;
+            // the view composites it into its persistent canvas.
+            if (m_frameDirty.load(std::memory_order_relaxed) && rfb->frameBuffer) {
+                if (!m_framePending.exchange(true, std::memory_order_acq_rel)) {
+                    m_frameDirty.store(false, std::memory_order_relaxed);
+                    // Clip: after a downsize the accumulated rect may exceed
+                    // the new framebuffer bounds.
+                    const QRect rect = m_dirtyRect.intersected(
+                        QRect(0, 0, rfb->width, rfb->height));
+                    m_dirtyRect = QRect();
+                    if (rect.isEmpty()) {
+                        m_framePending.store(false, std::memory_order_release);
+                    } else {
+                        const uchar *base = rfb->frameBuffer
+                            + (rect.y() * rfb->width + rect.x()) * 4;
+                        QImage sub(base, rect.width(), rect.height(),
+                                   rfb->width * 4, QImage::Format_RGB32);
+                        // libvncclient never writes the high byte, so the alpha
+                        // position is 0x00 — shipping the raw bytes renders
+                        // fully transparent. The conversion both deep-copies
+                        // the sub-rect and forces alpha to 0xff; it must stay.
+                        QMetaObject::invokeMethod(this,
+                            [this, rect,
+                             img = sub.convertToFormat(QImage::Format_ARGB32_Premultiplied)]() {
+                                m_framePending.store(false, std::memory_order_release);
+                                emit frameUpdated(img, rect.x(), rect.y(),
+                                                  rect.width(), rect.height());
+                            }, Qt::QueuedConnection);
+                    }
                 }
             }
         }
@@ -227,6 +253,9 @@ void VncClient::disconnect()
        connection). Must run after wait() so no new events can be posted.
     */
     QCoreApplication::removePostedEvents(this);
+    // A purged frame event can no longer clear the pending flag; reset it so
+    // the next session's frames aren't suppressed forever.
+    m_framePending.store(false);
 
     {
         QMutexLocker lk(&m_cmdMutex);

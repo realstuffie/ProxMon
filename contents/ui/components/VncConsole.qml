@@ -70,10 +70,8 @@ Window {
     ProxMon.VncClient {
         id: vncClient
 
-        onFrameUpdated: function(image, x, y, w, h) {
-            vncCanvas.updateFrame(image, x, y, w, h)
-        }
-
+        // Frame delivery is connected in C++ via vncCanvas.client — no JS
+        // per-frame handlers here.
         onStateChanged: {
             if (state === "error") {
                 statusLabel.text = "Connection lost - reconnecting..."
@@ -115,6 +113,7 @@ Window {
         ProxMon.VncFrameView {
             id: vncCanvas
             anchors.fill: parent
+            client: vncClient
 
             MouseArea {
                 id: mouseArea
