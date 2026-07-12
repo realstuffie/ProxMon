@@ -8,7 +8,7 @@ require_cmd() {
   fi
 }
 
-# Run a command as root — tries sudo, doas, su in order.
+# Run a command as root - tries sudo, doas, su in order.
 run_root() {
   if [ "$(id -u)" -eq 0 ]; then
     "$@"
@@ -62,7 +62,7 @@ install_deps_best_effort() {
     pm_update="apt-get update"
     pm_install="apt-get install -y"
     # libvncserver-dev ships both libvncserver and libvncclient headers on Debian/Ubuntu.
-    # libqtermwidget6 dev pkg is version-suffixed on some releases — both names listed.
+    # libqtermwidget6 dev pkg is version-suffixed on some releases - both names listed.
     pkgs_build="cmake make g++ pkg-config qt6-base-dev qt6-declarative-dev qt6-websockets-dev libsecret-1-dev libvncserver-dev libutf8proc-dev qtermwidget6-data"
     pkgs_qtermwidget="libqtermwidget6-2-dev libqtermwidget6-dev"
     pkgs_ecm="extra-cmake-modules"
@@ -189,7 +189,7 @@ BUILD_END="$(date +%s)"
 printf '%s\n' "[ build] Done in $(( BUILD_END - BUILD_START ))s"
 
 # Replace dst atomically via rename(2). A plain cp truncates and rewrites the
-# existing inode in place — if a running plasmashell has that .so mmap'd, its
+# existing inode in place - if a running plasmashell has that .so mmap'd, its
 # code pages are corrupted under it and it segfaults (reliably so with VNC
 # console worker threads executing plugin code during the copy).
 atomic_cp() {
@@ -198,7 +198,7 @@ atomic_cp() {
   cp "$src" "$dst.tmp.$$" && mv -f "$dst.tmp.$$" "$dst"
 }
 
-# Stage .so into the plasmoid package — main.qml uses a relative import
+# Stage .so into the plasmoid package - main.qml uses a relative import
 # resolved to contents/lib/proxmox/, which kpackagetool installs verbatim.
 atomic_cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/
 printf '%s\n' "[ build] Plugin staged → contents/lib/proxmox/libproxmoxclientplugin.so"
@@ -272,7 +272,7 @@ if [ ! -d "$PLASMOID_CONTENTS" ]; then
   fi
 fi
 
-# Checksum sync contents — skips unchanged files.
+# Checksum sync contents - skips unchanged files.
 # --rebuild: running from the installed dir so src == dst; install .so directly instead.
 if [ "$REBUILD_ONLY" -eq 1 ]; then
   mkdir -p "$PLASMOID_CONTENTS/lib/proxmox"
