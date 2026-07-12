@@ -25,7 +25,7 @@ static rfbBool resizeCallback(rfbClient *client)
     client->format.greenMax     = 0xff;
     client->format.blueMax      = 0xff;
 
-    // Request a full frame at the new dimensions immediately — without this
+    // Request a full frame at the new dimensions immediately - without this
     // the server waits for the client to ask before sending any pixels.
     SendFramebufferUpdateRequest(client, 0, 0, w, h, FALSE);
 
@@ -102,19 +102,19 @@ void VncClient::connectToVnc(const QString &host, int port)
 
     rfb->appData.encodingsString = "tight zrle hextile raw";
 
-    // RFB session runs on a worker thread — rfbInitClient blocks on I/O.
+    // RFB session runs on a worker thread - rfbInitClient blocks on I/O.
     // Qt-facing work is marshalled back via QueuedConnection. See docs/ARCHITECTURE.md.
     m_dirtyRect = QRect();  // safe: no worker thread is running here
     m_frameDirty.store(false, std::memory_order_relaxed);
     m_running.store(true);
     m_thread = QThread::create([this, rfb]() {
-        // Grab the ticket before rfbInitClient — it frees rfb on failure so
+        // Grab the ticket before rfbInitClient - it frees rfb on failure so
         // we can't read client data afterward.
         char *ticketSlot = static_cast<char *>(rfbClientGetClientData(rfb, (void*)1));
 
         bool ok = rfbInitClient(rfb, nullptr, nullptr);
         if (!ok) {
-            // rfbInitClient freed rfb on failure — do not touch it.
+            // rfbInitClient freed rfb on failure - do not touch it.
             // ticketSlot was saved before the call so it's still valid.
             if (ticketSlot) {
                 explicit_bzero(ticketSlot, strlen(ticketSlot) + 1);
@@ -130,7 +130,7 @@ void VncClient::connectToVnc(const QString &host, int port)
             return;
         }
 
-        // Handshake complete — null out the client-data slot first so
+        // Handshake complete - null out the client-data slot first so
         // GetPassword cannot race the free, then zero and release.
         if (ticketSlot) {
             rfbClientSetClientData(rfb, (void*)1, nullptr);
@@ -145,7 +145,7 @@ void VncClient::connectToVnc(const QString &host, int port)
 
         // Release any modifier keys the server may think are held.
         // Posted via the command queue so the writes stay on this thread
-        // alongside the poll loop — not on the main thread.
+        // alongside the poll loop - not on the main thread.
         postCmd([](rfbClient *rfb) {
             SendKeyEvent(rfb, 0xFFE1, FALSE); // Shift
             SendKeyEvent(rfb, 0xFFE3, FALSE); // Ctrl
@@ -168,7 +168,7 @@ void VncClient::connectToVnc(const QString &host, int port)
                     cmd(rfb);
             }
 
-            int result = WaitForMessage(rfb, 5'000); // µs — 5 ms keeps disconnect detection fast while reducing post-resize lag
+            int result = WaitForMessage(rfb, 5'000); // µs - 5 ms keeps disconnect detection fast while reducing post-resize lag
             if (!m_running.load()) break;
             if (result < 0) {
                 QMetaObject::invokeMethod(this, [this]() {
@@ -194,7 +194,7 @@ void VncClient::connectToVnc(const QString &host, int port)
             // One coalesced frame signal per server message, bounded to a
             // single in-flight frame. If the main thread hasn't consumed the
             // previous one, the dirty flag and rect stay accumulated and go
-            // out on a later pass (latest-frame-wins) — including timeout
+            // out on a later pass (latest-frame-wins) - including timeout
             // passes, so a held frame flushes within one WaitForMessage
             // interval. Only the dirty bounding rect is converted and shipped;
             // the view composites it into its persistent canvas.
@@ -214,7 +214,7 @@ void VncClient::connectToVnc(const QString &host, int port)
                         QImage sub(base, rect.width(), rect.height(),
                                    rfb->width * 4, QImage::Format_RGB32);
                         // libvncclient never writes the high byte, so the alpha
-                        // position is 0x00 — shipping the raw bytes renders
+                        // position is 0x00 - shipping the raw bytes renders
                         // fully transparent. The conversion both deep-copies
                         // the sub-rect and forces alpha to 0xff; it must stay.
                         QMetaObject::invokeMethod(this,
@@ -238,7 +238,7 @@ void VncClient::connectToVnc(const QString &host, int port)
 void VncClient::disconnect()
 {
     // Signal the poll loop to stop; wait for the thread to exit before
-    // touching rfb — the thread owns it and frees it at the end of the lambda.
+    // touching rfb - the thread owns it and frees it at the end of the lambda.
     m_running.store(false);
 
     if (m_thread) {

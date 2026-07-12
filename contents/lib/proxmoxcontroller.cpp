@@ -85,7 +85,7 @@ ProxmoxController::ProxmoxController(QObject *parent)
             ignoreSsl = endpoint.value(QStringLiteral("ignoreSsl"), m_ignoreSsl).toBool();
         }
         // Node consoles are labelled with the node name directly, but openConsole
-        // still stashed a name entry for this request — drain it here too.
+        // still stashed a name entry for this request - drain it here too.
         m_pendingConsoleNames.remove(requestId);
         discardConsoleCredentials(requestId);
         m_pendingConsoleAuth[requestId] = authHeader;

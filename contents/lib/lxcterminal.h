@@ -39,17 +39,17 @@ public:
                           const QString &user,
                           bool ignoreSslErrors);
 
-    // Re-handshake against an existing window — used when the QML reconnect
+    // Re-handshake against an existing window - used when the QML reconnect
     // timer fires and termproxy returns a fresh port pair.
     // The ticket must be delivered beforehand via setTicketSecure().
     Q_INVOKABLE void connectWithTicket(int proxyPort,
                                        const QString &user,
                                        bool ignoreSslErrors);
 
-    // Called by ProxmoxController.deliverConsoleAuth() — sets the auth header
+    // Called by ProxmoxController.deliverConsoleAuth() - sets the auth header
     // directly from C++ without passing through the QML/JS heap.
     Q_INVOKABLE void setAuthHeaderSecure(const QByteArray &header);
-    // Called by ProxmoxController.deliverConsoleTicket() — sets the ticket
+    // Called by ProxmoxController.deliverConsoleTicket() - sets the ticket
     // directly from C++ without passing through the QML/JS heap.
     Q_INVOKABLE void setTicketSecure(const QByteArray &ticket);
 
@@ -113,7 +113,7 @@ protected:
     QPointer<QTermWidget> m_term;
     QWebSocket *m_ws = nullptr;
     // Bytes received post-auth before our wake-CR timer expires. Used to
-    // decide whether to send a wake CR — boolean isn't enough because some
+    // decide whether to send a wake CR - boolean isn't enough because some
     // containers emit a 6-byte clear-screen sequence on attach and then go
     // silent, which would falsely suppress the wake. Threshold is heuristic:
     // a real prompt is usually >20 bytes (motd + path + dollar sign).

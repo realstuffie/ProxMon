@@ -58,7 +58,7 @@ QSGNode *VncFrameView::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
     // createImageNode() returns the backend-native node (OpenGL/Vulkan/Metal).
     // setOwnsTexture(true): setTexture() automatically frees the previous
-    // texture — do not delete it manually.
+    // texture - do not delete it manually.
     auto *node = static_cast<QSGImageNode *>(oldNode);
     if (!node) {
         node = window()->createImageNode();
@@ -107,8 +107,7 @@ void VncFrameView::updateFrame(const QImage &image, int x, int y, int w, int h)
 
     // The texture created in updatePaintNode still references m_frame, so the
     // first paint after each texture upload detaches (one full-frame memcpy).
-    // Cheaper than converting/shipping full frames per update; goes away
-    // entirely if the texture path moves to QRhi partial uploads.
+    // This remains on Qt Quick's stable public QImage/QSGTexture path.
     QPainter painter(&m_frame);
     painter.setCompositionMode(QPainter::CompositionMode_Source);
     painter.drawImage(x, y, image);

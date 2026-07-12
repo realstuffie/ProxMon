@@ -21,7 +21,7 @@ notify_error() {
   fi
 }
 
-# Hash of all watched runtime library paths — distro-agnostic via ldconfig.
+# Hash of all watched runtime library paths - distro-agnostic via ldconfig.
 get_fingerprint() {
   ldconfig -p 2>/dev/null \
     | grep -iE 'libplasma|libQt6|libvncclient|libqtermwidget' \

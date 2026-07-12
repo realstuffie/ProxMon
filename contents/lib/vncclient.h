@@ -66,7 +66,7 @@ private:
     // True while a frame event is queued to the main thread; bounds the
     // worker→main frame queue to one entry (latest-frame-wins).
     std::atomic<bool> m_framePending { false };
-    QRect m_dirtyRect;  // bounding box of undelivered updates — worker thread only
+    QRect m_dirtyRect;  // bounding box of undelivered updates - worker thread only
 
     QMutex m_cmdMutex;
     QQueue<std::function<void(rfbClient*)>> m_cmdQueue;

@@ -37,6 +37,6 @@ protected:
 private:
     VncClient *m_client = nullptr;  // connections auto-break if it's destroyed
     QImage m_frame;  // written in updateFrame (main thread),
-                     // read in updatePaintNode (render thread sync — main blocked)
+                     // read in updatePaintNode (render thread sync - main blocked)
     bool   m_dirty = false;
 };

@@ -121,7 +121,7 @@ signals:
     // user is the auth user returned by termproxy; sent over the
     // websocket as "user:ticket\n" before bidirectional traffic begins.
     // authHeader is the full "PVEAPIToken=USER@REALM!TOKENID=SECRET" string
-    // we used to obtain the termproxy ticket — Proxmox requires the same
+    // we used to obtain the termproxy ticket - Proxmox requires the same
     // header on the subsequent vncwebsocket upgrade or it 401s.
     void ttyProxyReady(const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int vmid, int port, const QString &ticket, const QString &user, const QByteArray &authHeader);
     void ttyProxyError(const QString &sessionKey, const QString &requestId, const QString &node, int vmid, const QString &error);

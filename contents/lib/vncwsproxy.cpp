@@ -109,7 +109,7 @@ void VncWsProxy::clearCredentials()
     m_ticket.clear();
 }
 
-// Slots — incoming TCP connection from libvncclient
+// Slots - incoming TCP connection from libvncclient
 
 void VncWsProxy::onNewConnection()
 {
@@ -154,10 +154,10 @@ void VncWsProxy::onNewConnection()
 }
 
 
-// Slots — WebSocket events
+// Slots - WebSocket events
 void VncWsProxy::onWsConnected()
 {
-    // HTTP upgrade complete — auth header and ticket were sent in the
+    // HTTP upgrade complete - auth header and ticket were sent in the
     // handshake request and are no longer needed. Zero then clear both.
     clearCredentials();
     // Flush any bytes libvncclient already wrote while WS was connecting.
@@ -185,7 +185,7 @@ void VncWsProxy::onWsError(QAbstractSocket::SocketError /*error*/)
 
 void VncWsProxy::onWsSslErrors(const QList<QSslError> &errors)
 {
-    // ignoreSsl is set — suppress all SSL errors.
+    // ignoreSsl is set - suppress all SSL errors.
     Q_UNUSED(errors)
     if (m_ws) m_ws->ignoreSslErrors();
 }
@@ -197,7 +197,7 @@ void VncWsProxy::onWsDisconnected()
     if (m_tcp) m_tcp->disconnectFromHost();
 }
 
-// Slots — TCP (libvncclient) events
+// Slots - TCP (libvncclient) events
 void VncWsProxy::onTcpReadyRead()
 {
     // TCP → WS: forward raw RFB bytes from libvncclient as binary WS frames.

@@ -283,7 +283,7 @@ void LxcTerminal::openSocket()
     }
 
     QObject::connect(m_ws, &QWebSocket::connected, this, [this]() {
-        // Upgrade complete — burn auth header, send user:ticket\n, burn ticket.
+        // Upgrade complete - burn auth header, send user:ticket\n, burn ticket.
         m_authHeader.fill(0);
         m_authHeader.clear();
         m_phase = Phase::Authenticating;
@@ -325,7 +325,7 @@ void LxcTerminal::openSocket()
 
     QNetworkRequest req(url);
     if (!m_authHeader.isEmpty()) {
-        // Required — Proxmox returns 401 without it.
+        // Required - Proxmox returns 401 without it.
         req.setRawHeader("Authorization", m_authHeader);
     }
     m_ws->open(req);
@@ -367,7 +367,7 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
     m_authBuffer.append(line);
 
     // Proxmox replies with literal bytes "OK" on success. Some versions
-    // include a trailing "\n", others don't — accept both. Anything else
+    // include a trailing "\n", others don't - accept both. Anything else
     // (with at least 2 bytes seen) is an auth failure.
     if (m_authBuffer.startsWith("OK")) {
         m_phase = Phase::Connected;
@@ -389,7 +389,7 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
         QTimer::singleShot(120, this, [this]() { sendCurrentResize(); });
 
         m_postAuthBytes = 0;
-        // Skip the silent-getty wake CR for node consoles (vmid==0) — it
+        // Skip the silent-getty wake CR for node consoles (vmid==0) - it
         // would fire mid-login-prompt and prepend a spurious newline.
         if (m_vmid != 0) {
             QTimer::singleShot(500, this, [this]() {
@@ -459,7 +459,7 @@ bool LxcTerminal::eventFilter(QObject *watched, QEvent *event)
         QTimer::singleShot(150, this, [this]() { sendCurrentResize(); });
     }
 
-    // Right-click context menu for copy/paste — intercept on any child widget
+    // Right-click context menu for copy/paste - intercept on any child widget
     // since mouse events land on QTermWidget's internal TerminalDisplay child.
     if (event->type() == QEvent::ContextMenu && m_term) {
         auto *w = qobject_cast<QWidget *>(watched);
