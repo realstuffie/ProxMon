@@ -13,6 +13,12 @@ class ProxmoxClientPlugin : public QQmlExtensionPlugin {
 public:
     void registerTypes(const char *uri) override {
         Q_ASSERT(uri == QLatin1String("org.kde.plasma.proxmox"));
+        // Skip QtKeychain's blocking backend probe: on Plasma 6 the answer
+        // is always kwallet6, and probing a busy kwalletd stalls the GUI
+        // thread. Respect an existing override.
+        if (qEnvironmentVariableIsEmpty("QTKEYCHAIN_BACKEND")) {
+            qputenv("QTKEYCHAIN_BACKEND", "kwallet6");
+        }
         qmlRegisterType<ProxmoxController>(uri, 1, 0, "ProxmoxController");
         qmlRegisterType<Notifier>(uri, 1, 0, "Notifier");
         qmlRegisterType<VncFrameView>(uri, 1, 0, "VncFrameView");

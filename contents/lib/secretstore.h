@@ -3,8 +3,10 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVariant>
 
 QT_BEGIN_NAMESPACE
+class QDBusMessage;
 class QProcess;
 QT_END_NAMESPACE
 
@@ -44,10 +46,22 @@ signals:
     void keysReady(const QStringList &keys);
     void keyListError(const QString &message);
 
+private slots:
+    void onWalletOpened(const QString &wallet);
+
 private:
     void emitFilteredKWalletKeys(const QStringList &raw);
+    void armWalletOpenRetry();
+    void asyncKWalletCall(const QString &method, const QVariantList &args,
+                          std::function<void(const QDBusMessage &)> handler);
+    void startKWalletEntryList(int handle);
+    void finishKeyListSuccess(const QStringList &raw, int handle);
+    void finishKeyListFailure(const QDBusMessage &reply, const QString &message);
+    void startQdbusFallback(int handle);
 
     QString m_service = QStringLiteral("ProxMon");
     QString m_key = QStringLiteral("apiTokenSecret");
     QProcess *m_kwalletListProcess = nullptr;
+    bool m_walletOpenRetryArmed = false;
+    bool m_listInFlight = false;
 };
