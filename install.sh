@@ -166,6 +166,10 @@ fi
 
 if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
   printf '%s\n' "[ git  ] Initializing submodules..."
+  # Refresh cached submodule URLs from .gitmodules first, so checkouts made
+  # before the qtkeychain fork repoint don't try to fetch the pinned commit
+  # from the old upstream URL (where it doesn't exist).
+  git submodule sync --recursive
   git submodule update --init --recursive
 fi
 
