@@ -284,5 +284,5 @@ Tested on Ubuntu 26 (KDE 6.6.4), Fedora 44 (KDE 6.6.5), Manjaro (KDE 6.6.5), ope
 - [KDE Plasma](https://kde.org/plasma-desktop/) - Desktop environment
 - [noVNC](https://github.com/novnc/noVNC) - DOM key table ported from `core/input/domkeytable.js`, licensed under MPL 2.0
 - [QTermWidget](https://github.com/lxqt/qtermwidget) - LXC terminal emulator widget, licensed under LGPL-2.0+
-- [LibVNCClient](https://github.com/LibVNC/libvncserver) - VNC client support, licensed under LGPL-2.1
+- [LibVNCClient](https://github.com/LibVNC/libvncserver) - VNC client support, licensed under GPL-2.0-or-later
 - [QtKeychain](https://github.com/frankosterfeld/qtkeychain) - secure credential storage, licensed under MIT
