@@ -8,6 +8,7 @@
 class QWebSocket;
 class QMainWindow;
 class QTermWidget;
+class QTimer;
 
 // Protocol layer + window manager for Proxmox LXC console sessions.
 // Owns a QMainWindow+QTermWidget (QWidget can't embed in QML).
@@ -80,6 +81,7 @@ private:
     void ensureWindow(const QString &vmName, const QString &nodeName);
     void destroyWindow();
     void openSocket();
+    void stopAuthTimeout();
     void clearCredentials();
     void deliverToTerminal(const QByteArray &data);
 
@@ -122,4 +124,8 @@ protected:
     QString m_state = QStringLiteral("disconnected");
     QString m_windowPreset = QStringLiteral("medium");
     QByteArray m_authBuffer;
+    // Single-shot guard against a stalled post-upgrade auth handshake: the
+    // server completes the WS upgrade but never sends "OK". Cancelled the
+    // moment we reach Connected, Errored, or the socket disconnects.
+    QTimer *m_authTimer = nullptr;
 };

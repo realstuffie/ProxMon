@@ -25,6 +25,11 @@
 
 namespace {
 
+// Max wait for the server's "OK" after the WS upgrade before we treat the
+// session as failed. Proxmox auth is near-instant; this only trips on a
+// stalled or wedged endpoint.
+constexpr int kAuthTimeoutMs = 10000;
+
 // QMainWindow subclass that emits a Qt signal when closed, so LxcTerminal
 // can clean up and notify QML. Using a small lambda-friendly QObject helper
 // keeps the relationship loose (no inheritance from LxcTerminal needed).
@@ -118,6 +123,7 @@ void LxcTerminal::raise()
 
 void LxcTerminal::disconnect()
 {
+    stopAuthTimeout();
     if (m_ws) {
         m_ws->disconnect(this);
         m_ws->close();
@@ -138,6 +144,15 @@ void LxcTerminal::clearCredentials()
     m_authHeader.clear();
     m_ticket.fill(0);
     m_ticket.clear();
+}
+
+void LxcTerminal::stopAuthTimeout()
+{
+    if (m_authTimer) {
+        m_authTimer->stop();
+        m_authTimer->deleteLater();
+        m_authTimer = nullptr;
+    }
 }
 
 void LxcTerminal::closeWindow()
@@ -287,6 +302,30 @@ void LxcTerminal::openSocket()
         m_authHeader.fill(0);
         m_authHeader.clear();
         m_phase = Phase::Authenticating;
+
+        // Arm the stall guard: if "OK" never arrives, surface an error
+        // instead of hanging in the connecting state forever.
+        stopAuthTimeout();
+        m_authTimer = new QTimer(this);
+        m_authTimer->setSingleShot(true);
+        m_authTimer->setInterval(kAuthTimeoutMs);
+        QObject::connect(m_authTimer, &QTimer::timeout, this, [this]() {
+            if (m_phase != Phase::Authenticating) return;
+            m_phase = Phase::Errored;
+            // Tear down the wedged socket; it completed the upgrade but never
+            // answered, so it won't close on its own.
+            if (m_ws) {
+                m_ws->disconnect(this);
+                m_ws->abort();
+                m_ws->deleteLater();
+                m_ws = nullptr;
+            }
+            clearCredentials();
+            setState(QStringLiteral("error"));
+            emit errorOccurred(QStringLiteral("LXC terminal authentication timed out"));
+        });
+        m_authTimer->start();
+
         if (m_ws) {
             QByteArray ba = m_user.toUtf8() + ':' + m_ticket + '\n';
             m_ws->sendTextMessage(QString::fromUtf8(ba));
@@ -298,7 +337,17 @@ void LxcTerminal::openSocket()
 
     QObject::connect(m_ws, &QWebSocket::disconnected, this, [this]() {
         clearCredentials();
+        stopAuthTimeout();
         if (m_phase == Phase::Errored) return;
+        // Proxmox closes the socket on a rejected ticket rather than sending
+        // non-"OK" bytes, so a disconnect while still authenticating is an
+        // auth failure - report it as such instead of a silent disconnect.
+        if (m_phase == Phase::Authenticating) {
+            m_phase = Phase::Errored;
+            setState(QStringLiteral("error"));
+            emit errorOccurred(QStringLiteral("LXC terminal authentication failed"));
+            return;
+        }
         setState(QStringLiteral("disconnected"));
         m_phase = Phase::Disconnected;
     });
@@ -312,6 +361,7 @@ void LxcTerminal::openSocket()
             failedSocket->disconnect(this);
             failedSocket->abort();
             failedSocket->deleteLater();
+            stopAuthTimeout();
             clearCredentials();
             m_phase = Phase::Errored;
             setState(QStringLiteral("error"));
@@ -370,6 +420,7 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
     // include a trailing "\n", others don't - accept both. Anything else
     // (with at least 2 bytes seen) is an auth failure.
     if (m_authBuffer.startsWith("OK")) {
+        stopAuthTimeout();
         m_phase = Phase::Connected;
         setState(QStringLiteral("connected"));
 
@@ -405,6 +456,7 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
     // Need at least 2 bytes before we can be sure this isn't "OK" yet.
     if (m_authBuffer.size() < 2) return;
 
+    stopAuthTimeout();
     m_phase = Phase::Errored;
     setState(QStringLiteral("error"));
     const QString msg = m_authBuffer.isEmpty()
