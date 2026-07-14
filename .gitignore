@@ -42,6 +42,7 @@ ui_*.h
 # ---- Local tooling ----
 qmlls.ini
 docs/local-qmllint-notes.md
+.claude/
 
 # ---- IDE / tooling (common safe defaults) ----
 # VS Code
