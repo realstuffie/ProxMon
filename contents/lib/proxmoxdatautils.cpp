@@ -129,4 +129,59 @@ QVariantList mergeEndpointBuckets(const QVariantList &endpoints, const QVariantM
     return rows;
 }
 
+void sortItems(QVariantList &items, const QString &mode) {
+    auto nameOf = [](const QVariantMap &m) {
+        QString n = m.value(QStringLiteral("name")).toString();
+        if (n.isEmpty()) {
+            n = m.value(QStringLiteral("hostname")).toString();
+        }
+        return n;
+    };
+
+    std::stable_sort(items.begin(), items.end(),
+                     [&nameOf, &mode](const QVariant &av, const QVariant &bv) {
+        const QVariantMap a = av.toMap();
+        const QVariantMap b = bv.toMap();
+        const int avmid = a.value(QStringLiteral("vmid")).toInt();
+        const int bvmid = b.value(QStringLiteral("vmid")).toInt();
+
+        if (mode == QLatin1String("id")) {
+            return avmid < bvmid;
+        }
+        if (mode == QLatin1String("idDesc")) {
+            return bvmid < avmid;
+        }
+
+        // Running-first grouping like "status", but ordered by vmid within
+        // each group instead of by name.
+        if (mode == QLatin1String("statusId")) {
+            const int aRun = a.value(QStringLiteral("status")).toString() == ProxmoxConst::Status::Running ? 0 : 1;
+            const int bRun = b.value(QStringLiteral("status")).toString() == ProxmoxConst::Status::Running ? 0 : 1;
+            if (aRun != bRun) return aRun < bRun;
+            return avmid < bvmid;
+        }
+
+        const QString an = nameOf(a);
+        const QString bn = nameOf(b);
+        if (mode == QLatin1String("name")) {
+            const int c = an.localeAwareCompare(bn);
+            if (c != 0) return c < 0;
+            return avmid < bvmid;
+        }
+        if (mode == QLatin1String("nameDesc")) {
+            const int c = bn.localeAwareCompare(an);
+            if (c != 0) return c < 0;
+            return avmid < bvmid;
+        }
+
+        // "status" and fallback
+        const int aRun = a.value(QStringLiteral("status")).toString() == ProxmoxConst::Status::Running ? 0 : 1;
+        const int bRun = b.value(QStringLiteral("status")).toString() == ProxmoxConst::Status::Running ? 0 : 1;
+        if (aRun != bRun) return aRun < bRun;
+        const int c = an.localeAwareCompare(bn);
+        if (c != 0) return c < 0;
+        return avmid < bvmid;
+    });
+}
+
 } // namespace ProxmoxDataUtils

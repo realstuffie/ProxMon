@@ -6,8 +6,10 @@
 #include "secretstore.h"
 
 #include <algorithm>
+#include <utility>
 
 #include <QDateTime>
+#include <QSet>
 #include <QDebug>
 #include <QHostAddress>
 #include <QHostInfo>
@@ -26,6 +28,9 @@ ProxmoxController::ProxmoxController(QObject *parent)
     , m_multiSecretStore(new SecretStore(this)) {
     m_singleSecretStore->setService(QStringLiteral("ProxMon"));
     m_multiSecretStore->setService(QStringLiteral("ProxMon"));
+
+    m_nodesModel = new VariantListModel({QStringLiteral("node")}, this);
+    m_endpointsModel = new VariantListModel({QStringLiteral("sessionKey")}, this);
 
     connect(m_api, &ProxmoxClient::reply, this, [this](int seq, const QString &kind, const QString &node, const QVariant &data) {
         handleSingleReply(seq, kind, node, data);
@@ -348,6 +353,259 @@ void ProxmoxController::setIgnoreSsl(bool value) {
     if (m_ignoreSsl == value) return;
     m_ignoreSsl = value;
     emit ignoreSslChanged();
+}
+
+void ProxmoxController::setDefaultSorting(const QString &value) {
+    if (m_defaultSorting == value) return;
+    m_defaultSorting = value;
+    emit defaultSortingChanged();
+    // Re-publish so the submodels re-sort; diffing turns this into row moves.
+    // No-op while the popup is collapsed; the catch-up publish in
+    // setViewActive() re-sorts from m_defaultSorting on the next expand.
+    publishSingleHostModels();
+    publishMultiHostModels();
+}
+
+void ProxmoxController::setViewActive(bool value) {
+    if (m_viewActive == value) return;
+    m_viewActive = value;
+    emit viewActiveChanged();
+    // Became visible: catch the models up from the latest displayed data.
+    // Each publish no-ops in the wrong connection mode.
+    if (value) {
+        publishSingleHostModels();
+        publishMultiHostModels();
+    }
+}
+
+/*  Publish the current single-host displayed data into the delegate-facing
+    models. Idempotent and diff-based: calling it with unchanged data emits
+    nothing. Called after every refresh completes and after PBS correlation
+    rewrites backup fields.
+*/
+void ProxmoxController::publishSingleHostModels() {
+    if (!m_viewActive || m_connectionMode != QStringLiteral("single")) return;
+
+    const QVariantList nodes = m_displayedProxmoxData.toMap().value(QStringLiteral("data")).toList();
+
+    // Group children by node, sorted once in C++ (QML no longer sorts).
+    QHash<QString, QVariantList> vmsByNode;
+    for (const QVariant &vmValue : m_displayedVmData) {
+        vmsByNode[vmValue.toMap().value(QStringLiteral("node")).toString()].push_back(vmValue);
+    }
+    QHash<QString, QVariantList> lxcsByNode;
+    for (const QVariant &lxcValue : m_displayedLxcData) {
+        lxcsByNode[lxcValue.toMap().value(QStringLiteral("node")).toString()].push_back(lxcValue);
+    }
+
+    QVariantList nodeRows;
+    nodeRows.reserve(nodes.size());
+    QSet<QString> liveNodes;
+    for (const QVariant &nodeValue : nodes) {
+        QVariantMap row = nodeValue.toMap();
+        const QString nodeName = row.value(QStringLiteral("node")).toString();
+        if (nodeName.isEmpty()) continue;
+        liveNodes.insert(nodeName);
+
+        VariantListModel *vmModel = m_vmModelsByNode.value(nodeName);
+        if (!vmModel) {
+            vmModel = new VariantListModel({QStringLiteral("node"), QStringLiteral("vmid")}, this);
+            m_vmModelsByNode.insert(nodeName, vmModel);
+        }
+        VariantListModel *lxcModel = m_lxcModelsByNode.value(nodeName);
+        if (!lxcModel) {
+            lxcModel = new VariantListModel({QStringLiteral("node"), QStringLiteral("vmid")}, this);
+            m_lxcModelsByNode.insert(nodeName, lxcModel);
+        }
+
+        QVariantList vms = vmsByNode.value(nodeName);
+        ProxmoxDataUtils::sortItems(vms, m_defaultSorting);
+        vmModel->applyItems(vms);
+
+        QVariantList lxcs = lxcsByNode.value(nodeName);
+        ProxmoxDataUtils::sortItems(lxcs, m_defaultSorting);
+        lxcModel->applyItems(lxcs);
+
+        // INVARIANT: submodel pointers must stay stable across refreshes and
+        // must be stored as QObject* (QMetaType::QObjectStar compares by
+        // address). Recreating models per refresh, or storing them as
+        // VariantListModel*, would make every node row compare unequal and
+        // silently reintroduce per-poll delegate churn. Pinned by
+        // tst_variantlistmodel objectPointerValues_compareByIdentity.
+        row.insert(QStringLiteral("vmsModel"), QVariant::fromValue<QObject *>(vmModel));
+        row.insert(QStringLiteral("lxcsModel"), QVariant::fromValue<QObject *>(lxcModel));
+        nodeRows.push_back(row);
+    }
+
+    // Remove vanished nodes' rows first (delegates release the submodels),
+    // then drop the submodels.
+    m_nodesModel->applyItems(nodeRows);
+    for (auto it = m_vmModelsByNode.begin(); it != m_vmModelsByNode.end();) {
+        if (!liveNodes.contains(it.key())) {
+            it.value()->deleteLater();
+            it = m_vmModelsByNode.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = m_lxcModelsByNode.begin(); it != m_lxcModelsByNode.end();) {
+        if (!liveNodes.contains(it.key())) {
+            it.value()->deleteLater();
+            it = m_lxcModelsByNode.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void ProxmoxController::clearSingleHostModels() {
+    if (m_nodesModel) {
+        m_nodesModel->clear();
+    }
+    for (VariantListModel *model : std::as_const(m_vmModelsByNode)) {
+        model->deleteLater();
+    }
+    m_vmModelsByNode.clear();
+    for (VariantListModel *model : std::as_const(m_lxcModelsByNode)) {
+        model->deleteLater();
+    }
+    m_lxcModelsByNode.clear();
+}
+
+/*  Multi-host mirror of publishSingleHostModels(), one level deeper:
+    endpoints -> nodes -> vms/lxcs. Child keys keep sessionKey so the same
+    node name (or vmid) behind two endpoints stays distinct; this matches
+    the old JS dedupe in getVmsForNodeMulti, which keyed per endpoint.
+    Same stable-pointer invariant as the single-host publish applies to
+    "nodesModel" on endpoint rows and "vmsModel"/"lxcsModel" on node rows.
+
+    Endpoint rows deliberately do NOT carry the nested nodes/vms/lxcs lists
+    from m_displayedEndpoints: delegates read those through the submodels,
+    and stripping them keeps row comparison cheap and quiet.
+*/
+void ProxmoxController::publishMultiHostModels() {
+    if (!m_viewActive || m_connectionMode != QStringLiteral("multiHost")) return;
+
+    QVariantList endpointRows;
+    endpointRows.reserve(m_displayedEndpoints.size());
+    QSet<QString> liveSessions;
+    QSet<QString> liveNodeKeys;
+
+    for (const QVariant &endpointValue : m_displayedEndpoints) {
+        const QVariantMap endpoint = endpointValue.toMap();
+        const QString sessionKey = endpoint.value(QStringLiteral("sessionKey")).toString();
+        if (sessionKey.isEmpty()) continue;
+        liveSessions.insert(sessionKey);
+
+        VariantListModel *nodesModel = m_nodesModelsBySession.value(sessionKey);
+        if (!nodesModel) {
+            nodesModel = new VariantListModel({QStringLiteral("sessionKey"), QStringLiteral("node")}, this);
+            m_nodesModelsBySession.insert(sessionKey, nodesModel);
+        }
+
+        // Group this endpoint's children by node, sorted once in C++.
+        QHash<QString, QVariantList> vmsByNode;
+        for (const QVariant &vmValue : endpoint.value(QStringLiteral("vms")).toList()) {
+            vmsByNode[vmValue.toMap().value(QStringLiteral("node")).toString()].push_back(vmValue);
+        }
+        QHash<QString, QVariantList> lxcsByNode;
+        for (const QVariant &lxcValue : endpoint.value(QStringLiteral("lxcs")).toList()) {
+            lxcsByNode[lxcValue.toMap().value(QStringLiteral("node")).toString()].push_back(lxcValue);
+        }
+
+        QVariantList nodeRows;
+        const QVariantList nodes = endpoint.value(QStringLiteral("nodes")).toList();
+        nodeRows.reserve(nodes.size());
+        for (const QVariant &nodeValue : nodes) {
+            QVariantMap nodeRow = nodeValue.toMap();
+            const QString nodeName = nodeRow.value(QStringLiteral("node")).toString();
+            if (nodeName.isEmpty()) continue;
+            const QString nodeKey = sessionKey + QLatin1Char('|') + nodeName;
+            liveNodeKeys.insert(nodeKey);
+
+            VariantListModel *vmModel = m_vmModelsBySessionNode.value(nodeKey);
+            if (!vmModel) {
+                vmModel = new VariantListModel({QStringLiteral("sessionKey"), QStringLiteral("node"), QStringLiteral("vmid")}, this);
+                m_vmModelsBySessionNode.insert(nodeKey, vmModel);
+            }
+            VariantListModel *lxcModel = m_lxcModelsBySessionNode.value(nodeKey);
+            if (!lxcModel) {
+                lxcModel = new VariantListModel({QStringLiteral("sessionKey"), QStringLiteral("node"), QStringLiteral("vmid")}, this);
+                m_lxcModelsBySessionNode.insert(nodeKey, lxcModel);
+            }
+
+            QVariantList vms = vmsByNode.value(nodeName);
+            ProxmoxDataUtils::sortItems(vms, m_defaultSorting);
+            vmModel->applyItems(vms);
+
+            QVariantList lxcs = lxcsByNode.value(nodeName);
+            ProxmoxDataUtils::sortItems(lxcs, m_defaultSorting);
+            lxcModel->applyItems(lxcs);
+
+            nodeRow.insert(QStringLiteral("sessionKey"), sessionKey);
+            nodeRow.insert(QStringLiteral("vmsModel"), QVariant::fromValue<QObject *>(vmModel));
+            nodeRow.insert(QStringLiteral("lxcsModel"), QVariant::fromValue<QObject *>(lxcModel));
+            nodeRows.push_back(nodeRow);
+        }
+        nodesModel->applyItems(nodeRows);
+
+        QVariantMap endpointRow{
+            {QStringLiteral("sessionKey"), sessionKey},
+            {QStringLiteral("label"), endpoint.value(QStringLiteral("label"))},
+            {QStringLiteral("host"), endpoint.value(QStringLiteral("host"))},
+            {QStringLiteral("port"), endpoint.value(QStringLiteral("port"))},
+            {QStringLiteral("error"), endpoint.value(QStringLiteral("error"))},
+            {QStringLiteral("offline"), endpoint.value(QStringLiteral("offline"))},
+            {QStringLiteral("nodesModel"), QVariant::fromValue<QObject *>(nodesModel)},
+        };
+        endpointRows.push_back(endpointRow);
+    }
+
+    // Remove vanished rows first (delegates release the submodels), then
+    // drop the submodels themselves.
+    m_endpointsModel->applyItems(endpointRows);
+    for (auto it = m_nodesModelsBySession.begin(); it != m_nodesModelsBySession.end();) {
+        if (!liveSessions.contains(it.key())) {
+            it.value()->deleteLater();
+            it = m_nodesModelsBySession.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = m_vmModelsBySessionNode.begin(); it != m_vmModelsBySessionNode.end();) {
+        if (!liveNodeKeys.contains(it.key())) {
+            it.value()->deleteLater();
+            it = m_vmModelsBySessionNode.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    for (auto it = m_lxcModelsBySessionNode.begin(); it != m_lxcModelsBySessionNode.end();) {
+        if (!liveNodeKeys.contains(it.key())) {
+            it.value()->deleteLater();
+            it = m_lxcModelsBySessionNode.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void ProxmoxController::clearMultiHostModels() {
+    if (m_endpointsModel) {
+        m_endpointsModel->clear();
+    }
+    for (VariantListModel *model : std::as_const(m_nodesModelsBySession)) {
+        model->deleteLater();
+    }
+    m_nodesModelsBySession.clear();
+    for (VariantListModel *model : std::as_const(m_vmModelsBySessionNode)) {
+        model->deleteLater();
+    }
+    m_vmModelsBySessionNode.clear();
+    for (VariantListModel *model : std::as_const(m_lxcModelsBySessionNode)) {
+        model->deleteLater();
+    }
+    m_lxcModelsBySessionNode.clear();
 }
 
 QString ProxmoxController::pbsKeyForHost(const QString &host) const {
@@ -1004,6 +1262,8 @@ void ProxmoxController::resetTransientStateForModeChange() {
     setDisplayedVmData({});
     setDisplayedLxcData({});
     setDisplayedProxmoxData(QVariant());
+    clearSingleHostModels();
+    clearMultiHostModels();
 }
 
 void ProxmoxController::resetMultiTempData() {
@@ -1490,6 +1750,7 @@ void ProxmoxController::handleSingleReply(int seq, const QString &kind, const QS
             setDisplayedNodeList({});
             setDisplayedVmData({});
             setDisplayedLxcData({});
+            publishSingleHostModels();
             setIsRefreshing(false);
             setLoading(false);
         }
@@ -1991,6 +2252,11 @@ void ProxmoxController::correlateBackups() {
     if (lxcs != m_displayedLxcData) {
         setDisplayedLxcData(lxcs);
     }
+
+    // Push the (possibly backup-annotated) data into the delegate models.
+    // Each publish no-ops in the wrong mode and is cheap when nothing changed.
+    publishSingleHostModels();
+    publishMultiHostModels();
 }
 
 QString ProxmoxController::normalizedHost(const QString &host) const {

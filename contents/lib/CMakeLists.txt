@@ -46,6 +46,8 @@ qt_add_library(proxmoxclientplugin SHARED
     proxmoxtaskutils.h
     proxmoxcontroller.cpp
     proxmoxcontroller.h
+    variantlistmodel.cpp
+    variantlistmodel.h
     pbstypes.h
     secretstore.cpp
     secretstore.h

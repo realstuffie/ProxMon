@@ -12,6 +12,7 @@ private slots:
     void responseRowsPreserveNestedDataAndAddContext();
     void responseRowsHandleMissingData();
     void endpointBucketsMergeAndSort();
+    void sortStatusIdGroupsRunningThenId();
 };
 
 void ProxmoxDataUtilsTest::multiHostJsonRejectsMalformedInput() {
@@ -196,6 +197,32 @@ void ProxmoxDataUtilsTest::endpointBucketsMergeAndSort() {
     QCOMPARE(zeta.value(QStringLiteral("sessionKey")).toString(), QStringLiteral("z"));
     QVERIFY(zeta.value(QStringLiteral("offline")).toBool());
     QCOMPARE(zeta.value(QStringLiteral("error")).toString(), QStringLiteral("timed out"));
+}
+
+void ProxmoxDataUtilsTest::sortStatusIdGroupsRunningThenId() {
+    auto guest = [](int vmid, const QString &status, const QString &name) {
+        return QVariant(QVariantMap{
+            {QStringLiteral("vmid"), vmid},
+            {QStringLiteral("status"), status},
+            {QStringLiteral("name"), name},
+        });
+    };
+
+    // Deliberately unordered, mixed status; names would sort differently.
+    QVariantList items{
+        guest(300, QStringLiteral("stopped"), QStringLiteral("aaa")),
+        guest(101, QStringLiteral("running"), QStringLiteral("zzz")),
+        guest(200, QStringLiteral("stopped"), QStringLiteral("bbb")),
+        guest(100, QStringLiteral("running"), QStringLiteral("yyy")),
+    };
+
+    ProxmoxDataUtils::sortItems(items, QStringLiteral("statusId"));
+
+    // Running group first, ascending vmid within each group.
+    QCOMPARE(items.at(0).toMap().value(QStringLiteral("vmid")).toInt(), 100);
+    QCOMPARE(items.at(1).toMap().value(QStringLiteral("vmid")).toInt(), 101);
+    QCOMPARE(items.at(2).toMap().value(QStringLiteral("vmid")).toInt(), 200);
+    QCOMPARE(items.at(3).toMap().value(QStringLiteral("vmid")).toInt(), 300);
 }
 
 QTEST_APPLESS_MAIN(ProxmoxDataUtilsTest)

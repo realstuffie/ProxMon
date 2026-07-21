@@ -7,6 +7,7 @@
 #include <QVariant>
 
 #include "pbstypes.h"
+#include "variantlistmodel.h"
 
 class ProxmoxClient;
 class SecretStore;
@@ -61,6 +62,20 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QVariantList displayedNodeList READ displayedNodeList NOTIFY displayedNodeListChanged)
     Q_PROPERTY(int runningVMs READ runningVMs NOTIFY runningVMsChanged)
     Q_PROPERTY(int runningLXC READ runningLXC NOTIFY runningLXCChanged)
+    // Delegate-facing models (single-host). Rows update in place via
+    // dataChanged instead of wholesale list replacement, so QML delegates
+    // survive refreshes. The QVariantList properties above remain the source
+    // for notifications/counts.
+    Q_PROPERTY(VariantListModel *nodesModel READ nodesModel CONSTANT)
+    // Multi-host equivalent: endpoint rows carry a "nodesModel" pointer, node
+    // rows carry "vmsModel"/"lxcsModel" pointers (same structure, one level
+    // deeper).
+    Q_PROPERTY(VariantListModel *endpointsModel READ endpointsModel CONSTANT)
+    Q_PROPERTY(QString defaultSorting READ defaultSorting WRITE setDefaultSorting NOTIFY defaultSortingChanged)
+    // True while the popup is expanded. Gates single-host model maintenance so
+    // no sort/diff work happens while nothing is watching (mirrors the old lazy
+    // behaviour, where sorting ran only inside visible delegate bindings).
+    Q_PROPERTY(bool viewActive READ viewActive WRITE setViewActive NOTIFY viewActiveChanged)
 
 public:
     explicit ProxmoxController(QObject *parent = nullptr);
@@ -158,6 +173,12 @@ public:
     QVariantList displayedNodeList() const { return m_displayedNodeList; }
     int runningVMs() const;
     int runningLXC() const;
+    VariantListModel *nodesModel() const { return m_nodesModel; }
+    VariantListModel *endpointsModel() const { return m_endpointsModel; }
+    QString defaultSorting() const { return m_defaultSorting; }
+    void setDefaultSorting(const QString &value);
+    bool viewActive() const { return m_viewActive; }
+    void setViewActive(bool value);
 
     Q_INVOKABLE void resolveSecretsIfNeeded();
     Q_INVOKABLE void listStoredKeys();
@@ -231,6 +252,8 @@ signals:
     void displayedNodeListChanged();
     void runningVMsChanged();
     void runningLXCChanged();
+    void defaultSortingChanged();
+    void viewActiveChanged();
     void restoreSingleConfigRequested(const QString &host, int port, const QString &tokenId);
     void restoreMultiHostConfigRequested(const QString &multiHostsJson);
     void keyListError(const QString &message);
@@ -303,6 +326,10 @@ private:
     void setDisplayedNodeList(const QVariantList &value);
     void resetRetryState();
     void scheduleRetry(const QString &reason);
+    void publishSingleHostModels();
+    void clearSingleHostModels();
+    void publishMultiHostModels();
+    void clearMultiHostModels();
     void resetTransientStateForModeChange();
     void resetMultiTempData();
     void discardConsoleCredentials(const QString &requestId);
@@ -436,4 +463,19 @@ private:
     ProxmoxClient *m_api;
     SecretStore *m_singleSecretStore;
     SecretStore *m_multiSecretStore;
+
+    // Delegate-facing models (single-host). m_nodesModel rows carry pointers
+    // to the per-node vm/lxc submodels below (roles "vmsModel"/"lxcsModel").
+    QString m_defaultSorting = QStringLiteral("status");
+    bool m_viewActive = false;
+    VariantListModel *m_nodesModel = nullptr;
+    QHash<QString, VariantListModel *> m_vmModelsByNode;
+    QHash<QString, VariantListModel *> m_lxcModelsByNode;
+
+    // Multi-host models. Child hashes key on sessionKey + "|" + node so the
+    // same node name behind two endpoints stays distinct.
+    VariantListModel *m_endpointsModel = nullptr;
+    QHash<QString, VariantListModel *> m_nodesModelsBySession;
+    QHash<QString, VariantListModel *> m_vmModelsBySessionNode;
+    QHash<QString, VariantListModel *> m_lxcModelsBySessionNode;
 };

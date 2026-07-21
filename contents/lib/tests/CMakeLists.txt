@@ -56,6 +56,21 @@ target_link_libraries(tst_proxmoxtaskutils PRIVATE
 
 add_test(NAME proxmoxtaskutils COMMAND tst_proxmoxtaskutils)
 
+qt_add_executable(tst_variantlistmodel
+    tst_variantlistmodel.cpp
+    ../variantlistmodel.cpp
+    ../variantlistmodel.h
+)
+
+target_include_directories(tst_variantlistmodel PRIVATE ..)
+
+target_link_libraries(tst_variantlistmodel PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+add_test(NAME variantlistmodel COMMAND tst_variantlistmodel)
+
 qt_add_executable(tst_debugsanitizer
     tst_debugsanitizer.cpp
 )

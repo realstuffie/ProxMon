@@ -101,6 +101,9 @@ PlasmoidItem {
         pbsExcludeVmids: root.pbsExcludeVmids
         debugEnabled: root.devMode
         ignoreSsl: root.ignoreSsl
+        defaultSorting: root.defaultSorting
+        // Gate single-host model maintenance to when the popup is open.
+        viewActive: root.expanded
         autoRetry: root.autoRetry
         retryStartMs: root.retryStartMs
         retryMaxMs: root.retryMaxMs
@@ -851,123 +854,6 @@ PlasmoidItem {
     }
 
 
-    // Get VMs for a specific node (use displayed data)
-    function getVmsForNode(nodeName) {
-        var nodeVms = displayedVmData.filter(function(vm) {
-            return vm.node === nodeName
-        })
-        return sortByStatus(nodeVms)
-    }
-
-    function getVmsForNodeMulti(sessionKey, nodeName) {
-        var arr = []
-        for (var i = 0; i < displayedEndpoints.length; i++) {
-            var b = displayedEndpoints[i]
-            if (!b || b.sessionKey !== sessionKey) continue
-            arr = b.vms.filter(function(vm) {
-                return vm.node === nodeName
-            })
-            break
-        }
-        var seen = ({})
-        var deduped = arr.filter(function(vm) {
-            var key = String(sessionKey) + "::" + String(vm.node || "") + "::vm::" + String(vm.vmid)
-            if (seen[key]) return false
-            seen[key] = true
-            return true
-        })
-        return sortByStatus(deduped)
-    }
-
-    // Get LXCs for a specific node (use displayed data)
-    function getLxcForNode(nodeName) {
-        var nodeLxc = displayedLxcData.filter(function(lxc) {
-            return lxc.node === nodeName
-        })
-        return sortByStatus(nodeLxc)
-    }
-
-    function getLxcForNodeMulti(sessionKey, nodeName) {
-        var arr2 = []
-        for (var i2 = 0; i2 < displayedEndpoints.length; i2++) {
-            var b2 = displayedEndpoints[i2]
-            if (!b2 || b2.sessionKey !== sessionKey) continue
-            arr2 = b2.lxcs.filter(function(lxc) {
-                return lxc.node === nodeName
-            })
-            break
-        }
-        var seen = ({})
-        var deduped = arr2.filter(function(lxc) {
-            var key = String(sessionKey) + "::" + String(lxc.node || "") + "::lxc::" + String(lxc.vmid)
-            if (seen[key]) return false
-            seen[key] = true
-            return true
-        })
-        return sortByStatus(deduped)
-    }
-
-    // Get running VM count for a node (use displayed data)
-    function getRunningVmsForNode(nodeName) {
-        var count = 0
-        for (var i = 0; i < displayedVmData.length; i++) {
-            if (displayedVmData[i].node === nodeName && displayedVmData[i].status === "running") count++
-        }
-        return count
-    }
-
-    function getRunningVmsForNodeMulti(sessionKey, nodeName) {
-        var vms = getVmsForNodeMulti(sessionKey, nodeName)
-        var c = 0
-        for (var i = 0; i < vms.length; i++) {
-            if (vms[i].status === "running") c++
-        }
-        return c
-    }
-
-    // Get running LXC count for a node (use displayed data)
-    function getRunningLxcForNode(nodeName) {
-        var count = 0
-        for (var i = 0; i < displayedLxcData.length; i++) {
-            if (displayedLxcData[i].node === nodeName && displayedLxcData[i].status === "running") count++
-        }
-        return count
-    }
-
-    function getRunningLxcForNodeMulti(sessionKey, nodeName) {
-        var lxcs = getLxcForNodeMulti(sessionKey, nodeName)
-        var c2 = 0
-        for (var i2 = 0; i2 < lxcs.length; i2++) {
-            if (lxcs[i2].status === "running") c2++
-        }
-        return c2
-    }
-
-    // Get total VM count for a node (use displayed data)
-    function getTotalVmsForNode(nodeName) {
-        var count = 0
-        for (var i = 0; i < displayedVmData.length; i++) {
-            if (displayedVmData[i].node === nodeName) count++
-        }
-        return count
-    }
-
-    function getTotalVmsForNodeMulti(sessionKey, nodeName) {
-        return getVmsForNodeMulti(sessionKey, nodeName).length
-    }
-
-    // Get total LXC count for a node (use displayed data)
-    function getTotalLxcForNode(nodeName) {
-        var count = 0
-        for (var i = 0; i < displayedLxcData.length; i++) {
-            if (displayedLxcData[i].node === nodeName) count++
-        }
-        return count
-    }
-
-    function getTotalLxcForNodeMulti(sessionKey, nodeName) {
-        return getLxcForNodeMulti(sessionKey, nodeName).length
-    }
 
     function actionKey(nodeName, kind, vmid, sessionKey) {
         if (sessionKey) return sessionKey + "::" + nodeName + ":" + kind + ":" + vmid
@@ -1076,54 +962,6 @@ PlasmoidItem {
             logDebug("Developer mode: ENABLED")
         }
         footerClickTimer.restart()
-    }
-
-    function sortByStatus(data) {
-        if (!data || data.length === 0) return []
-
-        function nameOf(x) {
-            return (x && (x.name || x.hostname) ? String(x.name || x.hostname) : "")
-        }
-
-        return data.slice().sort(function(a, b) {
-            var an = nameOf(a)
-            var bn = nameOf(b)
-
-            switch (defaultSorting) {
-                case "status":
-                    var aRunning = (a.status === "running") ? 0 : 1
-                    var bRunning = (b.status === "running") ? 0 : 1
-                    if (aRunning !== bRunning) return aRunning - bRunning
-                    // secondary sort: name, then vmid for stability
-                    var nc = an.localeCompare(bn)
-                    if (nc !== 0) return nc
-                    return (a.vmid || 0) - (b.vmid || 0)
-
-                case "name":
-                    var c1 = an.localeCompare(bn)
-                    if (c1 !== 0) return c1
-                    return (a.vmid || 0) - (b.vmid || 0)
-
-                case "nameDesc":
-                    var c2 = bn.localeCompare(an)
-                    if (c2 !== 0) return c2
-                    return (a.vmid || 0) - (b.vmid || 0)
-
-                case "id":
-                    return (a.vmid || 0) - (b.vmid || 0)
-
-                case "idDesc":
-                    return (b.vmid || 0) - (a.vmid || 0)
-
-                default:
-                    var aRun = (a.status === "running") ? 0 : 1
-                    var bRun = (b.status === "running") ? 0 : 1
-                    if (aRun !== bRun) return aRun - bRun
-                    var c3 = an.localeCompare(bn)
-                    if (c3 !== 0) return c3
-                    return (a.vmid || 0) - (b.vmid || 0)
-            }
-        })
     }
 
     // Get node name from API URL
@@ -1436,7 +1274,6 @@ PlasmoidItem {
     onPbsRefreshIntervalChanged: triggerRefreshFromConfigChange("pbsRefreshInterval")
     onPbsExcludeTagChanged: triggerRefreshFromConfigChange("pbsExcludeTag")
     onPbsExcludeVmidsChanged: triggerRefreshFromConfigChange("pbsExcludeVmids")
-    onDefaultSortingChanged: triggerRefreshFromConfigChange("defaultSorting")
     onAutoRetryChanged: triggerRefreshFromConfigChange("autoRetry")
     onRetryStartMsChanged: triggerRefreshFromConfigChange("retryStartMs")
     onRetryMaxMsChanged: triggerRefreshFromConfigChange("retryMaxMs")
@@ -1772,17 +1609,20 @@ PlasmoidItem {
 
                 Repeater {
                     visible: root.connectionMode === "single"
-                    model: root.displayedProxmoxData && root.displayedProxmoxData.data ? root.displayedProxmoxData.data : []
+                    // Diffing model: rows update in place via dataChanged, so
+                    // these delegates persist across refreshes instead of
+                    // being rebuilt every poll.
+                    model: controller.nodesModel
 
                     delegate: NodeSection {
                         required property int index
-                        required property var modelData
+                        required property var itemData
 
                         nodeIndex: index
-                        nodeModel: modelData
-                        nodeVms: root.getVmsForNode(modelData ? modelData.node : "")
-                        nodeLxc: root.getLxcForNode(modelData ? modelData.node : "")
-                        isCollapsed: root.isNodeCollapsed(modelData ? modelData.node : "")
+                        nodeModel: itemData
+                        vmsModel: itemData ? itemData.vmsModel : null
+                        lxcsModel: itemData ? itemData.lxcsModel : null
+                        isCollapsed: root.isNodeCollapsed(itemData ? itemData.node : "")
                         uiRadiusS: root.uiRadiusS
                         uiRadiusL: root.uiRadiusL
                         uiBorderOpacity: root.uiBorderOpacity
@@ -1803,10 +1643,6 @@ PlasmoidItem {
                         isActionBusy: root.isActionBusy
                         armedActionKey: root.armedActionKey
                         armedTimerRunning: armedTimer.running
-                        getRunningVmsForNode: root.getRunningVmsForNode
-                        getTotalVmsForNode: root.getTotalVmsForNode
-                        getRunningLxcForNode: root.getRunningLxcForNode
-                        getTotalLxcForNode: root.getTotalLxcForNode
                         onToggleCollapsed: function(nodeName) { root.toggleNodeCollapsed(nodeName) }
                         onAction: function(kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunAction(kind, nodeName, vmid, displayName, action)
@@ -1822,18 +1658,21 @@ PlasmoidItem {
                 // Multi-host view (group by endpoint)
                 Repeater {
                     visible: root.connectionMode === "multiHost"
-                    model: root.displayedEndpointsModel
+                    // Diffing model: endpoint rows update in place, delegates
+                    // persist across refreshes (same as the single-host path).
+                    model: controller.endpointsModel
 
                     Component.onCompleted: {
                         root.logDebug("[ProxMon UI] multi repeater visible=" + visible
                                  + " mode=" + root.connectionMode
-                                 + " modelLen=" + (root.displayedEndpointsModel ? root.displayedEndpointsModel.length : -1))
+                                 + " modelLen=" + controller.endpointsModel.count)
                     }
 
                     delegate: MultiHostEndpointSection {
                         required property int index
-                        required property var modelData
-                        endpoint: modelData
+                        required property var itemData
+                        endpoint: itemData
+                        nodesModel: itemData ? itemData.nodesModel : null
                         endpointIndex: index
                         anonymized: root.devMode
                         uiRadiusL: root.uiRadiusL
@@ -1852,13 +1691,7 @@ PlasmoidItem {
                         anonymizeVmId: root.anonymizeVmId
                         anonymizeVmName: root.anonymizeVmName
                         anonymizeLxcName: root.anonymizeLxcName
-                        getVmsForNodeMulti: root.getVmsForNodeMulti
-                        getLxcForNodeMulti: root.getLxcForNodeMulti
                         isNodeCollapsed: root.isNodeCollapsed
-                        getRunningVmsForNodeMulti: root.getRunningVmsForNodeMulti
-                        getTotalVmsForNodeMulti: root.getTotalVmsForNodeMulti
-                        getRunningLxcForNodeMulti: root.getRunningLxcForNodeMulti
-                        getTotalLxcForNodeMulti: root.getTotalLxcForNodeMulti
                         isActionBusy: root.isActionBusy
                         armedActionKey: root.armedActionKey
                         armedTimerRunning: armedTimer.running
@@ -1882,7 +1715,7 @@ PlasmoidItem {
                     text: "No nodes found"
                     visible: (root.connectionMode === "single")
                         ? (!root.displayedProxmoxData || !root.displayedProxmoxData.data || root.displayedProxmoxData.data.length === 0)
-                        : (root.displayedEndpointsModel.length === 0)
+                        : (controller.endpointsModel.count === 0)
                     opacity: 0.6
                     Layout.alignment: Qt.AlignHCenter
                 }

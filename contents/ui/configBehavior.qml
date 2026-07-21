@@ -180,6 +180,7 @@ KCM.SimpleKCM {
                 model: ListModel {
                     id: sortingModel
                     ListElement { text: "Status (Running first)"; value: "status" }
+                    ListElement { text: "Status, then ID"; value: "statusId" }
                     ListElement { text: "Name (A-Z)"; value: "name" }
                     ListElement { text: "Name (Z-A)"; value: "nameDesc" }
                     ListElement { text: "ID (Ascending)"; value: "id" }

@@ -12,8 +12,9 @@ ColumnLayout {
     required property int nodeIndex
     required property var nodeModel
     property string nodeName: nodeModel ? nodeModel.node : ""
-    property var nodeVms: []
-    property var nodeLxc: []
+    // Per-node diffing models owned by the controller (VariantListModel).
+    property var vmsModel: null
+    property var lxcsModel: null
     property bool isCollapsed: false
     property int uiRadiusL: 8
     property real uiBorderOpacity: 0.22
@@ -30,10 +31,6 @@ ColumnLayout {
     property var anonymizeVmId: null
     property var anonymizeVmName: null
     property var anonymizeLxcName: null
-    property var getRunningVmsForNodeMulti: null
-    property var getTotalVmsForNodeMulti: null
-    property var getRunningLxcForNodeMulti: null
-    property var getTotalLxcForNodeMulti: null
     property var isActionBusy: null
     property string armedActionKey: ""
     property bool armedTimerRunning: false
@@ -102,7 +99,7 @@ ColumnLayout {
                     }
 
                     PlasmaComponents.Label {
-                        text: root.getRunningVmsForNodeMulti(root.sessionKey, root.nodeName) + "/" + root.getTotalVmsForNodeMulti(root.sessionKey, root.nodeName)
+                        text: (root.vmsModel ? root.vmsModel.runningCount : 0) + "/" + (root.vmsModel ? root.vmsModel.count : 0)
                         font.pixelSize: 10
                         opacity: 0.7
                     }
@@ -117,7 +114,7 @@ ColumnLayout {
                     }
 
                     PlasmaComponents.Label {
-                        text: root.getRunningLxcForNodeMulti(root.sessionKey, root.nodeName) + "/" + root.getTotalLxcForNodeMulti(root.sessionKey, root.nodeName)
+                        text: (root.lxcsModel ? root.lxcsModel.runningCount : 0) + "/" + (root.lxcsModel ? root.lxcsModel.count : 0)
                         font.pixelSize: 10
                         opacity: 0.7
                     }
@@ -185,7 +182,7 @@ ColumnLayout {
 
         ColumnLayout {
             Layout.fillWidth: true
-            visible: root.nodeVms.length > 0
+            visible: root.vmsModel && root.vmsModel.count > 0
             spacing: 2
 
             RowLayout {
@@ -199,23 +196,23 @@ ColumnLayout {
                 }
 
                 PlasmaComponents.Label {
-                    text: "VMs (" + root.getRunningVmsForNodeMulti(root.sessionKey, root.nodeName) + "/" + root.nodeVms.length + ")"
+                    text: "VMs (" + (root.vmsModel ? root.vmsModel.runningCount : 0) + "/" + (root.vmsModel ? root.vmsModel.count : 0) + ")"
                     font.bold: true
                     font.pixelSize: 11
                 }
             }
 
             Repeater {
-                model: root.nodeVms
+                model: root.vmsModel
 
                 delegate: VmRow {
                     required property int index
-                    required property var modelData
+                    required property var itemData
 
                     vmIndex: index
-                    vmModel: modelData
+                    vmModel: itemData
                     nodeName: root.nodeName
-                    busy: root.isActionBusy(root.nodeName, "qemu", modelData.vmid, root.sessionKey)
+                    busy: root.isActionBusy(root.nodeName, "qemu", itemData.vmid, root.sessionKey)
                     armedActionKey: root.armedActionSessionKey === root.sessionKey
                         ? root.armedActionKey.replace(root.sessionKey + "::", "")
                         : ""
@@ -245,7 +242,7 @@ ColumnLayout {
 
         ColumnLayout {
             Layout.fillWidth: true
-            visible: root.nodeLxc.length > 0
+            visible: root.lxcsModel && root.lxcsModel.count > 0
             spacing: 2
 
             RowLayout {
@@ -259,23 +256,23 @@ ColumnLayout {
                 }
 
                 PlasmaComponents.Label {
-                    text: "Containers (" + root.getRunningLxcForNodeMulti(root.sessionKey, root.nodeName) + "/" + root.nodeLxc.length + ")"
+                    text: "Containers (" + (root.lxcsModel ? root.lxcsModel.runningCount : 0) + "/" + (root.lxcsModel ? root.lxcsModel.count : 0) + ")"
                     font.bold: true
                     font.pixelSize: 11
                 }
             }
 
             Repeater {
-                model: root.nodeLxc
+                model: root.lxcsModel
 
                 delegate: LxcRow {
                     required property int index
-                    required property var modelData
+                    required property var itemData
 
                     ctIndex: index
-                    ctModel: modelData
+                    ctModel: itemData
                     nodeName: root.nodeName
-                    busy: root.isActionBusy(root.nodeName, "lxc", modelData.vmid, root.sessionKey)
+                    busy: root.isActionBusy(root.nodeName, "lxc", itemData.vmid, root.sessionKey)
                     armedActionKey: root.armedActionSessionKey === root.sessionKey
                         ? root.armedActionKey.replace(root.sessionKey + "::", "")
                         : ""
@@ -304,7 +301,7 @@ ColumnLayout {
 
         PlasmaComponents.Label {
             text: "No VMs or Containers"
-            visible: root.nodeVms.length === 0 && root.nodeLxc.length === 0
+            visible: (!root.vmsModel || root.vmsModel.count === 0) && (!root.lxcsModel || root.lxcsModel.count === 0)
             opacity: 0.5
             font.pixelSize: 10
             Layout.leftMargin: 4
