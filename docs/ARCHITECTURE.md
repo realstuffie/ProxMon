@@ -81,9 +81,13 @@ Concurrent socket writes from the main thread (key/pointer/resize events via `Se
 
 libvncclient's `GotFrameBufferUpdate` callback fires once per dirty rect per `HandleRFBServerMessage` call, which can be many times per server message. Rather than emitting a signal per rect (expensive cross-thread marshalling + N repaints), the callback only sets an atomic dirty flag. The poll loop checks the flag once after `HandleRFBServerMessage` returns and emits a single `frameUpdated` signal per message.
 
-### SetDesktopSize (resize) workaround
+### Remote resize (dropped in v0.7.3)
 
-libvncclient ≤ 0.9.15 truncates the SCREEN array in its `SendExtDesktopSize` implementation (LibVNC issue #640), causing QEMU to silently reject resize requests. `VncClient::resizeRemote` hand-crafts the `SetDesktopSize` (251) wire frame directly rather than using libvncclient's helper.
+An earlier version implemented client-driven `SetDesktopSize` resize, hand-crafting the wire frame because libvncclient ≤ 0.9.15 truncates the SCREEN array in its helper (LibVNC issue #640). It was removed: behaviour across QEMU/Proxmox versions was inconsistent, and a fixed framebuffer with server-driven desktop-resize support (the `MallocFrameBuffer` realloc callback in `VncClient`) proved the better trade. The view letterboxes to fit instead.
+
+### TLS trust on the console path
+
+The WSS handshake validates the server certificate against the same configured CA as the API path. The controller resolves the cert per session (controller-wide in single-host; shared vs per-endpoint in multi-host, already resolved in `readNextMultiSecret`) and forwards it on `consoleReady` / `lxcConsoleReady`; `VncWsProxy` and `LxcTerminal` append it to their `QSslConfiguration` before `open()`. `ignoreSsl` (`VerifyNone`) takes precedence when enabled. Certificate material is public, so passing it through these signals is compatible with the credential-isolation model — it is not delivered via the pending registry.
 
 ## LXC terminal architecture
 
@@ -151,4 +155,4 @@ The two modes share the same `ProxmoxClient` and signal paths. The only runtime 
 - **Single**: session key is `""`, endpoint config comes from controller-level properties (`m_host`, `m_port`, etc.).
 - **Multi**: session key is a stable string identifying the endpoint, config is resolved via `endpointBySession()` from `m_endpoints`.
 
-`ProxmoxController` resolves per-session overrides (api port, ignoreSsl) in the proxy-ready lambdas before emitting the console-ready signal, so callers downstream don't need to know which mode is active.
+`ProxmoxController` resolves per-session overrides (api port, ignoreSsl, trusted CA) in the proxy-ready lambdas before emitting the console-ready signal, so callers downstream don't need to know which mode is active.

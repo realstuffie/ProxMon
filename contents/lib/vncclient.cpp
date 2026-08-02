@@ -153,7 +153,7 @@ void VncClient::connectToVnc(const QString &host, int port)
             SendKeyEvent(rfb, 0xFFE5, FALSE); // CapsLock
         });
 
-        // Poll loop. WaitForMessage timeout is 16 ms so disconnect() is
+        // Poll loop. WaitForMessage timeout is 5 ms so disconnect() is
         // noticed within one interval.
         while (m_running.load()) {
             // Drain pending commands (key/pointer/resize) before waiting for

@@ -21,7 +21,7 @@ A KDE Plasma 6 plasmoid to monitor your Proxmox VE servers directly from your de
 
 - **Keychain storage** - API token secrets are stored in your system keyring (QtKeychain) and never written to disk in plaintext. They are read on demand and held in memory only for the duration of a request.
 - **Isolated from the UI layer** - Credentials are never exposed to the QML/JavaScript layer. Auth tokens and VNC tickets are delivered directly between native C++ components and zeroed from memory immediately after use.
-- **SSL/TLS** - Connections to Proxmox use HTTPS/WSS. You can supply your own CA certificate for self-signed setups. "Ignore SSL" disables all TLS verification and encryption - only enable it when **all** other options are exhausted.
+- **SSL/TLS** - Connections to Proxmox use HTTPS/WSS. You can supply your own CA certificate for self-signed setups - it applies to API, PBS, and VNC/LXC console connections (shared or per-endpoint in multi-host mode). "Ignore SSL" disables all TLS verification and encryption - only enable it when **all** other options are exhausted.
 - **Notification privacy** - Token identifiers are redacted from desktop notifications by default, so credentials don't appear in your notifications.
 - **Known limitation** - The VNC console uses a local loopback socket to bridge between the native VNC client and the Proxmox WebSocket endpoint. There is a brief window where another local process could connect to that socket instead. In the worst case this causes a failed connection - no credentials can be extracted this way.
 
@@ -215,7 +215,7 @@ ctest --test-dir build-tests --output-on-failure
 
 ## License
 
-GPL-3.0 or later. See [LICENSE](LICENSE) for details.
+GPL-3.0 or later. See [License](License) for details.
 
 ## Changelog
 

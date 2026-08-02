@@ -189,20 +189,10 @@ Residual threat is DoS only. The Proxmox VNC ticket lives in this process and is
 
 `SO_PEERCRED` is **not** a viable check here — it is documented for AF_UNIX only, and on AF_INET returns `ENOPROTOOPT` on Linux (0/0/0 on some older kernels).
 
-- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Newer versions auto-migrate legacy keys, but if the widget shows "Missing Token Secret", re-enter the secret in settings and click **Update Keyring**, then wait a moment.
+- If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Legacy keys are **no longer auto-migrated** (removed in v0.7.3) and can leave the widget showing "Missing Token Secret": remove any ProxMon-related entries in KWallet, re-enter the secret in settings, and click **Update Keyring**. Wait a moment, or restart plasmashell.
 
 ### Compact representation click handling
 
-`Kirigami.Icon` silently absorbs mouse events in custom `compactRepresentation` items,
-preventing a parent `MouseArea` from receiving clicks over the icon area (KDE bug 518024,
-unresolved as of Plasma 6.6.3). Workaround: add a second `MouseArea` directly inside the
-`Kirigami.Icon` in addition to the root item's `MouseArea`.
+Expansion is driven from two places that complement each other: `activationTogglesExpanded: true` on the `PlasmoidItem` in main.qml lets Plasma toggle the popup on activation, and a `TapHandler` in CompactRepresentation.qml calls `root.expanded = !root.expanded` on direct taps. `root` resolves through the component creation context at tap time.
 
-`activationTogglesExpanded` is not used — both `MouseArea` handlers call
-`root.expanded = !root.expanded` directly to avoid double-toggle.
-
-A `HoverHandler` nested inside the root `MouseArea` provides hover highlighting passively
-without consuming click events. The root `MouseArea` is bounded to `compactLayout` rather
-than `parent` to avoid overlapping adjacent applet click areas. A `TextMetrics` item
-measuring `"99%"` provides a stable minimum label width to prevent layout shifting as CPU
-values change between one and two digits.
+One known cosmetic quirk: the handler's `enabled: !Plasmoid.editMode` binding cannot resolve `Plasmoid` inside that component and logs one harmless `ReferenceError: Plasmoid is not defined` per plasmashell load. The handler is load-bearing — do not remove it to silence the warning (tap-to-expand stops working; verified at runtime). A `HoverHandler` provides passive hover highlighting. `Kirigami.Icon` absorbs plain `MouseArea` clicks over the icon area (KDE bug 518024), which is why the handler sits at the root item level.
