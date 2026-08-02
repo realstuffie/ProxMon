@@ -20,6 +20,8 @@ class VncWsProxy : public QObject {
     Q_PROPERTY(int     vmid        READ vmid        WRITE setVmid        NOTIFY vmidChanged)
     Q_PROPERTY(int     vncPort     READ vncPort     WRITE setVncPort     NOTIFY vncPortChanged)
     Q_PROPERTY(bool    ignoreSsl   READ ignoreSsl   WRITE setIgnoreSsl   NOTIFY ignoreSslChanged)
+    Q_PROPERTY(QString trustedCertPem  READ trustedCertPem  WRITE setTrustedCertPem  NOTIFY trustedCertPemChanged)
+    Q_PROPERTY(QString trustedCertPath READ trustedCertPath WRITE setTrustedCertPath NOTIFY trustedCertPathChanged)
 
 public:
     explicit VncWsProxy(QObject *parent = nullptr);
@@ -32,6 +34,8 @@ public:
     int     vmid()       const { return m_vmid; }
     int     vncPort()    const { return m_vncPort; }
     bool    ignoreSsl()  const { return m_ignoreSsl; }
+    QString trustedCertPem()  const { return m_trustedCertPem; }
+    QString trustedCertPath() const { return m_trustedCertPath; }
 
     void setHost(const QString &v)       { if (m_host == v) return;       m_host = v;       emit hostChanged(); }
     void setApiPort(int v)               { if (m_apiPort == v) return;    m_apiPort = v;    emit apiPortChanged(); }
@@ -40,6 +44,8 @@ public:
     void setVmid(int v)                  { if (m_vmid == v) return;       m_vmid = v;       emit vmidChanged(); }
     void setVncPort(int v)               { if (m_vncPort == v) return;    m_vncPort = v;    emit vncPortChanged(); }
     void setIgnoreSsl(bool v)            { if (m_ignoreSsl == v) return;  m_ignoreSsl = v;  emit ignoreSslChanged(); }
+    void setTrustedCertPem(const QString &v)  { if (m_trustedCertPem == v) return;  m_trustedCertPem = v;  emit trustedCertPemChanged(); }
+    void setTrustedCertPath(const QString &v) { if (m_trustedCertPath == v) return; m_trustedCertPath = v; emit trustedCertPathChanged(); }
 
     Q_INVOKABLE void start();
     Q_INVOKABLE void stop();
@@ -57,6 +63,8 @@ signals:
     void vmidChanged();
     void vncPortChanged();
     void ignoreSslChanged();
+    void trustedCertPemChanged();
+    void trustedCertPathChanged();
 
 private slots:
     void onNewConnection();
@@ -82,6 +90,8 @@ private:
     QByteArray m_ticket;
     QByteArray m_authHeader;
     bool    m_ignoreSsl = false;
+    QString m_trustedCertPem;
+    QString m_trustedCertPath;
 
     QTcpServer  *m_server    = nullptr;
     QTcpSocket  *m_tcp       = nullptr;

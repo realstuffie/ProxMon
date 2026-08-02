@@ -60,11 +60,16 @@ ProxmoxController::ProxmoxController(QObject *parent)
         // Resolve per-session overrides (multi-host), falling back to controller-wide settings.
         int resolvedApiPort = apiPort;
         bool resolvedIgnoreSsl = ignoreSsl;
+        QString resolvedCertPem = m_trustedCertPem;
+        QString resolvedCertPath = m_trustedCertPath;
         if (!sessionKey.isEmpty()) {
             const QVariantMap endpoint = endpointBySession(sessionKey);
             if (!endpoint.isEmpty()) {
                 resolvedApiPort    = endpoint.value(QStringLiteral("port"), apiPort).toInt();
                 resolvedIgnoreSsl  = endpoint.value(QStringLiteral("ignoreSsl"), ignoreSsl).toBool();
+                // Already resolved shared-vs-per-endpoint by readNextMultiSecret().
+                resolvedCertPem    = endpoint.value(QStringLiteral("trustedCertPem")).toString();
+                resolvedCertPath   = endpoint.value(QStringLiteral("trustedCertPath")).toString();
             }
         }
         const QString vmName = m_pendingConsoleNames.take(requestId);
@@ -72,7 +77,7 @@ ProxmoxController::ProxmoxController(QObject *parent)
         m_pendingConsoleAuth[requestId] = authHeader;
         m_pendingConsoleTicket[requestId] = ticket.toUtf8();
         emit consoleReady(sessionKey, requestId, host, node, kind, vmid, vmName, vncPort,
-                          resolvedApiPort, resolvedIgnoreSsl);
+                          resolvedApiPort, resolvedIgnoreSsl, resolvedCertPem, resolvedCertPath);
         // Delivery is deliberately synchronous. Anything QML did not consume
         // while handling consoleReady must not remain resident in the registry.
         discardConsoleCredentials(requestId);
@@ -84,10 +89,14 @@ ProxmoxController::ProxmoxController(QObject *parent)
     connect(m_api, &ProxmoxClient::nodeTermProxyReady, this, [this](const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int proxyPort, const QString &ticket, const QString &user, const QByteArray &authHeader) {
         int apiPort = m_port;
         bool ignoreSsl = m_ignoreSsl;
+        QString certPem = m_trustedCertPem;
+        QString certPath = m_trustedCertPath;
         if (!sessionKey.isEmpty()) {
             const QVariantMap endpoint = endpointBySession(sessionKey);
             apiPort   = endpoint.value(QStringLiteral("port"), m_port).toInt();
             ignoreSsl = endpoint.value(QStringLiteral("ignoreSsl"), m_ignoreSsl).toBool();
+            certPem   = endpoint.value(QStringLiteral("trustedCertPem"), m_trustedCertPem).toString();
+            certPath  = endpoint.value(QStringLiteral("trustedCertPath"), m_trustedCertPath).toString();
         }
         // Node consoles are labelled with the node name directly, but openConsole
         // still stashed a name entry for this request - drain it here too.
@@ -97,7 +106,7 @@ ProxmoxController::ProxmoxController(QObject *parent)
         m_pendingConsoleTicket[requestId] = ticket.toUtf8();
         // vmid=0 is the sentinel for node-level console (Proxmox vmids start at 100)
         emit lxcConsoleReady(sessionKey, requestId, host, apiPort, node, 0, node,
-                             proxyPort, user, ignoreSsl);
+                             proxyPort, user, ignoreSsl, certPem, certPath);
         discardConsoleCredentials(requestId);
     });
     connect(m_api, &ProxmoxClient::nodeTermProxyError, this, [this](const QString &, const QString &requestId, const QString &node, const QString &message) {
@@ -109,17 +118,21 @@ ProxmoxController::ProxmoxController(QObject *parent)
         // the controller-wide settings; for multi-host pull from the endpoint.
         int apiPort = m_port;
         bool ignoreSsl = m_ignoreSsl;
+        QString certPem = m_trustedCertPem;
+        QString certPath = m_trustedCertPath;
         if (!sessionKey.isEmpty()) {
             const QVariantMap endpoint = endpointBySession(sessionKey);
             apiPort   = endpoint.value(QStringLiteral("port"), m_port).toInt();
             ignoreSsl = endpoint.value(QStringLiteral("ignoreSsl"), m_ignoreSsl).toBool();
+            certPem   = endpoint.value(QStringLiteral("trustedCertPem"), m_trustedCertPem).toString();
+            certPath  = endpoint.value(QStringLiteral("trustedCertPath"), m_trustedCertPath).toString();
         }
         const QString vmName = m_pendingConsoleNames.take(requestId);
         discardConsoleCredentials(requestId);
         m_pendingConsoleAuth[requestId] = authHeader;
         m_pendingConsoleTicket[requestId] = ticket.toUtf8();
         emit lxcConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName,
-                             proxyPort, user, ignoreSsl);
+                             proxyPort, user, ignoreSsl, certPem, certPath);
         discardConsoleCredentials(requestId);
     });
     connect(m_api, &ProxmoxClient::ttyProxyError, this, [this](const QString &, const QString &requestId, const QString &node, int vmid, const QString &message) {
@@ -183,6 +196,15 @@ ProxmoxController::ProxmoxController(QObject *parent)
     m_pbsDebounceTimer->setSingleShot(true);
     m_pbsDebounceTimer->setInterval(500);
     connect(m_pbsDebounceTimer, &QTimer::timeout, this, &ProxmoxController::refreshPBSNow);
+
+    // Auto-retry: scheduleRetry() computes the backoff and arms this timer;
+    // the timeout performs the actual retry. resetRetryState() disarms it.
+    m_retryTimer = new QTimer(this);
+    m_retryTimer->setSingleShot(true);
+    connect(m_retryTimer, &QTimer::timeout, this, [this]() {
+        appendDebugLog(QStringLiteral("[ProxmoxController] auto-retry firing attempt=%1").arg(QString::number(m_retryAttempt)));
+        fetchData();
+    });
 
     connect(m_singleSecretStore, &SecretStore::keysReady, this, [this](const QStringList &keys) {
         if (keys.isEmpty()) {
@@ -353,6 +375,13 @@ void ProxmoxController::setIgnoreSsl(bool value) {
     if (m_ignoreSsl == value) return;
     m_ignoreSsl = value;
     emit ignoreSslChanged();
+}
+
+void ProxmoxController::setLowLatency(bool value) {
+    if (m_lowLatency == value) return;
+    m_lowLatency = value;
+    m_api->setLowLatency(value);
+    emit lowLatencyChanged();
 }
 
 void ProxmoxController::setDefaultSorting(const QString &value) {
@@ -769,6 +798,11 @@ void ProxmoxController::fetchData() {
 void ProxmoxController::cancelRefresh() {
     m_api->cancelRefreshRequests();
     m_pendingNodeRequests = 0;
+    // Explicit refreshes (manual, config change, retry timer fire) supersede
+    // any pending auto-retry; a failed attempt re-arms via scheduleRetry().
+    if (m_retryTimer) {
+        m_retryTimer->stop();
+    }
 }
 
 bool ProxmoxController::runAction(const QString &sessionKey,
@@ -987,6 +1021,9 @@ void ProxmoxController::setDisplayedNodeList(const QVariantList &value) {
 }
 
 void ProxmoxController::resetRetryState() {
+    if (m_retryTimer) {
+        m_retryTimer->stop();
+    }
     setRetryAttempt(0);
     setRetryNextDelayMs(0);
     setRetryStatusText(QString());
@@ -999,6 +1036,9 @@ void ProxmoxController::scheduleRetry(const QString &reason) {
     delay = qMin(delay, m_retryMaxMs);
     setRetryNextDelayMs(delay);
     setRetryStatusText(QStringLiteral("Retrying in %1s…").arg(qRound(double(delay) / 1000.0)));
+    if (m_retryTimer) {
+        m_retryTimer->start(delay);
+    }
     Q_UNUSED(reason)
 }
 

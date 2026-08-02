@@ -1,5 +1,6 @@
 #include "proxmoxclient.h"
 #include "proxmoxconsts.h"
+#include "proxmoxdatautils.h"
 #include "proxmoxtaskutils.h"
 
 #include <QFile>
@@ -167,20 +168,6 @@ void ProxmoxClient::requestActionFor(const QString &sessionKey,
 
 namespace {
 
-QList<QSslCertificate> loadTrustedCertificates(const QByteArray &trustedCertPem, const QString &trustedCertPath) {
-    QByteArray source = trustedCertPem;
-    if (source.isEmpty() && !trustedCertPath.trimmed().isEmpty()) {
-        QFile file(trustedCertPath.trimmed());
-        if (file.open(QIODevice::ReadOnly)) {
-            source = file.readAll();
-        }
-    }
-    if (source.isEmpty()) {
-        return {};
-    }
-    return QSslCertificate::fromData(source, QSsl::Pem);
-}
-
 QNetworkRequest buildRequest(const QString &host,
                              int port,
                              const QString &path,
@@ -195,7 +182,8 @@ QNetworkRequest buildRequest(const QString &host,
     req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("ProxMon"));
     req.setRawHeader("Accept", "application/json");
 
-    const QList<QSslCertificate> trustedCertificates = loadTrustedCertificates(trustedCertPem, trustedCertPath);
+    const QList<QSslCertificate> trustedCertificates =
+        ProxmoxDataUtils::trustedCertificatesFromConfig(trustedCertPem, trustedCertPath);
     if (!trustedCertificates.isEmpty()) {
         QSslConfiguration sslConfig = QSslConfiguration::defaultConfiguration();
         QList<QSslCertificate> caCertificates = sslConfig.caCertificates();

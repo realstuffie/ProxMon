@@ -1,5 +1,7 @@
 #include "lxcterminal.h"
 
+#include "proxmoxdatautils.h"
+
 #include <QCloseEvent>
 #include <QContextMenuEvent>
 #include <QMenu>
@@ -66,7 +68,9 @@ void LxcTerminal::open(const QString &host,
                        const QString &vmName,
                        int proxyPort,
                        const QString &user,
-                       bool ignoreSslErrors)
+                       bool ignoreSslErrors,
+                       const QString &trustedCertPem,
+                       const QString &trustedCertPath)
 {
     m_host       = host;
     m_apiPort    = apiPort;
@@ -76,6 +80,8 @@ void LxcTerminal::open(const QString &host,
     m_proxyPort  = proxyPort;
     m_user       = user;
     m_ignoreSsl  = ignoreSslErrors;
+    m_trustedCertPem  = trustedCertPem;
+    m_trustedCertPath = trustedCertPath;
     // m_authHeader and m_ticket are set beforehand via setAuthHeaderSecure()
     // and setTicketSecure() respectively.
 
@@ -287,14 +293,19 @@ void LxcTerminal::openSocket()
 
     m_ws = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
 
-    if (m_ignoreSsl) {
+    {
+        // TLS trust: apply the configured custom CA (same as the API path);
+        // only relax verification entirely when ignoreSsl is set.
         QSslConfiguration cfg = m_ws->sslConfiguration();
-        cfg.setPeerVerifyMode(QSslSocket::VerifyNone);
+        ProxmoxDataUtils::appendTrustedCertificates(cfg, m_trustedCertPem.toUtf8(), m_trustedCertPath);
+        if (m_ignoreSsl) {
+            cfg.setPeerVerifyMode(QSslSocket::VerifyNone);
+            QObject::connect(m_ws, &QWebSocket::sslErrors, this,
+                [this](const QList<QSslError> &) {
+                    if (m_ws) m_ws->ignoreSslErrors();
+                });
+        }
         m_ws->setSslConfiguration(cfg);
-        QObject::connect(m_ws, &QWebSocket::sslErrors, this,
-            [this](const QList<QSslError> &) {
-                if (m_ws) m_ws->ignoreSslErrors();
-            });
     }
 
     QObject::connect(m_ws, &QWebSocket::connected, this, [this]() {

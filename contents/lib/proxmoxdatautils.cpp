@@ -4,8 +4,10 @@
 
 #include <algorithm>
 
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSslConfiguration>
 
 namespace ProxmoxDataUtils {
 
@@ -182,6 +184,33 @@ void sortItems(QVariantList &items, const QString &mode) {
         if (c != 0) return c < 0;
         return avmid < bvmid;
     });
+}
+
+QList<QSslCertificate> trustedCertificatesFromConfig(const QByteArray &trustedCertPem,
+                                                     const QString &trustedCertPath) {
+    QByteArray source = trustedCertPem;
+    if (source.isEmpty() && !trustedCertPath.trimmed().isEmpty()) {
+        QFile file(trustedCertPath.trimmed());
+        if (file.open(QIODevice::ReadOnly)) {
+            source = file.readAll();
+        }
+    }
+    if (source.isEmpty()) {
+        return {};
+    }
+    return QSslCertificate::fromData(source, QSsl::Pem);
+}
+
+void appendTrustedCertificates(QSslConfiguration &config,
+                               const QByteArray &trustedCertPem,
+                               const QString &trustedCertPath) {
+    const QList<QSslCertificate> certs = trustedCertificatesFromConfig(trustedCertPem, trustedCertPath);
+    if (certs.isEmpty()) {
+        return;
+    }
+    QList<QSslCertificate> caCertificates = config.caCertificates();
+    caCertificates.append(certs);
+    config.setCaCertificates(caCertificates);
 }
 
 } // namespace ProxmoxDataUtils

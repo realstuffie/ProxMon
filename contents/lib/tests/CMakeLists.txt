@@ -21,6 +21,7 @@ target_include_directories(tst_proxmoxdatautils PRIVATE ..)
 
 target_link_libraries(tst_proxmoxdatautils PRIVATE
     Qt6::Core
+    Qt6::Network
     Qt6::Test
 )
 

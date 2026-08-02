@@ -31,6 +31,9 @@ public:
     // Show the window and start the connection. Safe to call again to
     // reconnect with fresh termproxy params on the same window instance.
     // The ticket must be delivered beforehand via setTicketSecure().
+    // trustedCertPem/trustedCertPath carry the configured custom CA (already
+    // resolved shared-vs-per-endpoint by the controller) so the WSS handshake
+    // honors the same trust settings as the API path.
     Q_INVOKABLE void open(const QString &host,
                           int apiPort,
                           const QString &node,
@@ -38,7 +41,9 @@ public:
                           const QString &vmName,
                           int proxyPort,
                           const QString &user,
-                          bool ignoreSslErrors);
+                          bool ignoreSslErrors,
+                          const QString &trustedCertPem,
+                          const QString &trustedCertPath);
 
     // Re-handshake against an existing window - used when the QML reconnect
     // timer fires and termproxy returns a fresh port pair.
@@ -110,6 +115,8 @@ protected:
     QString    m_user;
     QByteArray m_authHeader;
     bool    m_ignoreSsl = false;
+    QString m_trustedCertPem;
+    QString m_trustedCertPath;
 
     QPointer<QMainWindow> m_window;
     QPointer<QTermWidget> m_term;

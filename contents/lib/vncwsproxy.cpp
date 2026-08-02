@@ -1,5 +1,7 @@
 #include "vncwsproxy.h"
 
+#include "proxmoxdatautils.h"
+
 #include <QNetworkRequest>
 #include <QSslConfiguration>
 #include <QUrlQuery>
@@ -122,12 +124,17 @@ void VncWsProxy::onNewConnection()
 
     m_ws = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
 
-    if (m_ignoreSsl) {
-        // Mirror LxcTerminal's approach: modify the existing socket config.
+    {
+        // TLS trust: start from the socket's config, apply the configured
+        // custom CA (same as the API path), and only relax verification
+        // entirely when ignoreSsl is set.
         QSslConfiguration cfg = m_ws->sslConfiguration();
-        cfg.setPeerVerifyMode(QSslSocket::VerifyNone);
+        ProxmoxDataUtils::appendTrustedCertificates(cfg, m_trustedCertPem.toUtf8(), m_trustedCertPath);
+        if (m_ignoreSsl) {
+            cfg.setPeerVerifyMode(QSslSocket::VerifyNone);
+            connect(m_ws, &QWebSocket::sslErrors, this, &VncWsProxy::onWsSslErrors);
+        }
         m_ws->setSslConfiguration(cfg);
-        connect(m_ws, &QWebSocket::sslErrors, this, &VncWsProxy::onWsSslErrors);
     }
 
     connect(m_ws, &QWebSocket::connected,             this, &VncWsProxy::onWsConnected);

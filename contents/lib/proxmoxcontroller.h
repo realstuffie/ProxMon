@@ -36,6 +36,7 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString pbsExcludeVmids READ pbsExcludeVmids WRITE setPbsExcludeVmids NOTIFY pbsExcludeVmidsChanged)
     Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
     Q_PROPERTY(bool ignoreSsl READ ignoreSsl WRITE setIgnoreSsl NOTIFY ignoreSslChanged)
+    Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatency NOTIFY lowLatencyChanged)
     Q_PROPERTY(QVariantList debugLog READ debugLog NOTIFY debugLogChanged)
     Q_PROPERTY(QString secretState READ secretState NOTIFY secretStateChanged)
     Q_PROPERTY(bool refreshResolvingSecrets READ refreshResolvingSecrets NOTIFY refreshResolvingSecretsChanged)
@@ -122,9 +123,12 @@ public:
 
     bool pbsIgnoreSsl() const { return m_pbsIgnoreSsl; }
     QString pbsTrustedCertPem() const { return m_pbsTrustedCertPem; }
-    void setPbsTrustedCertPem(const QString &v) { if (m_pbsTrustedCertPem == v) return; m_pbsTrustedCertPem = v; emit pbsTrustedCertPemChanged(); QMetaObject::invokeMethod(this, &ProxmoxController::refreshPBSNow, Qt::QueuedConnection); }
+    // Route through the debounced refreshPBS() like every other PBS setter:
+    // a direct queued refreshPBSNow() here bypassed the debounce and caused a
+    // second PBS cycle on every startup when a cert was configured.
+    void setPbsTrustedCertPem(const QString &v) { if (m_pbsTrustedCertPem == v) return; m_pbsTrustedCertPem = v; emit pbsTrustedCertPemChanged(); refreshPBS(); }
     QString pbsTrustedCertPath() const { return m_pbsTrustedCertPath; }
-    void setPbsTrustedCertPath(const QString &v) { if (m_pbsTrustedCertPath == v) return; m_pbsTrustedCertPath = v; emit pbsTrustedCertPathChanged(); QMetaObject::invokeMethod(this, &ProxmoxController::refreshPBSNow, Qt::QueuedConnection); }
+    void setPbsTrustedCertPath(const QString &v) { if (m_pbsTrustedCertPath == v) return; m_pbsTrustedCertPath = v; emit pbsTrustedCertPathChanged(); refreshPBS(); }
     void setPbsIgnoreSsl(bool value);
 
     int pbsBackupWarningDays() const { return m_pbsBackupWarningDays; }
@@ -142,6 +146,9 @@ public:
 
     bool ignoreSsl() const { return m_ignoreSsl; }
     void setIgnoreSsl(bool value);
+
+    bool lowLatency() const { return m_lowLatency; }
+    void setLowLatency(bool value);
 
     QVariantList debugLog() const { return m_debugLog; }
     QString sanitizeDebugString(const QString &value) const;
@@ -226,6 +233,7 @@ signals:
     void pbsExcludeVmidsChanged();
     void debugEnabledChanged();
     void ignoreSslChanged();
+    void lowLatencyChanged();
     void debugLogChanged();
     void secretStateChanged();
     void refreshResolvingSecretsChanged();
@@ -271,15 +279,17 @@ signals:
                      const QString &message);
 
     void consoleReady(const QString &sessionKey,
-                  const QString &requestId,
-                  const QString &host,
-                  const QString &node,
-                  const QString &kind,
-                  int vmid,
-                  const QString &vmName,
-                  int vncPort,
-                  int apiPort,
-                  bool ignoreSsl);
+                   const QString &requestId,
+                   const QString &host,
+                   const QString &node,
+                   const QString &kind,
+                   int vmid,
+                   const QString &vmName,
+                   int vncPort,
+                   int apiPort,
+                   bool ignoreSsl,
+                   const QString &trustedCertPem,
+                   const QString &trustedCertPath);
     // Separate signal for LXC: carries the auth `user` returned by termproxy
     // so the LxcTerminal can complete the "user:ticket\n" handshake.
     // Auth header is delivered out-of-band via deliverConsoleAuth().
@@ -292,7 +302,9 @@ signals:
                          const QString &vmName,
                          int proxyPort,
                          const QString &user,
-                         bool ignoreSsl);
+                         bool ignoreSsl,
+                         const QString &trustedCertPem,
+                         const QString &trustedCertPath);
     void consoleError(const QString &node,
                   const QString &kind,
                   int vmid,
@@ -406,6 +418,7 @@ private:
     QString m_activeSingleSecretKey;
     bool m_debugEnabled = false;
     bool m_ignoreSsl = false;
+    bool m_lowLatency = false;
     QVariantList m_debugLog;
     QString m_secretState = QStringLiteral("idle");
     bool m_refreshResolvingSecrets = false;
@@ -429,6 +442,10 @@ private:
     int m_retryAttempt = 0;
     int m_retryNextDelayMs = 0;
     QString m_retryStatusText;
+    // Single-shot timer armed by scheduleRetry(); fires the actual auto-retry
+    // fetch after the computed backoff delay. Cancelled by resetRetryState()
+    // (success, config change, mode change) and by cancelRefresh().
+    QTimer *m_retryTimer = nullptr;
     QString m_pbsRefreshError;
     int m_pendingPbsEndpoints = 0;
     // Bumped by every refreshPBSNow() run; PBS keychain callbacks capture the
