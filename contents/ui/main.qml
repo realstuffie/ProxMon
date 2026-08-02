@@ -102,6 +102,7 @@ PlasmoidItem {
         pbsExcludeVmids: root.pbsExcludeVmids
         debugEnabled: root.devMode
         ignoreSsl: root.ignoreSsl
+        lowLatency: root.lowLatency
         defaultSorting: root.defaultSorting
         // Gate single-host model maintenance to when the popup is open.
         viewActive: root.expanded
@@ -146,6 +147,7 @@ PlasmoidItem {
 
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl === true
+    property bool lowLatency: Plasmoid.configuration.lowLatency === true
     property bool pbsEnabled: Plasmoid.configuration.pbsEnabled === true
     property string pbsHost: Plasmoid.configuration.pbsHost || ""
     property int pbsPort: Math.max(1, Plasmoid.configuration.pbsPort || 8007)
@@ -170,7 +172,10 @@ PlasmoidItem {
     property int retryMaxMs: Math.max(retryStartMs, (Plasmoid.configuration.retryMaxSeconds || 300) * 1000)
     property int retryAttempt: controller ? controller.retryAttempt : 0
     property int retryNextDelayMs: controller ? controller.retryNextDelayMs : 0
-    property string retryStatusText: controller ? controller.retryStatusText : ""
+    // Propagated explicitly via Connections.onRetryStatusTextChanged below.
+    // Do NOT re-add a controller binding here: imperative clearing in
+    // triggerRefreshFromConfigChange would silently kill it.
+    property string retryStatusText: ""
     property string pbsError: ""
 
     // Notification properties
@@ -213,7 +218,10 @@ PlasmoidItem {
     property var displayedNodeList: controller.displayedNodeList
     property bool loading: controller ? controller.loading : false
     property bool isRefreshing: controller ? controller.isRefreshing : false
-    property string errorMessage: controller ? controller.errorMessage : ""
+    // Propagated explicitly via Connections.onErrorMessageChanged below.
+    // Do NOT re-add a controller binding here: imperative writes (fetchData,
+    // console/action errors, config changes) would silently kill it.
+    property string errorMessage: ""
     property string lastUpdate: controller ? controller.lastUpdate : ""
 
     property bool actionPermHintShown: false
@@ -255,7 +263,7 @@ PlasmoidItem {
     }
     property bool defaultsLoaded: false
     property bool devMode: false
-    readonly property bool debugLogToJournal: true
+    readonly property bool debugLogToJournal: false
     property int footerClickCount: 0
 
     // Per-item action busy map: key "node:kind:vmid" => true
@@ -1071,7 +1079,10 @@ PlasmoidItem {
             if (!controller.isRefreshing && root.connectionMode !== "multiHost") root.checkStateChanges()
         }
         function onErrorMessageChanged() {
-            if (controller.errorMessage !== "") root.errorMessage = controller.errorMessage
+            root.errorMessage = controller.errorMessage
+        }
+        function onRetryStatusTextChanged() {
+            root.retryStatusText = controller.retryStatusText
         }
         function onPbsLastErrorChanged() {
             root.pbsError = controller.pbsLastError
@@ -1079,11 +1090,13 @@ PlasmoidItem {
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             root.setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
-        function onConsoleReady(sessionKey, requestId, host, node, kind, vmid, vmName, vncPort, apiPort, ignoreSsl) {
+        function onConsoleReady(sessionKey, requestId, host, node, kind, vmid, vmName, vncPort, apiPort, ignoreSsl, trustedCertPem, trustedCertPath) {
             var key = root.consoleWindowKey(sessionKey, kind, node, vmid)
             if (root.openConsoles[key]) {
                 // Auth header and ticket for reconnect are stashed in controller registry.
                 root.openConsoles[key].consoleRequestId = requestId
+                root.openConsoles[key].trustedCertPem = trustedCertPem
+                root.openConsoles[key].trustedCertPath = trustedCertPath
                 root.openConsoles[key].connectWithTicket(vncPort)
                 root.openConsoles[key].raise()
                 root.openConsoles[key].requestActivate()
@@ -1100,7 +1113,9 @@ PlasmoidItem {
                 consoleRequestId: requestId,
                 kind: kind,
                 apiPort: apiPort,
-                ignoreSsl: ignoreSsl
+                ignoreSsl: ignoreSsl,
+                trustedCertPem: trustedCertPem,
+                trustedCertPath: trustedCertPath
             })
             root.openConsoles[key] = win
             win.closing.connect(function() {
@@ -1111,7 +1126,7 @@ PlasmoidItem {
                 controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
             })
         }
-        function onLxcConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl) {
+        function onLxcConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl, trustedCertPem, trustedCertPath) {
             var kind = vmid === 0 ? "node" : "lxc"
             var key = root.consoleWindowKey(sessionKey, kind, node, vmid)
             var label = vmid === 0 ? (vmName || node) : (vmName || ("lxc " + vmid))
@@ -1152,7 +1167,7 @@ PlasmoidItem {
             controller.deliverConsoleAuth(requestId, term)
             controller.deliverConsoleTicket(requestId, term)
             term.windowPreset = Plasmoid.configuration.terminalSize || "medium"
-            term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl)
+            term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl, trustedCertPem, trustedCertPath)
         }
         function onConsoleError(node, kind, vmid, message) {
             root.errorMessage = "Console failed: " + message
@@ -1161,12 +1176,6 @@ PlasmoidItem {
             root.setActionBusy(node, actionKind, vmid, false, sessionKey)
             root.errorMessage = message || ("Action failed: " + action)
             configRefreshDebounce.restart()
-        }
-        function onPbsTestSucceeded(pbsHost) {
-            root.sendNotification("PBS connection OK", pbsHost || "Connection succeeded", "network-connect", "pbs-test-" + String(pbsHost || "ok"))
-        }
-        function onPbsTestFailed(pbsHost, message) {
-            root.errorMessage = message || ("PBS connection failed: " + String(pbsHost || ""))
         }
     }
 
@@ -1442,12 +1451,14 @@ PlasmoidItem {
 
             PlasmaComponents.Button {
                 icon.name: "utilities-terminal"
-                visible: Plasmoid.configuration.consoleEnabled !== false
+                // Coerced with !! so the pre-first-data evaluation can't yield
+                // undefined ("Unable to assign [undefined] to bool" at load).
+                visible: !!(Plasmoid.configuration.consoleEnabled !== false
                       && root.connectionMode === "single"
                       && root.configured
                       && root.displayedProxmoxData
                       && root.displayedProxmoxData.data
-                      && root.displayedProxmoxData.data.length > 0
+                      && root.displayedProxmoxData.data.length > 0)
                 implicitHeight: 28
                 implicitWidth: 28
                 onClicked: {

@@ -18,6 +18,9 @@ Window {
     // WebSocket proxy params - needed to connect through Proxmox's vncwebsocket endpoint
     property int    apiPort:   8006
     property bool   ignoreSsl: false
+    // Configured custom CA for the WSS handshake (same trust as the API path)
+    property string trustedCertPem:  ""
+    property string trustedCertPath: ""
     // Controller reference - used to deliver the auth header directly in C++
     // without passing it through the QML/JS heap.
     property var    controller: null
@@ -55,6 +58,8 @@ Window {
         vmid:       consoleWindow.vmid
         vncPort:    consoleWindow.vncPort
         ignoreSsl: consoleWindow.ignoreSsl
+        trustedCertPem:  consoleWindow.trustedCertPem
+        trustedCertPath: consoleWindow.trustedCertPath
 
         onReady: function(localPort) {
             // Proxy is listening - hand the local port to libvncclient.

@@ -47,7 +47,9 @@ KCM.SimpleKCM {
     property int cfg_refreshInterval: 30
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSsl: true
-    property bool cfg_ignoreSslDefault: true
+    // Matches main.xml (<default>false</default>): Restore Defaults must not
+    // silently enable Ignore SSL.
+    property bool cfg_ignoreSslDefault: false
     property string cfg_connectionMode: "single"
     property string cfg_connectionModeDefault: "single"
     property string cfg_multiHostsJson: "[]"

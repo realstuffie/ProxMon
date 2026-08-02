@@ -125,7 +125,9 @@ KCM.SimpleKCM {
     property string cfg_connectionModeDefault: "single"
     property string cfg_multiHostsJsonDefault: "[]"
     property int cfg_refreshIntervalDefault: 30
-    property bool cfg_ignoreSslDefault: true
+    // Matches main.xml (<default>false</default>): Restore Defaults must not
+    // silently enable Ignore SSL.
+    property bool cfg_ignoreSslDefault: false
     property bool cfg_enableNotificationsDefault: true
     property string cfg_pbsExcludeVmidsDefault: ""
     property string cfg_pbsExcludeTagDefault: ""
