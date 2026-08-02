@@ -8,6 +8,7 @@ import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.plasma.core as PlasmaCore
 import "components"
+import "components/configportability.mjs" as ConfigPortability
 // qmllint disable unused-imports
 import "../lib/proxmox" as ProxMon
 // qmllint enable unused-imports
@@ -1311,27 +1312,24 @@ PlasmoidItem {
             root.logDebug("loadDefaults: Received response")
 
             if (data["exit code"] === 0 && data["stdout"] && !root.defaultsLoaded) {
-                try {
-                    var s = JSON.parse(data["stdout"])
-                    root.logDebug("loadDefaults: Parsed settings file")
-
-                    if (s.host) Plasmoid.configuration.proxmoxHost = s.host
-                    if (s.port) Plasmoid.configuration.proxmoxPort = s.port
-                    if (s.tokenId) Plasmoid.configuration.apiTokenId = s.tokenId
-                    if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
-                    if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
-                    if (s.enableNotifications !== undefined) Plasmoid.configuration.enableNotifications = s.enableNotifications
-
-                    root.proxmoxHost = s.host || ""
-                    root.proxmoxPort = s.port || 8006
-                    root.apiTokenId = s.tokenId || ""
-                    root.refreshInterval = (s.refreshInterval || 30) * 1000
-                    root.ignoreSsl = s.ignoreSsl !== false
-                    root.enableNotifications = s.enableNotifications !== false
+                // Same format as Backup/Restore: the validated export envelope.
+                // Legacy flat seeds are still understood (tokenSecret in them is
+                // never read). Values land on Plasmoid.configuration; the root
+                // property bindings and onXChanged handlers propagate from there.
+                var res = ConfigPortability.validateImportFile(data["stdout"])
+                if (!res.ok)
+                    res = ConfigPortability.parseLegacyDefaults(data["stdout"])
+                if (res.ok) {
+                    var keys = ConfigPortability.whitelistedKeys()
+                    for (var i = 0; i < keys.length; i++) {
+                        var k = keys[i]
+                        if (res.config[k] !== undefined)
+                            Plasmoid.configuration[k] = res.config[k]
+                    }
                     root.defaultsLoaded = true
-                    root.logDebug("loadDefaults: Settings applied - host: " + root.proxmoxHost)
-                } catch (e) {
-                    root.logDebug("loadDefaults: No defaults found or parse error - " + e)
+                    root.logDebug("loadDefaults: Settings applied from defaults file")
+                } else {
+                    root.logDebug("loadDefaults: No defaults found or file not recognized")
                 }
             }
             disconnectSource(source)

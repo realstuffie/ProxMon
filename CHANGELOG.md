@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- feat(configGeneral): Backup / Restore section — export all settings to a versioned JSON file and import them back with schema validation and a confirm prompt; token secrets are never exported (whitelist + serialized-output guard) and matching keychain entries are picked up automatically after Apply
+- refactor(configGeneral): Default Settings now uses the same export-envelope format as Backup/Restore and captures all settings (previously a flat 6-field single-host file); legacy flat seeds are still read via a dedicated fallback (tokenSecret in them is never applied) and rewritten in the new format on next save
+- refactor(main.qml): startup defaults seed applies the full validated envelope to Plasmoid.configuration (drops binding-breaking direct assignments)
+- test(configportability): QML logic suite (qmltestrunner) wired into CTest covering round-trip, secret exclusion, import validation, needsSecrets detection and the legacy defaults reader
+
 ## v0.7.3
 - fix(proxmoxclient): isolate task poll requests from refresh cancellation to prevent stuck busy spinner
 - fix(main): add action busy guard on status change — clears spinner via checkStateChanges if onActionReply never fires

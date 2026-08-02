@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls as QQC2
 import QtQuick.Layouts
 import "components"
+import "components/configportability.mjs" as ConfigPortability
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.kcmutils as KCM
@@ -70,6 +71,8 @@ KCM.SimpleKCM {
     // property set instead of warning about missing properties.
     property bool cfg_consoleEnabled: true
     property bool cfg_consoleEnabledDefault: true
+    property string cfg_terminalSize: "medium"
+    property string cfg_terminalSizeDefault: "medium"
     property bool cfg_powerActionsEnabled: true
     property bool cfg_powerActionsEnabledDefault: true
     property string cfg_defaultSorting: "status"
@@ -156,22 +159,21 @@ KCM.SimpleKCM {
         engine: "executable"
         connectedSources: []
         onNewData: function(source, data) {
+            var loaded = false
             if (data["exit code"] === 0 && data["stdout"]) {
-                try {
-                    var s = JSON.parse(data["stdout"])
-                    if (s.host) singleHostSection.hostText = s.host
-                    if (s.port) singleHostSection.portValue = s.port
-                    if (s.tokenId) singleHostSection.tokenIdText = s.tokenId
-                    if (s.tokenSecret) singleHostSection.tokenSecretText = s.tokenSecret
-                    if (s.refreshInterval) refreshField.value = s.refreshInterval
-                    if (s.ignoreSsl !== undefined) singleHostSection.ignoreSsl = s.ignoreSsl
-                    if (s.enableNotifications !== undefined) enableNotificationsCheck.checked = s.enableNotifications
-                    loadStatus.text = "✓ Loaded!"
-                    loadStatus.color = Kirigami.Theme.positiveTextColor
-                } catch (e) {
-                    loadStatus.text = "No defaults saved"
-                    loadStatus.color = Kirigami.Theme.neutralTextColor
+                // Same pipeline as Backup/Restore: validated envelope first,
+                // then the legacy flat seed format (never reads tokenSecret).
+                var res = ConfigPortability.validateImportFile(data["stdout"])
+                if (!res.ok)
+                    res = ConfigPortability.parseLegacyDefaults(data["stdout"])
+                if (res.ok) {
+                    root.applyImportedConfig(res.config)
+                    loaded = true
                 }
+            }
+            if (loaded) {
+                loadStatus.text = "✓ Loaded!"
+                loadStatus.color = Kirigami.Theme.positiveTextColor
             } else {
                 loadStatus.text = "No defaults saved"
                 loadStatus.color = Kirigami.Theme.neutralTextColor
@@ -194,9 +196,12 @@ KCM.SimpleKCM {
         onTriggered: loadStatus.text = ""
     }
 
-    // Helper function to escape JSON for shell
-    function escapeForShell(str) {
-        return str.replace(/\\/g, "\\\\").replace(/'/g, "'\\''")
+    // Transient status text surfaced next to the defaults buttons (used by the
+    // defaults section, e.g. when the export guard blocks a write).
+    function reportStatus(text, isError) {
+        saveStatus.text = text
+        saveStatus.color = isError ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.positiveTextColor
+        saveStatusTimer.restart()
     }
 
     function parseMultiHosts() {
@@ -230,6 +235,80 @@ KCM.SimpleKCM {
         var tokenId = (entry && entry.tokenId) ? String(entry.tokenId).trim() : ""
         var key = (!host || !tokenId) ? "" : ("apiTokenSecret:" + tokenId + "@" + host + ":" + port)
         return key
+    }
+
+    // --- Backup / Restore -------------------------------------------------
+    // Values handed to the export builder. Deliberately covers ONLY the
+    // whitelisted, non-secret settings — apiTokenSecret, pbsTokenSecretBuffer
+    // and multiHostSecretsJson are never read here (and would be dropped by
+    // the export builder's whitelist/guard even if they were).
+    function collectExportValues() {
+        return {
+            "proxmoxHost": cfg_proxmoxHost,
+            "proxmoxPort": cfg_proxmoxPort,
+            "apiTokenId": cfg_apiTokenId,
+            "trustedCertPem": cfg_trustedCertPem,
+            "trustedCertPath": cfg_trustedCertPath,
+            "refreshInterval": cfg_refreshInterval,
+            "ignoreSsl": cfg_ignoreSsl,
+            "pbsEnabled": cfg_pbsEnabled,
+            "pbsHost": cfg_pbsHost,
+            "pbsPort": cfg_pbsPort,
+            "pbsTokenId": cfg_pbsTokenId,
+            "pbsIgnoreSsl": cfg_pbsIgnoreSsl,
+            "pbsTrustedCertPem": cfg_pbsTrustedCertPem,
+            "pbsTrustedCertPath": cfg_pbsTrustedCertPath,
+            "pbsBackupWarningDays": cfg_pbsBackupWarningDays,
+            "pbsBackupStaleDays": cfg_pbsBackupStaleDays,
+            "pbsRefreshInterval": cfg_pbsRefreshInterval,
+            "pbsExcludeTag": cfg_pbsExcludeTag,
+            "pbsExcludeVmids": cfg_pbsExcludeVmids,
+            "connectionMode": cfg_connectionMode,
+            "multiHostSharedCert": cfg_multiHostSharedCert,
+            "multiHostsJson": cfg_multiHostsJson,
+            "consoleEnabled": cfg_consoleEnabled,
+            "terminalSize": cfg_terminalSize,
+            "powerActionsEnabled": cfg_powerActionsEnabled,
+            "defaultSorting": cfg_defaultSorting,
+            "compactMode": cfg_compactMode,
+            "enableNotifications": cfg_enableNotifications,
+            "notifyMode": cfg_notifyMode,
+            "notifyFilter": cfg_notifyFilter,
+            "notifyOnStart": cfg_notifyOnStart,
+            "notifyOnStop": cfg_notifyOnStop,
+            "notifyOnNodeChange": cfg_notifyOnNodeChange,
+            "notifyRateLimitEnabled": cfg_notifyRateLimitEnabled,
+            "notifyRateLimitSeconds": cfg_notifyRateLimitSeconds,
+            "redactNotifyIdentities": cfg_redactNotifyIdentities,
+            "autoRetry": cfg_autoRetry,
+            "retryStartSeconds": cfg_retryStartSeconds,
+            "retryMaxSeconds": cfg_retryMaxSeconds,
+            "lowLatency": cfg_lowLatency,
+            "debugLogToJournal": cfg_debugLogToJournal,
+            "appearanceRunningColor": cfg_appearanceRunningColor,
+            "appearanceStoppedColor": cfg_appearanceStoppedColor,
+            "appearanceNodeColor": cfg_appearanceNodeColor,
+            "appearanceCardTintOpacity": cfg_appearanceCardTintOpacity,
+            "appearanceWindowOpacity": cfg_appearanceWindowOpacity
+        }
+    }
+
+    // Assign a validated import result to the cfg_* properties. KConfigXT
+    // persists the changes when the user presses Apply. Only whitelisted
+    // keys can arrive here (configportability.mjs validates them), so secret
+    // cfg_* keys and the keyring are never touched by an import.
+    function applyImportedConfig(cfg) {
+        if (!cfg) return
+        var keys = ConfigPortability.whitelistedKeys()
+        for (var i = 0; i < keys.length; i++) {
+            var k = keys[i]
+            if (cfg[k] !== undefined)
+                root["cfg_" + k] = cfg[k]
+        }
+        // The mode combo only reads cfg_connectionMode once
+        // (Component.onCompleted); re-sync it after an import.
+        if (cfg.connectionMode !== undefined)
+            connectionModeCombo.currentIndex = (cfg.connectionMode === "multiHost") ? 1 : 0
     }
 
     /*
@@ -393,15 +472,26 @@ KCM.SimpleKCM {
         ConfigGeneralDefaultsSection {
             saveExec: root.saveExec
             loadExec: root.loadExec
-            escapeForShell: root.escapeForShell
-            singleHostSection: singleHostSection
-            refreshField: refreshField
-            ignoreSsl: singleHostSection.ignoreSsl
-            enableNotifications: cfg_enableNotifications
+            collectValues: root.collectExportValues
+            reportStatus: root.reportStatus
             saveStatusText: saveStatus.text
             saveStatusColor: saveStatus.color
             loadStatusText: loadStatus.text
             loadStatusColor: loadStatus.color
+        }
+
+        // Separator
+        Rectangle {
+            Layout.fillWidth: true
+            implicitHeight: 1
+            color: Kirigami.Theme.disabledTextColor
+            opacity: 0.3
+            Layout.topMargin: 10
+        }
+
+        ConfigBackupSection {
+            collectValues: root.collectExportValues
+            applyImportedConfig: root.applyImportedConfig
         }
 
         // Separator

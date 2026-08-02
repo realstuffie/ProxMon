@@ -84,3 +84,41 @@ target_link_libraries(tst_debugsanitizer PRIVATE
 )
 
 add_test(NAME debugsanitizer COMMAND tst_debugsanitizer)
+
+# QML logic test for the config export/import module — runs the shipped
+# contents/ui/components/configportability.mjs through the real QML JS engine.
+# NOTE: /usr/bin/qmltestrunner can be a qtchooser shim delegating to a
+# nonexistent Qt5 binary, so resolve the real Qt6 tools dir via qmake first.
+set(_qt6_bin_hints "")
+find_program(_proxmon_qmake NAMES qmake6 qmake-qt6 qmake)
+if(_proxmon_qmake)
+    get_filename_component(_proxmon_qmake_real "${_proxmon_qmake}" REALPATH)
+    get_filename_component(_proxmon_qmake_dir "${_proxmon_qmake_real}" DIRECTORY)
+    list(APPEND _qt6_bin_hints "${_proxmon_qmake_dir}")
+    execute_process(
+        COMMAND "${_proxmon_qmake_real}" -query QT_INSTALL_BINS
+        OUTPUT_VARIABLE _proxmon_qt_install_bins
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+    if(_proxmon_qt_install_bins)
+        list(APPEND _qt6_bin_hints "${_proxmon_qt_install_bins}")
+    endif()
+endif()
+list(APPEND _qt6_bin_hints
+    "${QT6_INSTALL_PREFIX}/${QT6_INSTALL_BINS}"
+    "${QT6_INSTALL_PREFIX}/lib/qt6/bin"
+    "${QT6_INSTALL_PREFIX}/bin"
+)
+find_program(QMLTESTRUNNER_EXECUTABLE
+    NAMES qmltestrunner qmltestrunner6
+    HINTS ${_qt6_bin_hints}
+)
+if(QMLTESTRUNNER_EXECUTABLE)
+    add_test(NAME configportability
+        COMMAND ${QMLTESTRUNNER_EXECUTABLE} -input ${CMAKE_CURRENT_SOURCE_DIR}/tst_configportability.qml)
+    set_tests_properties(configportability PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+else()
+    message(STATUS "qmltestrunner not found — skipping the configportability QML test")
+endif()
