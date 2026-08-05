@@ -1,6 +1,8 @@
 # Changelog
 
 ## Unreleased
+
+## v0.8.0
 - fix(console): honor configured trusted CA on VNC/LXC WebSocket connections (single-host, multi-host shared or per-endpoint), matching the API path — previously only the ticket-fetch request used it
 - fix(controller): auto-retry timer now actually schedules the retry after the computed backoff (previously only the banner text was set)
 - fix(controller): wire lowLatency setting through to request timeouts (10s → 5s when enabled)
@@ -14,6 +16,8 @@
 - refactor(configGeneral): Default Settings now uses the same export-envelope format as Backup/Restore and captures all settings (previously a flat 6-field single-host file); legacy flat seeds are still read via a dedicated fallback (tokenSecret in them is never applied) and rewritten in the new format on next save
 - refactor(main.qml): startup defaults seed applies the full validated envelope to Plasmoid.configuration (drops binding-breaking direct assignments)
 - test(configportability): QML logic suite (qmltestrunner) wired into CTest covering round-trip, secret exclusion, import validation, needsSecrets detection and the legacy defaults reader
+- feat(stats): add per-VM/CT stats panel — CPU/mem sparkline from RRD history (last hour, 10-minute grid) plus best-effort IP address (QEMU guest agent for VMs, /interfaces for LXC); IP anonymized in dev mode
+- fix(NodeSection): add missing right margin on node card to match the VM/LXC list's scrollbar reserve
 
 ## v0.7.3
 - fix(proxmoxclient): isolate task poll requests from refresh cancellation to prevent stuck busy spinner

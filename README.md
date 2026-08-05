@@ -219,6 +219,24 @@ GPL-3.0 or later. See [License](License) for details.
 
 ## Changelog
 
+### v0.8.0
+
+- Fix: honor configured trusted CA on VNC/LXC WebSocket connections
+- Fix: auto-retry timer now schedules the retry after the computed backoff
+- Fix: wire lowLatency setting through to request timeouts
+- Fix: stop killing error/retry status bindings with imperative writes
+- Fix: KCM Restore Defaults no longer enables Ignore SSL
+- Fix: collapse duplicate PBS refresh at startup
+- Chore: drop dead PBS test button handlers
+- Fix: coerce host-shell visible binding to bool
+- Docs: sync ARCHITECTURE/developer notes with current code
+- Feat: Backup / Restore section for exporting and importing all settings
+- Refactor: Default Settings uses the same export format as Backup/Restore
+- Refactor: startup defaults seed applies the full validated envelope
+- Test: QML logic suite wired into CTest for config portability
+- Feat: per-VM/CT stats panel with CPU/mem sparkline and best-effort IP
+- Fix: missing right margin on node card
+
 ### v0.7.3
 
 - Refactor: node card header - status pill replaces computer icon, always-visible VM/CT counts
