@@ -200,6 +200,10 @@ public:
                                const QString &node,
                                int vmid,
                                const QString &action);
+    Q_INVOKABLE void fetchStats(const QString &sessionKey,
+                                const QString &kind,
+                                const QString &node,
+                                int vmid);
     Q_INVOKABLE void deliverConsoleAuth(const QString &requestId, QObject *target);
     Q_INVOKABLE void deliverConsoleTicket(const QString &requestId,
                                           QObject *primary,
@@ -277,6 +281,14 @@ signals:
                      int vmid,
                      const QString &action,
                      const QString &message);
+    void statsError(const QString &sessionKey,
+                    const QString &node,
+                    int vmid,
+                    const QString &message);
+    void statsReady(const QString &sessionKey,
+                    const QString &node,
+                    int vmid,
+                    const QVariant &data);
 
     void consoleReady(const QString &sessionKey,
                    const QString &requestId,
@@ -346,6 +358,7 @@ private:
     void resetMultiTempData();
     void discardConsoleCredentials(const QString &requestId);
     void clearPendingConsoleCredentials();
+    bool dispatchSingleStatsWithSecret(const QString &sessionKey, const QString &statsKind, const QString &node, int vmid, const QString &secret);
     void dispatchSingleFetchWithSecret(const QString &secret);
     void dispatchSingleNodeChildrenWithSecret(const QVariantList &nodeNames,
                                               const QString &secret);
@@ -361,8 +374,7 @@ private:
                                              const QVariantMap &endpoint,
                                              const QVariantList &nodeNames,
                                              const QString &secret);
-    bool dispatchMultiActionWithSecret(const QString &sessionKey,
-                                       const QVariantMap &endpoint,
+    bool dispatchMultiActionWithSecret(const QString &sessionKey,const QVariantMap &endpoint,
                                        const QString &kind,
                                        const QString &node,
                                        int vmid,

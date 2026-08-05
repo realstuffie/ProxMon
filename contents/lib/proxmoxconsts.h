@@ -17,6 +17,7 @@ namespace Kind {
     inline const QString Action   = QStringLiteral("action");   // internal dispatch
     inline const QString Console  = QStringLiteral("console");  // internal dispatch
     inline const QString Fetch    = QStringLiteral("fetch");    // internal dispatch
+    inline const QString Stats    = QStringLiteral("stats");    // internal dispatch
 } // namespace Kind
 
 // VM / CT action verbs sent to the Proxmox API

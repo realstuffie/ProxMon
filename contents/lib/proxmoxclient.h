@@ -53,6 +53,22 @@ public:
                                    const QString &trustedCertPath,
                                    const QString &node,
                                    int seq);
+    // Fetches RRD history (for a CPU/mem sparkline) and best-effort IP
+    // address in one call. statsKind: "qemu" | "lxc". Either leg can fail
+    // independently (e.g. no guest agent) without failing the whole call -
+    // statsError only fires if both legs come back empty.
+    void requestStatsFor(const QString &sessionKey,
+                                    const QString &host,
+                                    int port,
+                                    const QString &tokenId,
+                                    const QString &tokenSecret,
+                                    bool ignoreSslErrors,
+                                    const QByteArray &trustedCertPem,
+                                    const QString &trustedCertPath,
+                                    const QString &statsKind,
+                                    const QString &node,
+                                    int vmid,
+                                    int seq);
 
     // VM/CT actions: kind: "qemu" | "lxc"; action: "start" | "shutdown" | "reboot"
     void requestActionFor(const QString &sessionKey,
@@ -144,6 +160,9 @@ signals:
                    const QString &kind,
                    int vmid,
                    const QString &message);
+    // data is a map with optional "rrd" (array of RRD samples) and "ip" keys.
+    void statsReady(const QString &sessionKey, const QString &statsKind, const QString &node, int vmid, const QVariant &data);
+    void statsError(const QString &sessionKey, const QString &node, int vmid, const QString &message);
 
     // kind: "nodes" | "qemu" | "lxc"
     void reply(int seq, const QString &kind, const QString &node, const QVariant &data);

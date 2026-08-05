@@ -8,6 +8,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkReply>
+#include <QSharedPointer>
 #include <QSslCertificate>
 #include <QSslConfiguration>
 #include <QTimer>
@@ -286,6 +287,45 @@ void handleFinishedReply(QNetworkReply *r,
 
     emitOk(doc.toVariant());
     r->deleteLater();
+}
+
+// Best-effort IP extraction. For qemu, parses the QEMU guest agent's
+// network-get-interfaces payload (requires the agent installed+running in
+// the guest). For lxc, parses the /interfaces endpoint (PVE 7+; container
+// must be running). Returns the first non-loopback IPv4 address found, or
+// an empty string if none is available.
+QString extractIpAddress(const QVariantMap &responseMap, const QString &statsKind) {
+    const QVariant dataVariant = responseMap.value(QStringLiteral("data"));
+    if (statsKind == ProxmoxConst::Kind::Qemu) {
+        const QVariantList interfaces = dataVariant.toMap().value(QStringLiteral("result")).toList();
+        for (const QVariant &ifaceVariant : interfaces) {
+            const QVariantMap iface = ifaceVariant.toMap();
+            if (iface.value(QStringLiteral("name")).toString() == QStringLiteral("lo")) continue;
+            const QVariantList addrs = iface.value(QStringLiteral("ip-addresses")).toList();
+            for (const QVariant &addrVariant : addrs) {
+                const QVariantMap addr = addrVariant.toMap();
+                if (addr.value(QStringLiteral("ip-address-type")).toString() != QStringLiteral("ipv4")) continue;
+                const QString ip = addr.value(QStringLiteral("ip-address")).toString();
+                if (!ip.isEmpty() && !ip.startsWith(QStringLiteral("127."))) {
+                    return ip;
+                }
+            }
+        }
+        return {};
+    }
+
+    // LXC: /nodes/{node}/lxc/{vmid}/interfaces returns a flat list of
+    // interfaces, each with an "inet" field like "192.168.1.60/24".
+    const QVariantList interfaces = dataVariant.toList();
+    for (const QVariant &ifaceVariant : interfaces) {
+        const QVariantMap iface = ifaceVariant.toMap();
+        if (iface.value(QStringLiteral("name")).toString() == QStringLiteral("lo")) continue;
+        const QString inet = iface.value(QStringLiteral("inet")).toString();
+        if (!inet.isEmpty()) {
+            return inet.section(QLatin1Char('/'), 0, 0);
+        }
+    }
+    return {};
 }
 
 } // namespace
@@ -721,6 +761,107 @@ void ProxmoxClient::pollTaskStatus(const QString &sessionKey,
     });
 }
 
+void ProxmoxClient::requestStatsFor(const QString &sessionKey,
+                                    const QString &host,
+                                    int port,
+                                    const QString &tokenId,
+                                    const QString &tokenSecret,
+                                    bool ignoreSslErrors,
+                                    const QByteArray &trustedCertPem,
+                                    const QString &trustedCertPath,
+                                    const QString &statsKind,
+                                    const QString &node,
+                                    int vmid,
+                                    int seq) {
+    Q_UNUSED(seq)
+    if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
+        emit statsError(sessionKey, node, vmid, QStringLiteral("credentials unavailable"));
+        return;
+    }
+
+    // Two independent requests feed one combined result: RRD history for the
+    // graph, and a best-effort IP lookup. Either leg can fail on its own
+    // (e.g. no guest agent installed) without failing the whole call - only
+    // report an error if *both* legs come back empty.
+    auto result = QSharedPointer<QVariantMap>::create();
+    auto pending = QSharedPointer<int>::create(2);
+    auto anyOk = QSharedPointer<bool>::create(false);
+
+    auto finishOne = [this, result, pending, anyOk, sessionKey, statsKind, node, vmid]() {
+        if (--(*pending) > 0) return;
+        if (!*anyOk) {
+            emit statsError(sessionKey, node, vmid, QStringLiteral("failed to fetch stats"));
+            return;
+        }
+        emit statsReady(sessionKey, statsKind, node, vmid, QVariant(*result));
+    };
+
+    // Leg 1: RRD history (last hour, averaged samples) for the sparkline.
+    {
+        const QString path = QStringLiteral("/nodes/%1/%2/%3/rrddata?timeframe=hour&cf=AVERAGE")
+                                  .arg(node).arg(statsKind).arg(vmid);
+        QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, trustedCertPem, trustedCertPath);
+        QNetworkReply *reply = m_nam.get(req);
+        m_interactiveInFlight.insert(reply);
+        if (ignoreSslErrors) {
+            connect(reply, &QNetworkReply::sslErrors, reply, [reply](const QList<QSslError> &) {
+                reply->ignoreSslErrors();
+            });
+        }
+        QObject::connect(reply, &QNetworkReply::finished, this,
+            [this, reply, result, anyOk, finishOne]() {
+                m_interactiveInFlight.remove(reply);
+                if (reply->error() == QNetworkReply::NoError) {
+                    const QByteArray body = reply->readAll();
+                    QJsonParseError pe;
+                    const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+                    if (pe.error == QJsonParseError::NoError) {
+                        (*result)[QStringLiteral("rrd")] =
+                            doc.toVariant().toMap().value(QStringLiteral("data")).toList();
+                        *anyOk = true;
+                    }
+                }
+                reply->deleteLater();
+                finishOne();
+            });
+    }
+
+    // Leg 2: best-effort IP address lookup. 404s/timeouts here are expected
+    // (agent not installed, container stopped) and are not treated as a
+    // hard failure - the RRD leg can still carry the overall result.
+    {
+        const QString path = statsKind == ProxmoxConst::Kind::Qemu
+            ? QStringLiteral("/nodes/%1/qemu/%2/agent/network-get-interfaces").arg(node).arg(vmid)
+            : QStringLiteral("/nodes/%1/lxc/%2/interfaces").arg(node).arg(vmid);
+        QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret, trustedCertPem, trustedCertPath);
+        QNetworkReply *reply = m_nam.get(req);
+        m_interactiveInFlight.insert(reply);
+        if (ignoreSslErrors) {
+            connect(reply, &QNetworkReply::sslErrors, reply, [reply](const QList<QSslError> &) {
+                reply->ignoreSslErrors();
+            });
+        }
+        QObject::connect(reply, &QNetworkReply::finished, this,
+            [this, reply, result, anyOk, finishOne, statsKind]() {
+                m_interactiveInFlight.remove(reply);
+                if (reply->error() == QNetworkReply::NoError) {
+                    const QByteArray body = reply->readAll();
+                    QJsonParseError pe;
+                    const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
+                    if (pe.error == QJsonParseError::NoError) {
+                        const QString ip = extractIpAddress(doc.toVariant().toMap(), statsKind);
+                        if (!ip.isEmpty()) {
+                            (*result)[QStringLiteral("ip")] = ip;
+                            *anyOk = true;
+                        }
+                    }
+                }
+                reply->deleteLater();
+                finishOne();
+            });
+    }
+}
+
 void ProxmoxClient::requestVncProxy(const QString &sessionKey,
                                      const QString &requestId,
                                      const QString &host,
@@ -732,18 +873,16 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
                                      const QString &trustedCertPath,
                                      const QString &node,
                                      const QString &kind,
-    int vmid)
+                                     int vmid)
 {
     if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
         emit vncProxyError(sessionKey, requestId, node, kind, vmid, QStringLiteral("Not configured"));
         return;
     }
 
-    const QString path = QStringLiteral("/nodes/%1/%2/%3/vncproxy")
-                             .arg(node).arg(kind).arg(vmid);
+    const QString path = QStringLiteral("/nodes/%1/%2/%3/vncproxy").arg(node).arg(kind).arg(vmid);
 
-    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,
-                                       trustedCertPem, trustedCertPath);
+    QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,trustedCertPem, trustedCertPath);
 
     QByteArray body;
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");

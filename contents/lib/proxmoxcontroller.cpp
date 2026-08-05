@@ -32,6 +32,15 @@ ProxmoxController::ProxmoxController(QObject *parent)
     m_nodesModel = new VariantListModel({QStringLiteral("node")}, this);
     m_endpointsModel = new VariantListModel({QStringLiteral("sessionKey")}, this);
 
+    connect(m_api, &ProxmoxClient::statsReady, this,
+        [this](const QString &sessionKey, const QString &statsKind, const QString &node, int vmid, const QVariant &data) {
+            Q_UNUSED(statsKind)
+            emit statsReady(sessionKey, node, vmid, data);
+        });
+    connect(m_api, &ProxmoxClient::statsError, this,
+        [this](const QString &sessionKey, const QString &node, int vmid, const QString &message) {
+            emit statsError(sessionKey, node, vmid, message);
+        });
     connect(m_api, &ProxmoxClient::reply, this, [this](int seq, const QString &kind, const QString &node, const QVariant &data) {
         handleSingleReply(seq, kind, node, data);
     });
@@ -838,6 +847,26 @@ bool ProxmoxController::runAction(const QString &sessionKey,
     return true;
 }
 
+void ProxmoxController::fetchStats(const QString &sessionKey,
+                                   const QString &kind,
+                                   const QString &node,
+                                   int vmid) {
+    if (sessionKey.isEmpty()) {
+        readSingleSecretFor({
+            {QStringLiteral("kind"), ProxmoxConst::Kind::Stats},
+            {QStringLiteral("sessionKey"), sessionKey},
+            {QStringLiteral("statsKind"), kind},
+            {QStringLiteral("node"), node},
+            {QStringLiteral("vmid"), vmid},
+        });
+        return;
+    }
+
+    // Multi-host stats dispatch isn't wired yet - readMultiSecretFor has no
+    // Kind::Stats branch. Report clearly instead of silently doing nothing.
+    emit statsError(sessionKey, node, vmid, QStringLiteral("Multi-host stats not yet supported"));
+}
+
 void ProxmoxController::deliverConsoleAuth(const QString &requestId, QObject *target)
 {
     auto it = m_pendingConsoleAuth.find(requestId);
@@ -1363,6 +1392,8 @@ void ProxmoxController::dispatchSingleNodeChildrenWithSecret(const QVariantList 
     }
 }
 
+
+
 void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
     const QString key = keyFor(m_host, m_port, m_tokenId);
     m_singleSecretStore->readSecret(
@@ -1391,6 +1422,15 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
                                                request.value(QStringLiteral("vmid")).toInt(),
                                                request.value(QStringLiteral("action")).toString(),
                                                secret);
+                return;
+            }
+            if (kind == ProxmoxConst::Kind::Stats) {
+                dispatchSingleStatsWithSecret(
+                    request.value(QStringLiteral("sessionKey")).toString(),
+                    request.value(QStringLiteral("statsKind")).toString(),
+                    request.value(QStringLiteral("node")).toString(),
+                    request.value(QStringLiteral("vmid")).toInt(),
+                    secret);
                 return;
             }
             if (kind != ProxmoxConst::Kind::Console) return;
@@ -1450,8 +1490,38 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
                                  request.value(QStringLiteral("vmid")).toInt(),
                                  request.value(QStringLiteral("action")).toString(),
                                  QStringLiteral("credentials unavailable"));
+            } else if (kind == ProxmoxConst::Kind::Stats) {
+                emit statsError(request.value(QStringLiteral("sessionKey")).toString(),
+                                request.value(QStringLiteral("node")).toString(),
+                                request.value(QStringLiteral("vmid")).toInt(),
+                                QStringLiteral("credentials unavailable"));
             }
         });
+}
+
+bool ProxmoxController::dispatchSingleStatsWithSecret(const QString &sessionKey,
+                                                       const QString &statsKind,
+                                                       const QString &node,
+                                                       int vmid,
+                                                       const QString &secret) {
+    if (secret.isEmpty()) {
+        emit statsError(sessionKey, node, vmid, QStringLiteral("credentials unavailable"));
+        return false;
+    }
+
+    m_api->requestStatsFor(QString(),
+                           m_host,
+                           m_port,
+                           m_tokenId,
+                           secret,
+                           m_ignoreSsl,
+                           m_trustedCertPem.toUtf8(),
+                           m_trustedCertPath,
+                           statsKind,
+                           node,
+                           vmid,
+                           ++m_refreshSeq);
+    return true;
 }
 
 bool ProxmoxController::dispatchSingleActionWithSecret(const QString &kind,

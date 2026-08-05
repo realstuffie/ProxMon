@@ -216,6 +216,36 @@ PlasmoidItem {
                  + " endpointsModel=" + (displayedEndpointsModel ? displayedEndpointsModel.length : -1))
     }
     property var displayedNodeList: controller.displayedNodeList
+
+    // Stats (RRD history + IP address) cache, keyed by vmid.
+    // Rebuilt via Object.assign on every update rather than mutated in place,
+    // since QML only re-evaluates bindings when a property actually changes
+    // reference - an in-place mutation of the same object is invisible to it.
+    property var statsDataByVmid: ({})
+    property var statsLoadingByVmid: ({})
+
+    function getStatsData(vmid) {
+        return root.statsDataByVmid[vmid] !== undefined ? root.statsDataByVmid[vmid] : null
+    }
+    function isStatsLoading(vmid) {
+        return root.statsLoadingByVmid[vmid] === true
+    }
+    function setStatsLoading(vmid, isLoading) {
+        var m = Object.assign({}, root.statsLoadingByVmid)
+        if (isLoading) { m[vmid] = true } else { delete m[vmid] }
+        root.statsLoadingByVmid = m
+    }
+    function setStatsData(vmid, data) {
+        var m = Object.assign({}, root.statsDataByVmid)
+        m[vmid] = data
+        root.statsDataByVmid = m
+        root.setStatsLoading(vmid, false)
+    }
+    function requestStats(kind, nodeName, vmid) {
+        root.setStatsLoading(vmid, true)
+        controller.fetchStats("", kind, nodeName, vmid)
+    }
+
     property bool loading: controller ? controller.loading : false
     property bool isRefreshing: controller ? controller.isRefreshing : false
     // Propagated explicitly via Connections.onErrorMessageChanged below.
@@ -962,6 +992,11 @@ PlasmoidItem {
         return 100 + index
     }
 
+    function anonymizeIp(ip) {
+        if (!devMode) return ip
+        return "192.168.x.x"
+    }
+
 
     function handleFooterClick() {
         footerClickCount++
@@ -1176,6 +1211,13 @@ PlasmoidItem {
             root.setActionBusy(node, actionKind, vmid, false, sessionKey)
             root.errorMessage = message || ("Action failed: " + action)
             configRefreshDebounce.restart()
+        }
+        function onStatsReady(sessionKey, node, vmid, data) {
+            root.setStatsData(vmid, data)
+        }
+        function onStatsError(sessionKey, node, vmid, message) {
+            root.setStatsLoading(vmid, false)
+            root.setStatsData(vmid, { error: message })
         }
     }
 
@@ -1649,6 +1691,7 @@ PlasmoidItem {
                         anonymizeVmId: root.anonymizeVmId
                         anonymizeVmName: root.anonymizeVmName
                         anonymizeLxcName: root.anonymizeLxcName
+                        anonymizeIp: root.anonymizeIp
                         isActionBusy: root.isActionBusy
                         armedActionKey: root.armedActionKey
                         armedTimerRunning: armedTimer.running
@@ -1659,6 +1702,12 @@ PlasmoidItem {
                         onConsole: function(kind, nodeName, vmid, displayName) {
                             controller.openConsole("", kind, nodeName, vmid, displayName)
                         }
+                        onStatsToggled: function(kind, nodeName, vmid) {
+                            root.requestStats(kind, nodeName, vmid)
+                        }
+                        getStatsData: root.getStatsData
+                        isStatsLoading: root.isStatsLoading
+                        statsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
                         consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                         powerActionsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
                     }

@@ -32,12 +32,17 @@ ColumnLayout {
     property var anonymizeVmId: null
     property var anonymizeVmName: null
     property var anonymizeLxcName: null
+    property var anonymizeIp: null
     property var isActionBusy: null
     property string armedActionKey: ""
     property bool armedTimerRunning: false
     property var onToggleCollapsed: null
     property var onAction: null
     property var onConsole: null
+    property var onStatsToggled: null
+    property var getStatsData: null
+    property var isStatsLoading: null
+    property bool statsEnabled: true
     property bool consoleEnabled: true
     property bool powerActionsEnabled: true
 
@@ -223,6 +228,11 @@ ColumnLayout {
                     anonymizeVmName: root.anonymizeVmName
                     onAction: root.onAction
                     onConsole: root.onConsole
+                    onStatsToggled: root.onStatsToggled
+                    getStatsData: root.getStatsData
+                    isStatsLoading: root.isStatsLoading
+                    statsEnabled: root.statsEnabled
+                    anonymizeIp: root.anonymizeIp
                     consoleEnabled: root.consoleEnabled
                     powerActionsEnabled: root.powerActionsEnabled
                 }
@@ -276,6 +286,11 @@ ColumnLayout {
                     anonymizeLxcName: root.anonymizeLxcName
                     onAction: root.onAction
                     onConsole: root.onConsole
+                    onStatsToggled: root.onStatsToggled
+                    getStatsData: root.getStatsData
+                    isStatsLoading: root.isStatsLoading
+                    statsEnabled: root.statsEnabled
+                    anonymizeIp: root.anonymizeIp
                     consoleEnabled: root.consoleEnabled
                     powerActionsEnabled: root.powerActionsEnabled
                 }
