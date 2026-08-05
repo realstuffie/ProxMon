@@ -53,6 +53,7 @@ ColumnLayout {
     Rectangle {
         Layout.fillWidth: true
         Layout.leftMargin: 12
+        Layout.rightMargin: root.scrollbarReserve
         Layout.preferredHeight: 70
         radius: root.uiRadiusL
         color: Qt.rgba(root.uiNodeColor.r, root.uiNodeColor.g, root.uiNodeColor.b, root.uiNodeCardOpacity * root.uiWindowOpacity)
