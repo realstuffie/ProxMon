@@ -89,6 +89,9 @@
         <entry name="consoleEnabled" type="Bool">
             <default>true</default>
         </entry>
+        <entry name="terminalSize" type="String">
+            <default>medium</default>
+        </entry>
         <entry name="powerActionsEnabled" type="Bool">
             <default>true</default>
         </entry>

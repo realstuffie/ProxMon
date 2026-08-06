@@ -1,4 +1,4 @@
-// Plasmoid, root.expanded, averageCpuText() are Plasma runtime injections — not resolvable at lint time
+// Plasmoid, root.expanded, averageCpuText() are Plasma runtime injections - not resolvable at lint time
 // qmllint disable unqualified
 import QtQuick
 import QtQuick.Layouts
@@ -84,7 +84,7 @@ Item {
         gesturePolicy: TapHandler.ReleaseWithinBounds
         onTapped: root.expanded = !root.expanded
     }
-
+    
     Rectangle {
         anchors.fill: compactLayout
         visible: compactRoot.debugBounds

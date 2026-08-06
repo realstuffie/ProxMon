@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Qt6 REQUIRED COMPONENTS Core Network Qml DBus Gui Quick WebSockets Widgets)
 set(CMAKE_AUTOMOC ON)
 set(QT_QML_LINT_OPTIONS --disable-warning unqualified)
+option(PROXMON_BUILD_TESTS "Build ProxMon unit tests" OFF)
 # Bundled dependency: QtKeychain (stores secrets in the desktop keyring: KWallet/libsecret/etc)
 # Build it with Qt6 (this project uses Qt6)
 set(BUILD_WITH_QT6 ON CACHE BOOL "Build qtkeychain with Qt 6" FORCE)
@@ -18,8 +19,9 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build qtkeychain as static for bundling in
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # libsecret dev package may not be installed; allow qtkeychain to build without it (fallbacks: KWallet/plaintext)
 set(LIBSECRET_SUPPORT OFF CACHE BOOL "Disable libsecret support for bundled qtkeychain" FORCE)
-# Ensure qtkeychain doesn't build its own tests when embedded
-set(BUILD_TESTING OFF CACHE BOOL "Disable CTest when embedding qtkeychain" FORCE)
+# Ensure qtkeychain doesn't build its own tests when embedded. ProxMon's test
+# option is independent so enabling our tests does not enable dependency tests.
+set(BUILD_TESTING OFF)
 add_subdirectory(third_party/qtkeychain)
 
 # Find libvncclient
@@ -38,8 +40,14 @@ qt_add_library(proxmoxclientplugin SHARED
     plugin.cpp
     proxmoxclient.cpp
     proxmoxclient.h
+    proxmoxdatautils.cpp
+    proxmoxdatautils.h
+    proxmoxtaskutils.cpp
+    proxmoxtaskutils.h
     proxmoxcontroller.cpp
     proxmoxcontroller.h
+    variantlistmodel.cpp
+    variantlistmodel.h
     pbstypes.h
     secretstore.cpp
     secretstore.h
@@ -85,4 +93,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   if(MOLD_LINKER)
     target_link_options(proxmoxclientplugin PRIVATE -fuse-ld=mold)
   endif()
+endif()
+
+if(PROXMON_BUILD_TESTS)
+    enable_testing()
+    find_package(Qt6 REQUIRED COMPONENTS Test)
+    add_subdirectory(tests)
 endif()

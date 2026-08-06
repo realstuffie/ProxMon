@@ -8,6 +8,7 @@
 class QWebSocket;
 class QMainWindow;
 class QTermWidget;
+class QTimer;
 
 // Protocol layer + window manager for Proxmox LXC console sessions.
 // Owns a QMainWindow+QTermWidget (QWidget can't embed in QML).
@@ -17,16 +18,22 @@ class LxcTerminal : public QObject {
     Q_OBJECT
 
     Q_PROPERTY(QString state READ state NOTIFY stateChanged)
+    Q_PROPERTY(QString windowPreset READ windowPreset WRITE setWindowPreset)
 
 public:
     explicit LxcTerminal(QObject *parent = nullptr);
     ~LxcTerminal() override;
 
     QString state() const { return m_state; }
+    QString windowPreset() const { return m_windowPreset; }
+    void setWindowPreset(const QString &preset) { m_windowPreset = preset; }
 
     // Show the window and start the connection. Safe to call again to
     // reconnect with fresh termproxy params on the same window instance.
     // The ticket must be delivered beforehand via setTicketSecure().
+    // trustedCertPem/trustedCertPath carry the configured custom CA (already
+    // resolved shared-vs-per-endpoint by the controller) so the WSS handshake
+    // honors the same trust settings as the API path.
     Q_INVOKABLE void open(const QString &host,
                           int apiPort,
                           const QString &node,
@@ -34,19 +41,21 @@ public:
                           const QString &vmName,
                           int proxyPort,
                           const QString &user,
-                          bool ignoreSslErrors);
+                          bool ignoreSslErrors,
+                          const QString &trustedCertPem,
+                          const QString &trustedCertPath);
 
-    // Re-handshake against an existing window — used when the QML reconnect
+    // Re-handshake against an existing window - used when the QML reconnect
     // timer fires and termproxy returns a fresh port pair.
     // The ticket must be delivered beforehand via setTicketSecure().
     Q_INVOKABLE void connectWithTicket(int proxyPort,
                                        const QString &user,
                                        bool ignoreSslErrors);
 
-    // Called by ProxmoxController.deliverConsoleAuth() — sets the auth header
+    // Called by ProxmoxController.deliverConsoleAuth() - sets the auth header
     // directly from C++ without passing through the QML/JS heap.
     Q_INVOKABLE void setAuthHeaderSecure(const QByteArray &header);
-    // Called by ProxmoxController.deliverConsoleTicket() — sets the ticket
+    // Called by ProxmoxController.deliverConsoleTicket() - sets the ticket
     // directly from C++ without passing through the QML/JS heap.
     Q_INVOKABLE void setTicketSecure(const QByteArray &ticket);
 
@@ -77,6 +86,8 @@ private:
     void ensureWindow(const QString &vmName, const QString &nodeName);
     void destroyWindow();
     void openSocket();
+    void stopAuthTimeout();
+    void clearCredentials();
     void deliverToTerminal(const QByteArray &data);
 
     // WebSocket frame handlers
@@ -104,17 +115,24 @@ protected:
     QString    m_user;
     QByteArray m_authHeader;
     bool    m_ignoreSsl = false;
+    QString m_trustedCertPem;
+    QString m_trustedCertPath;
 
     QPointer<QMainWindow> m_window;
     QPointer<QTermWidget> m_term;
     QWebSocket *m_ws = nullptr;
     // Bytes received post-auth before our wake-CR timer expires. Used to
-    // decide whether to send a wake CR — boolean isn't enough because some
+    // decide whether to send a wake CR - boolean isn't enough because some
     // containers emit a 6-byte clear-screen sequence on attach and then go
     // silent, which would falsely suppress the wake. Threshold is heuristic:
     // a real prompt is usually >20 bytes (motd + path + dollar sign).
     int m_postAuthBytes = 0;
     Phase m_phase = Phase::Disconnected;
     QString m_state = QStringLiteral("disconnected");
+    QString m_windowPreset = QStringLiteral("medium");
     QByteArray m_authBuffer;
+    // Single-shot guard against a stalled post-upgrade auth handshake: the
+    // server completes the WS upgrade but never sends "OK". Cancelled the
+    // moment we reach Connected, Errored, or the socket disconnects.
+    QTimer *m_authTimer = nullptr;
 };

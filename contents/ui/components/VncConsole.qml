@@ -11,13 +11,17 @@ Window {
     property string nodeName: ""
     property int vmid: 0
     property string sessionKey: ""
+    property string consoleRequestId: ""
     property string kind: ""
     property string host: ""
     property int vncPort: 0
-    // WebSocket proxy params — needed to connect through Proxmox's vncwebsocket endpoint
+    // WebSocket proxy params - needed to connect through Proxmox's vncwebsocket endpoint
     property int    apiPort:   8006
     property bool   ignoreSsl: false
-    // Controller reference — used to deliver the auth header directly in C++
+    // Configured custom CA for the WSS handshake (same trust as the API path)
+    property string trustedCertPem:  ""
+    property string trustedCertPath: ""
+    // Controller reference - used to deliver the auth header directly in C++
     // without passing it through the QML/JS heap.
     property var    controller: null
     signal requestReconnect()
@@ -25,10 +29,10 @@ Window {
     function connectWithTicket(port) {
         vncPort         = port
         wsProxy.vncPort = port
-        // Deliver auth header and ticket from C++ registry — never touches JS heap.
+        // Deliver auth header and ticket from C++ registry - never touches JS heap.
         if (controller) {
-            controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
-            controller.deliverConsoleTicket(consoleWindow.sessionKey, wsProxy, vncClient)
+            controller.deliverConsoleAuth(consoleWindow.consoleRequestId, wsProxy)
+            controller.deliverConsoleTicket(consoleWindow.consoleRequestId, wsProxy, vncClient)
         }
         wsProxy.start()
     }
@@ -43,7 +47,7 @@ Window {
     /* WebSocket-to-TCP shim: libvncclient speaks raw TCP; Proxmox only exposes
        a WebSocket endpoint (vncwebsocket). VncWsProxy binds a random local TCP
        port, accepts libvncclient's connection, and bridges bytes over a WS
-       connection to Proxmox — all transparent to libvncclient.
+       connection to Proxmox - all transparent to libvncclient.
     */
     ProxMon.VncWsProxy {
         id: wsProxy
@@ -54,13 +58,16 @@ Window {
         vmid:       consoleWindow.vmid
         vncPort:    consoleWindow.vncPort
         ignoreSsl: consoleWindow.ignoreSsl
+        trustedCertPem:  consoleWindow.trustedCertPem
+        trustedCertPath: consoleWindow.trustedCertPath
 
         onReady: function(localPort) {
-            // Proxy is listening — hand the local port to libvncclient.
+            // Proxy is listening - hand the local port to libvncclient.
             // Ticket was already delivered via deliverConsoleTicket before start().
             vncClient.connectToVnc("127.0.0.1", localPort)
         }
         onErrorOccurred: function(message) {
+            vncClient.clearCredentials()
             statusLabel.text = "Proxy error: " + message
         }
     }
@@ -68,10 +75,8 @@ Window {
     ProxMon.VncClient {
         id: vncClient
 
-        onFrameUpdated: function(image, x, y, w, h) {
-            vncCanvas.updateFrame(image, x, y, w, h)
-        }
-
+        // Frame delivery is connected in C++ via vncCanvas.client - no JS
+        // per-frame handlers here.
         onStateChanged: {
             if (state === "error") {
                 statusLabel.text = "Connection lost - reconnecting..."
@@ -113,6 +118,7 @@ Window {
         ProxMon.VncFrameView {
             id: vncCanvas
             anchors.fill: parent
+            client: vncClient
 
             MouseArea {
                 id: mouseArea
@@ -150,7 +156,7 @@ Window {
                     if (!vncClient || vncClient.state !== "connected") return
                     var p = mapToFrame(mouse.x, mouse.y)
                     if (!p) return
-                    // Each pointer event is a discrete WebSocket frame — no TCP
+                    // Each pointer event is a discrete WebSocket frame - no TCP
                     // stream buffering issues, so send every event immediately.
                     vncClient.sendPointerEvent(p.x, p.y, mouse.buttons)
                 }
@@ -219,15 +225,15 @@ Window {
     Component.onCompleted: {
         // Deliver auth header and ticket from C++ registry before starting proxy.
         if (controller) {
-            controller.deliverConsoleAuth(consoleWindow.sessionKey, wsProxy)
-            controller.deliverConsoleTicket(consoleWindow.sessionKey, wsProxy, vncClient)
+            controller.deliverConsoleAuth(consoleWindow.consoleRequestId, wsProxy)
+            controller.deliverConsoleTicket(consoleWindow.consoleRequestId, wsProxy, vncClient)
         }
         wsProxy.start()
     }
 
     onClosing: {
         reconnectTimer.stop()
-        /* Stop the proxy first — this aborts the loopback TCP socket so
+        /* Stop the proxy first - this aborts the loopback TCP socket so
            rfbInitClient (which is blocked waiting for RFB handshake bytes)
            sees a connection error and exits promptly. Without this, disconnect()
            would block in m_thread->wait() indefinitely because the event loop
@@ -235,5 +241,6 @@ Window {
         */
         wsProxy.stop()
         vncClient.disconnect()
+        vncClient.clearCredentials()
     }
 }

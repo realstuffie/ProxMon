@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+## v0.8.0
+- fix(console): honor configured trusted CA on VNC/LXC WebSocket connections (single-host, multi-host shared or per-endpoint), matching the API path — previously only the ticket-fetch request used it
+- fix(controller): auto-retry timer now actually schedules the retry after the computed backoff (previously only the banner text was set)
+- fix(controller): wire lowLatency setting through to request timeouts (10s → 5s when enabled)
+- fix(main): stop killing errorMessage/retryStatusText property bindings with imperative writes (explicit propagation via Connections)
+- fix(config): KCM Restore Defaults no longer enables Ignore SSL (cfg_ignoreSslDefault now matches main.xml)
+- fix(controller): collapse duplicate PBS refresh at startup (cert setters routed through the existing debounce)
+- chore(main): drop dead onPbsTestSucceeded/onPbsTestFailed handlers (leftover from removed PBS test button)
+- fix(main): coerce host-shell visible binding to bool (silences undefined-to-bool warning at load)
+- docs: sync ARCHITECTURE/developer notes with current code; drop completed multihost-models handoff; correct QtKeychain license file name (BSD-3-Clause)
+- feat(configGeneral): Backup / Restore section — export all settings to a versioned JSON file and import them back with schema validation and a confirm prompt; token secrets are never exported (whitelist + serialized-output guard) and matching keychain entries are picked up automatically after Apply
+- refactor(configGeneral): Default Settings now uses the same export-envelope format as Backup/Restore and captures all settings (previously a flat 6-field single-host file); legacy flat seeds are still read via a dedicated fallback (tokenSecret in them is never applied) and rewritten in the new format on next save
+- refactor(main.qml): startup defaults seed applies the full validated envelope to Plasmoid.configuration (drops binding-breaking direct assignments)
+- test(configportability): QML logic suite (qmltestrunner) wired into CTest covering round-trip, secret exclusion, import validation, needsSecrets detection and the legacy defaults reader
+- feat(stats): add per-VM/CT stats panel — CPU/mem sparkline from RRD history (last hour, 10-minute grid) plus best-effort IP address (QEMU guest agent for VMs, /interfaces for LXC); IP anonymized in dev mode
+- fix(NodeSection): add missing right margin on node card to match the VM/LXC list's scrollbar reserve
+
 ## v0.7.3
 - fix(proxmoxclient): isolate task poll requests from refresh cancellation to prevent stuck busy spinner
 - fix(main): add action busy guard on status change — clears spinner via checkStateChanges if onActionReply never fires

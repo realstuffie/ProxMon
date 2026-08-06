@@ -7,6 +7,7 @@
 #include <QVariant>
 
 #include "pbstypes.h"
+#include "variantlistmodel.h"
 
 class ProxmoxClient;
 class SecretStore;
@@ -35,6 +36,7 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString pbsExcludeVmids READ pbsExcludeVmids WRITE setPbsExcludeVmids NOTIFY pbsExcludeVmidsChanged)
     Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
     Q_PROPERTY(bool ignoreSsl READ ignoreSsl WRITE setIgnoreSsl NOTIFY ignoreSslChanged)
+    Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatency NOTIFY lowLatencyChanged)
     Q_PROPERTY(QVariantList debugLog READ debugLog NOTIFY debugLogChanged)
     Q_PROPERTY(QString secretState READ secretState NOTIFY secretStateChanged)
     Q_PROPERTY(bool refreshResolvingSecrets READ refreshResolvingSecrets NOTIFY refreshResolvingSecretsChanged)
@@ -61,9 +63,24 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QVariantList displayedNodeList READ displayedNodeList NOTIFY displayedNodeListChanged)
     Q_PROPERTY(int runningVMs READ runningVMs NOTIFY runningVMsChanged)
     Q_PROPERTY(int runningLXC READ runningLXC NOTIFY runningLXCChanged)
+    // Delegate-facing models (single-host). Rows update in place via
+    // dataChanged instead of wholesale list replacement, so QML delegates
+    // survive refreshes. The QVariantList properties above remain the source
+    // for notifications/counts.
+    Q_PROPERTY(VariantListModel *nodesModel READ nodesModel CONSTANT)
+    // Multi-host equivalent: endpoint rows carry a "nodesModel" pointer, node
+    // rows carry "vmsModel"/"lxcsModel" pointers (same structure, one level
+    // deeper).
+    Q_PROPERTY(VariantListModel *endpointsModel READ endpointsModel CONSTANT)
+    Q_PROPERTY(QString defaultSorting READ defaultSorting WRITE setDefaultSorting NOTIFY defaultSortingChanged)
+    // True while the popup is expanded. Gates single-host model maintenance so
+    // no sort/diff work happens while nothing is watching (mirrors the old lazy
+    // behaviour, where sorting ran only inside visible delegate bindings).
+    Q_PROPERTY(bool viewActive READ viewActive WRITE setViewActive NOTIFY viewActiveChanged)
 
 public:
     explicit ProxmoxController(QObject *parent = nullptr);
+    ~ProxmoxController() override;
 
     QString connectionMode() const { return m_connectionMode; }
     void setConnectionMode(const QString &value);
@@ -106,9 +123,12 @@ public:
 
     bool pbsIgnoreSsl() const { return m_pbsIgnoreSsl; }
     QString pbsTrustedCertPem() const { return m_pbsTrustedCertPem; }
-    void setPbsTrustedCertPem(const QString &v) { if (m_pbsTrustedCertPem == v) return; m_pbsTrustedCertPem = v; emit pbsTrustedCertPemChanged(); QMetaObject::invokeMethod(this, &ProxmoxController::refreshPBSNow, Qt::QueuedConnection); }
+    // Route through the debounced refreshPBS() like every other PBS setter:
+    // a direct queued refreshPBSNow() here bypassed the debounce and caused a
+    // second PBS cycle on every startup when a cert was configured.
+    void setPbsTrustedCertPem(const QString &v) { if (m_pbsTrustedCertPem == v) return; m_pbsTrustedCertPem = v; emit pbsTrustedCertPemChanged(); refreshPBS(); }
     QString pbsTrustedCertPath() const { return m_pbsTrustedCertPath; }
-    void setPbsTrustedCertPath(const QString &v) { if (m_pbsTrustedCertPath == v) return; m_pbsTrustedCertPath = v; emit pbsTrustedCertPathChanged(); QMetaObject::invokeMethod(this, &ProxmoxController::refreshPBSNow, Qt::QueuedConnection); }
+    void setPbsTrustedCertPath(const QString &v) { if (m_pbsTrustedCertPath == v) return; m_pbsTrustedCertPath = v; emit pbsTrustedCertPathChanged(); refreshPBS(); }
     void setPbsIgnoreSsl(bool value);
 
     int pbsBackupWarningDays() const { return m_pbsBackupWarningDays; }
@@ -126,6 +146,9 @@ public:
 
     bool ignoreSsl() const { return m_ignoreSsl; }
     void setIgnoreSsl(bool value);
+
+    bool lowLatency() const { return m_lowLatency; }
+    void setLowLatency(bool value);
 
     QVariantList debugLog() const { return m_debugLog; }
     QString sanitizeDebugString(const QString &value) const;
@@ -157,6 +180,12 @@ public:
     QVariantList displayedNodeList() const { return m_displayedNodeList; }
     int runningVMs() const;
     int runningLXC() const;
+    VariantListModel *nodesModel() const { return m_nodesModel; }
+    VariantListModel *endpointsModel() const { return m_endpointsModel; }
+    QString defaultSorting() const { return m_defaultSorting; }
+    void setDefaultSorting(const QString &value);
+    bool viewActive() const { return m_viewActive; }
+    void setViewActive(bool value);
 
     Q_INVOKABLE void resolveSecretsIfNeeded();
     Q_INVOKABLE void listStoredKeys();
@@ -171,8 +200,12 @@ public:
                                const QString &node,
                                int vmid,
                                const QString &action);
-    Q_INVOKABLE void deliverConsoleAuth(const QString &sessionKey, QObject *target);
-    Q_INVOKABLE void deliverConsoleTicket(const QString &sessionKey,
+    Q_INVOKABLE void fetchStats(const QString &sessionKey,
+                                const QString &kind,
+                                const QString &node,
+                                int vmid);
+    Q_INVOKABLE void deliverConsoleAuth(const QString &requestId, QObject *target);
+    Q_INVOKABLE void deliverConsoleTicket(const QString &requestId,
                                           QObject *primary,
                                           QObject *secondary = nullptr);
     Q_INVOKABLE void openConsole(const QString &sessionKey,
@@ -204,6 +237,7 @@ signals:
     void pbsExcludeVmidsChanged();
     void debugEnabledChanged();
     void ignoreSslChanged();
+    void lowLatencyChanged();
     void debugLogChanged();
     void secretStateChanged();
     void refreshResolvingSecretsChanged();
@@ -230,6 +264,8 @@ signals:
     void displayedNodeListChanged();
     void runningVMsChanged();
     void runningLXCChanged();
+    void defaultSortingChanged();
+    void viewActiveChanged();
     void restoreSingleConfigRequested(const QString &host, int port, const QString &tokenId);
     void restoreMultiHostConfigRequested(const QString &multiHostsJson);
     void keyListError(const QString &message);
@@ -245,20 +281,32 @@ signals:
                      int vmid,
                      const QString &action,
                      const QString &message);
+    void statsError(const QString &sessionKey,
+                    const QString &node,
+                    int vmid,
+                    const QString &message);
+    void statsReady(const QString &sessionKey,
+                    const QString &node,
+                    int vmid,
+                    const QVariant &data);
 
     void consoleReady(const QString &sessionKey,
-                  const QString &host,
-                  const QString &node,
-                  const QString &kind,
-                  int vmid,
-                  const QString &vmName,
-                  int vncPort,
-                  int apiPort,
-                  bool ignoreSsl);
+                   const QString &requestId,
+                   const QString &host,
+                   const QString &node,
+                   const QString &kind,
+                   int vmid,
+                   const QString &vmName,
+                   int vncPort,
+                   int apiPort,
+                   bool ignoreSsl,
+                   const QString &trustedCertPem,
+                   const QString &trustedCertPath);
     // Separate signal for LXC: carries the auth `user` returned by termproxy
     // so the LxcTerminal can complete the "user:ticket\n" handshake.
     // Auth header is delivered out-of-band via deliverConsoleAuth().
     void lxcConsoleReady(const QString &sessionKey,
+                         const QString &requestId,
                          const QString &host,
                          int apiPort,
                          const QString &node,
@@ -266,7 +314,9 @@ signals:
                          const QString &vmName,
                          int proxyPort,
                          const QString &user,
-                         bool ignoreSsl);
+                         bool ignoreSsl,
+                         const QString &trustedCertPem,
+                         const QString &trustedCertPath);
     void consoleError(const QString &node,
                   const QString &kind,
                   int vmid,
@@ -300,9 +350,18 @@ private:
     void setDisplayedNodeList(const QVariantList &value);
     void resetRetryState();
     void scheduleRetry(const QString &reason);
+    void publishSingleHostModels();
+    void clearSingleHostModels();
+    void publishMultiHostModels();
+    void clearMultiHostModels();
     void resetTransientStateForModeChange();
     void resetMultiTempData();
+    void discardConsoleCredentials(const QString &requestId);
+    void clearPendingConsoleCredentials();
+    bool dispatchSingleStatsWithSecret(const QString &sessionKey, const QString &statsKind, const QString &node, int vmid, const QString &secret);
     void dispatchSingleFetchWithSecret(const QString &secret);
+    void dispatchSingleNodeChildrenWithSecret(const QVariantList &nodeNames,
+                                              const QString &secret);
     bool dispatchSingleActionWithSecret(const QString &kind,
                                         const QString &node,
                                         int vmid,
@@ -315,8 +374,7 @@ private:
                                              const QVariantMap &endpoint,
                                              const QVariantList &nodeNames,
                                              const QString &secret);
-    bool dispatchMultiActionWithSecret(const QString &sessionKey,
-                                       const QVariantMap &endpoint,
+    bool dispatchMultiActionWithSecret(const QString &sessionKey,const QVariantMap &endpoint,
                                        const QString &kind,
                                        const QString &node,
                                        int vmid,
@@ -335,6 +393,7 @@ private:
     QVariantMap endpointBySession(const QString &sessionKey) const;
     void refreshPBS();
     void refreshPBSNow();
+    void checkPBSRequestsComplete();
     void applyBackupState(QVariantList &items, const QVariantMap &endpointMap, bool isLxc, bool &anyChanged);
     BackupStatus evaluateBackupStatus(qint64 lastBackupTime, int warningDays, int staleDays) const;
     QString lastBackupDisplay(qint64 backupTime) const;
@@ -371,6 +430,7 @@ private:
     QString m_activeSingleSecretKey;
     bool m_debugEnabled = false;
     bool m_ignoreSsl = false;
+    bool m_lowLatency = false;
     QVariantList m_debugLog;
     QString m_secretState = QStringLiteral("idle");
     bool m_refreshResolvingSecrets = false;
@@ -380,6 +440,7 @@ private:
     bool m_multiSecretHadError = false;
     QVariantList m_secretQueue;
     int m_secretQueueIndex = 0;
+    quint64 m_secretResolutionGeneration = 0;
     QVariantMap m_activeMultiSecretRequest;
     QVariantList m_tempEndpoints;
     bool m_autoRetry = true;
@@ -393,15 +454,23 @@ private:
     int m_retryAttempt = 0;
     int m_retryNextDelayMs = 0;
     QString m_retryStatusText;
+    // Single-shot timer armed by scheduleRetry(); fires the actual auto-retry
+    // fetch after the computed backoff delay. Cancelled by resetRetryState()
+    // (success, config change, mode change) and by cancelRefresh().
+    QTimer *m_retryTimer = nullptr;
     QString m_pbsRefreshError;
     int m_pendingPbsEndpoints = 0;
+    // Bumped by every refreshPBSNow() run; PBS keychain callbacks capture the
+    // value and drop themselves when a newer cycle (or a config change that
+    // retriggers PBS refresh) has superseded them. Keychain reads cannot be
+    // cancelled, so this is the only way to invalidate them.
+    quint64 m_pbsRefreshGeneration = 0;
     QVariant m_proxmoxData;
     QVariantList m_vmData;
     QVariantList m_lxcData;
-    // Stash for vmName between openConsole() and the matching ttyProxy/
-    // vncProxy reply. Keyed "kind:node:vmid". Populated in readSingle/
-    // MultiSecretFor's "console" branches; drained in the ttyProxyReady/
-    // vncProxyReady lambdas. Bounded by in-flight console requests.
+    // Console handoff state is keyed by a unique request ID so concurrent
+    // consoles on the same endpoint cannot consume each other's metadata,
+    // auth header, or proxy ticket.
     QHash<QString, QString> m_pendingConsoleNames;
     QVariant m_displayedProxmoxData;
     QVariantList m_displayedVmData;
@@ -423,4 +492,19 @@ private:
     ProxmoxClient *m_api;
     SecretStore *m_singleSecretStore;
     SecretStore *m_multiSecretStore;
+
+    // Delegate-facing models (single-host). m_nodesModel rows carry pointers
+    // to the per-node vm/lxc submodels below (roles "vmsModel"/"lxcsModel").
+    QString m_defaultSorting = QStringLiteral("status");
+    bool m_viewActive = false;
+    VariantListModel *m_nodesModel = nullptr;
+    QHash<QString, VariantListModel *> m_vmModelsByNode;
+    QHash<QString, VariantListModel *> m_lxcModelsByNode;
+
+    // Multi-host models. Child hashes key on sessionKey + "|" + node so the
+    // same node name behind two endpoints stays distinct.
+    VariantListModel *m_endpointsModel = nullptr;
+    QHash<QString, VariantListModel *> m_nodesModelsBySession;
+    QHash<QString, VariantListModel *> m_vmModelsBySessionNode;
+    QHash<QString, VariantListModel *> m_lxcModelsBySessionNode;
 };

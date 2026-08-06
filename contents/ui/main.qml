@@ -8,7 +8,10 @@ import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.plasma.core as PlasmaCore
 import "components"
+import "components/configportability.mjs" as ConfigPortability
+// qmllint disable unused-imports
 import "../lib/proxmox" as ProxMon
+// qmllint enable unused-imports
 
 
 PlasmoidItem {
@@ -99,6 +102,10 @@ PlasmoidItem {
         pbsExcludeVmids: root.pbsExcludeVmids
         debugEnabled: root.devMode
         ignoreSsl: root.ignoreSsl
+        lowLatency: root.lowLatency
+        defaultSorting: root.defaultSorting
+        // Gate single-host model maintenance to when the popup is open.
+        viewActive: root.expanded
         autoRetry: root.autoRetry
         retryStartMs: root.retryStartMs
         retryMaxMs: root.retryMaxMs
@@ -134,15 +141,23 @@ PlasmoidItem {
     }
     property var openConsoles: ({})
 
+    function consoleWindowKey(sessionKey, kind, node, vmid) {
+        return String(sessionKey || "single") + "::" + String(kind) + "::" + String(node) + "::" + String(vmid)
+    }
+
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl === true
+    property bool lowLatency: Plasmoid.configuration.lowLatency === true
     property bool pbsEnabled: Plasmoid.configuration.pbsEnabled === true
     property string pbsHost: Plasmoid.configuration.pbsHost || ""
     property int pbsPort: Math.max(1, Plasmoid.configuration.pbsPort || 8007)
     property string pbsTokenId: Plasmoid.configuration.pbsTokenId || ""
     property string pbsTrustedCertPem: Plasmoid.configuration.pbsTrustedCertPem || ""
     property string pbsTrustedCertPath: Plasmoid.configuration.pbsTrustedCertPath || ""
-    property string pbsTokenSecretBuffer: ""
+    // Temporary KConfig handoff from the settings page. Keep this bound so a
+    // newly saved secret is migrated immediately rather than waiting for the
+    // plasmoid to restart. The change handler below clears KConfig first.
+    property string pbsTokenSecretBuffer: Plasmoid.configuration.pbsTokenSecretBuffer || ""
     property bool pbsIgnoreSsl: Plasmoid.configuration.pbsIgnoreSsl === true
     property int pbsBackupWarningDays: Math.max(1, Plasmoid.configuration.pbsBackupWarningDays || 7)
     property int pbsBackupStaleDays: Math.max(1, Plasmoid.configuration.pbsBackupStaleDays || 14)
@@ -157,7 +172,10 @@ PlasmoidItem {
     property int retryMaxMs: Math.max(retryStartMs, (Plasmoid.configuration.retryMaxSeconds || 300) * 1000)
     property int retryAttempt: controller ? controller.retryAttempt : 0
     property int retryNextDelayMs: controller ? controller.retryNextDelayMs : 0
-    property string retryStatusText: controller ? controller.retryStatusText : ""
+    // Propagated explicitly via Connections.onRetryStatusTextChanged below.
+    // Do NOT re-add a controller binding here: imperative clearing in
+    // triggerRefreshFromConfigChange would silently kill it.
+    property string retryStatusText: ""
     property string pbsError: ""
 
     // Notification properties
@@ -198,9 +216,42 @@ PlasmoidItem {
                  + " endpointsModel=" + (displayedEndpointsModel ? displayedEndpointsModel.length : -1))
     }
     property var displayedNodeList: controller.displayedNodeList
+
+    // Stats (RRD history + IP address) cache, keyed by vmid.
+    // Rebuilt via Object.assign on every update rather than mutated in place,
+    // since QML only re-evaluates bindings when a property actually changes
+    // reference - an in-place mutation of the same object is invisible to it.
+    property var statsDataByVmid: ({})
+    property var statsLoadingByVmid: ({})
+
+    function getStatsData(vmid) {
+        return root.statsDataByVmid[vmid] !== undefined ? root.statsDataByVmid[vmid] : null
+    }
+    function isStatsLoading(vmid) {
+        return root.statsLoadingByVmid[vmid] === true
+    }
+    function setStatsLoading(vmid, isLoading) {
+        var m = Object.assign({}, root.statsLoadingByVmid)
+        if (isLoading) { m[vmid] = true } else { delete m[vmid] }
+        root.statsLoadingByVmid = m
+    }
+    function setStatsData(vmid, data) {
+        var m = Object.assign({}, root.statsDataByVmid)
+        m[vmid] = data
+        root.statsDataByVmid = m
+        root.setStatsLoading(vmid, false)
+    }
+    function requestStats(kind, nodeName, vmid) {
+        root.setStatsLoading(vmid, true)
+        controller.fetchStats("", kind, nodeName, vmid)
+    }
+
     property bool loading: controller ? controller.loading : false
     property bool isRefreshing: controller ? controller.isRefreshing : false
-    property string errorMessage: controller ? controller.errorMessage : ""
+    // Propagated explicitly via Connections.onErrorMessageChanged below.
+    // Do NOT re-add a controller binding here: imperative writes (fetchData,
+    // console/action errors, config changes) would silently kill it.
+    property string errorMessage: ""
     property string lastUpdate: controller ? controller.lastUpdate : ""
 
     property bool actionPermHintShown: false
@@ -242,7 +293,7 @@ PlasmoidItem {
     }
     property bool defaultsLoaded: false
     property bool devMode: false
-    readonly property bool debugLogToJournal: true
+    readonly property bool debugLogToJournal: false
     property int footerClickCount: 0
 
     // Per-item action busy map: key "node:kind:vmid" => true
@@ -332,20 +383,6 @@ PlasmoidItem {
         return x * 100
     }
  
-        ProxMon.ProxmoxClient {
-        id: api
-        // For multi-host fetching we use requestNodesFor/requestQemuFor/requestLxcFor.
-        host: root.proxmoxHost
-        port: root.proxmoxPort
-        tokenId: root.apiTokenId
-        tokenSecret: ""
-        ignoreSslErrors: root.ignoreSsl
-        lowLatency: Plasmoid.configuration.lowLatency !== false
-
-
-    }
-
-
     // Redact sensitive identity fragments in debug logs / copied debug output.
     // Matches "user@realm" and "!tokenid"
     property string secretRedactRegex: "([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)|!([A-Za-z0-9._:-]+)"
@@ -856,123 +893,6 @@ PlasmoidItem {
     }
 
 
-    // Get VMs for a specific node (use displayed data)
-    function getVmsForNode(nodeName) {
-        var nodeVms = displayedVmData.filter(function(vm) {
-            return vm.node === nodeName
-        })
-        return sortByStatus(nodeVms)
-    }
-
-    function getVmsForNodeMulti(sessionKey, nodeName) {
-        var arr = []
-        for (var i = 0; i < displayedEndpoints.length; i++) {
-            var b = displayedEndpoints[i]
-            if (!b || b.sessionKey !== sessionKey) continue
-            arr = b.vms.filter(function(vm) {
-                return vm.node === nodeName
-            })
-            break
-        }
-        var seen = ({})
-        var deduped = arr.filter(function(vm) {
-            var key = String(sessionKey) + "::" + String(vm.node || "") + "::vm::" + String(vm.vmid)
-            if (seen[key]) return false
-            seen[key] = true
-            return true
-        })
-        return sortByStatus(deduped)
-    }
-
-    // Get LXCs for a specific node (use displayed data)
-    function getLxcForNode(nodeName) {
-        var nodeLxc = displayedLxcData.filter(function(lxc) {
-            return lxc.node === nodeName
-        })
-        return sortByStatus(nodeLxc)
-    }
-
-    function getLxcForNodeMulti(sessionKey, nodeName) {
-        var arr2 = []
-        for (var i2 = 0; i2 < displayedEndpoints.length; i2++) {
-            var b2 = displayedEndpoints[i2]
-            if (!b2 || b2.sessionKey !== sessionKey) continue
-            arr2 = b2.lxcs.filter(function(lxc) {
-                return lxc.node === nodeName
-            })
-            break
-        }
-        var seen = ({})
-        var deduped = arr2.filter(function(lxc) {
-            var key = String(sessionKey) + "::" + String(lxc.node || "") + "::lxc::" + String(lxc.vmid)
-            if (seen[key]) return false
-            seen[key] = true
-            return true
-        })
-        return sortByStatus(deduped)
-    }
-
-    // Get running VM count for a node (use displayed data)
-    function getRunningVmsForNode(nodeName) {
-        var count = 0
-        for (var i = 0; i < displayedVmData.length; i++) {
-            if (displayedVmData[i].node === nodeName && displayedVmData[i].status === "running") count++
-        }
-        return count
-    }
-
-    function getRunningVmsForNodeMulti(sessionKey, nodeName) {
-        var vms = getVmsForNodeMulti(sessionKey, nodeName)
-        var c = 0
-        for (var i = 0; i < vms.length; i++) {
-            if (vms[i].status === "running") c++
-        }
-        return c
-    }
-
-    // Get running LXC count for a node (use displayed data)
-    function getRunningLxcForNode(nodeName) {
-        var count = 0
-        for (var i = 0; i < displayedLxcData.length; i++) {
-            if (displayedLxcData[i].node === nodeName && displayedLxcData[i].status === "running") count++
-        }
-        return count
-    }
-
-    function getRunningLxcForNodeMulti(sessionKey, nodeName) {
-        var lxcs = getLxcForNodeMulti(sessionKey, nodeName)
-        var c2 = 0
-        for (var i2 = 0; i2 < lxcs.length; i2++) {
-            if (lxcs[i2].status === "running") c2++
-        }
-        return c2
-    }
-
-    // Get total VM count for a node (use displayed data)
-    function getTotalVmsForNode(nodeName) {
-        var count = 0
-        for (var i = 0; i < displayedVmData.length; i++) {
-            if (displayedVmData[i].node === nodeName) count++
-        }
-        return count
-    }
-
-    function getTotalVmsForNodeMulti(sessionKey, nodeName) {
-        return getVmsForNodeMulti(sessionKey, nodeName).length
-    }
-
-    // Get total LXC count for a node (use displayed data)
-    function getTotalLxcForNode(nodeName) {
-        var count = 0
-        for (var i = 0; i < displayedLxcData.length; i++) {
-            if (displayedLxcData[i].node === nodeName) count++
-        }
-        return count
-    }
-
-    function getTotalLxcForNodeMulti(sessionKey, nodeName) {
-        return getLxcForNodeMulti(sessionKey, nodeName).length
-    }
 
     function actionKey(nodeName, kind, vmid, sessionKey) {
         if (sessionKey) return sessionKey + "::" + nodeName + ":" + kind + ":" + vmid
@@ -1030,15 +950,6 @@ PlasmoidItem {
         armedTimer.restart()
     }
 
-    // Backwards-compatible helper (no longer used by action flow, but kept to avoid dangling references)
-    function runPendingAction() {
-        if (!pendingAction) return
-        var a = pendingAction
-        pendingAction = null
-        setActionBusy(a.node, a.kind, a.vmid, true)
-        api.requestAction(a.kind, a.node, a.vmid, a.action, ++actionSeq)
-    }
-
     // Toggle node collapsed state
     function toggleNodeCollapsed(nodeName, sessionKey) {
         var k = (connectionMode === "multiHost" && sessionKey) ? endpointNodeKey(sessionKey, nodeName) : nodeName
@@ -1081,6 +992,11 @@ PlasmoidItem {
         return 100 + index
     }
 
+    function anonymizeIp(ip) {
+        if (!devMode) return ip
+        return "192.168.x.x"
+    }
+
 
     function handleFooterClick() {
         footerClickCount++
@@ -1092,54 +1008,6 @@ PlasmoidItem {
         footerClickTimer.restart()
     }
 
-    function sortByStatus(data) {
-        if (!data || data.length === 0) return []
-
-        function nameOf(x) {
-            return (x && (x.name || x.hostname) ? String(x.name || x.hostname) : "")
-        }
-
-        return data.slice().sort(function(a, b) {
-            var an = nameOf(a)
-            var bn = nameOf(b)
-
-            switch (defaultSorting) {
-                case "status":
-                    var aRunning = (a.status === "running") ? 0 : 1
-                    var bRunning = (b.status === "running") ? 0 : 1
-                    if (aRunning !== bRunning) return aRunning - bRunning
-                    // secondary sort: name, then vmid for stability
-                    var nc = an.localeCompare(bn)
-                    if (nc !== 0) return nc
-                    return (a.vmid || 0) - (b.vmid || 0)
-
-                case "name":
-                    var c1 = an.localeCompare(bn)
-                    if (c1 !== 0) return c1
-                    return (a.vmid || 0) - (b.vmid || 0)
-
-                case "nameDesc":
-                    var c2 = bn.localeCompare(an)
-                    if (c2 !== 0) return c2
-                    return (a.vmid || 0) - (b.vmid || 0)
-
-                case "id":
-                    return (a.vmid || 0) - (b.vmid || 0)
-
-                case "idDesc":
-                    return (b.vmid || 0) - (a.vmid || 0)
-
-                default:
-                    var aRun = (a.status === "running") ? 0 : 1
-                    var bRun = (b.status === "running") ? 0 : 1
-                    if (aRun !== bRun) return aRun - bRun
-                    var c3 = an.localeCompare(bn)
-                    if (c3 !== 0) return c3
-                    return (a.vmid || 0) - (b.vmid || 0)
-            }
-        })
-    }
-
     // Get node name from API URL
     function getNodeFromSource(source) {
         var match = source.match(/\/nodes\/([^\/]+)\//)
@@ -1148,12 +1016,6 @@ PlasmoidItem {
 
         // Atomically swap displayed data when all requests finish
 
-
-    // Sequencing for actions
-    property int actionSeq: 0
-
-    // Confirmation prompt state
-    property var pendingAction: null
 
     // Confirm is two-click (see confirmAndRunAction()); QQC2.Popup overlays are unreliable in plasmoids.
 
@@ -1185,7 +1047,7 @@ PlasmoidItem {
     function triggerRefreshFromConfigChange(reason) {
         logDebug("config change: " + (reason || "unknown"))
         // Cancel in-flight requests and retry timers so we restart cleanly.
-        api.cancelAll()
+        controller.cancelRefresh()
         errorMessage = ""
         retryStatusText = ""
         armedActionKey = ""
@@ -1217,18 +1079,6 @@ PlasmoidItem {
     function fetchData() {
         errorMessage = ""
         controller.fetchData()
-    }
-
-    function fetchVMs(nodeName) {
-        if (!nodeName) return
-        logDebug("fetchVMs: Requesting VMs for node: " + nodeName)
-        api.requestQemu(nodeName, root.refreshSeq)
-    }
-
-    function fetchLXC(nodeName) {
-        if (!nodeName) return
-        logDebug("fetchLXC: Requesting LXCs for node: " + nodeName)
-        api.requestLxc(nodeName, root.refreshSeq)
     }
 
     // Use displayed data for counts
@@ -1264,7 +1114,10 @@ PlasmoidItem {
             if (!controller.isRefreshing && root.connectionMode !== "multiHost") root.checkStateChanges()
         }
         function onErrorMessageChanged() {
-            if (controller.errorMessage !== "") root.errorMessage = controller.errorMessage
+            root.errorMessage = controller.errorMessage
+        }
+        function onRetryStatusTextChanged() {
+            root.retryStatusText = controller.retryStatusText
         }
         function onPbsLastErrorChanged() {
             root.pbsError = controller.pbsLastError
@@ -1272,10 +1125,13 @@ PlasmoidItem {
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             root.setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
-        function onConsoleReady(sessionKey, host, node, kind, vmid, vmName, vncPort, apiPort, ignoreSsl) {
-            var key = kind + ":" + vmid
+        function onConsoleReady(sessionKey, requestId, host, node, kind, vmid, vmName, vncPort, apiPort, ignoreSsl, trustedCertPem, trustedCertPath) {
+            var key = root.consoleWindowKey(sessionKey, kind, node, vmid)
             if (root.openConsoles[key]) {
                 // Auth header and ticket for reconnect are stashed in controller registry.
+                root.openConsoles[key].consoleRequestId = requestId
+                root.openConsoles[key].trustedCertPem = trustedCertPem
+                root.openConsoles[key].trustedCertPath = trustedCertPath
                 root.openConsoles[key].connectWithTicket(vncPort)
                 root.openConsoles[key].raise()
                 root.openConsoles[key].requestActivate()
@@ -1289,23 +1145,30 @@ PlasmoidItem {
                 vmName: vmName || (kind + " " + vmid),
                 vncPort: vncPort,
                 sessionKey: sessionKey,
+                consoleRequestId: requestId,
                 kind: kind,
                 apiPort: apiPort,
-                ignoreSsl: ignoreSsl
+                ignoreSsl: ignoreSsl,
+                trustedCertPem: trustedCertPem,
+                trustedCertPath: trustedCertPath
             })
             root.openConsoles[key] = win
-            win.closing.connect(function() { delete root.openConsoles[key] })
+            win.closing.connect(function() {
+                delete root.openConsoles[key]
+                win.destroy()
+            })
             win.requestReconnect.connect(function() {
                 controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
             })
         }
-        function onLxcConsoleReady(sessionKey, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl) {
-            var key = "lxc:" + vmid
-            var label = vmName || ("lxc " + vmid)
+        function onLxcConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl, trustedCertPem, trustedCertPath) {
+            var kind = vmid === 0 ? "node" : "lxc"
+            var key = root.consoleWindowKey(sessionKey, kind, node, vmid)
+            var label = vmid === 0 ? (vmName || node) : (vmName || ("lxc " + vmid))
             if (root.openConsoles[key]) {
                 // Deliver fresh auth header and ticket from C++ registry.
-                controller.deliverConsoleAuth(sessionKey, root.openConsoles[key])
-                controller.deliverConsoleTicket(sessionKey, root.openConsoles[key])
+                controller.deliverConsoleAuth(requestId, root.openConsoles[key])
+                controller.deliverConsoleTicket(requestId, root.openConsoles[key])
                 root.openConsoles[key].connectWithTicket(proxyPort, user, ignoreSsl)
                 root.openConsoles[key].raise()
                 return
@@ -1329,12 +1192,17 @@ PlasmoidItem {
                 term.destroy()
             })
             term.requestReconnect.connect(function() {
-                controller.openConsole(capturedSession, "lxc", capturedNode, capturedVmid, capturedLabel)
+                if (capturedVmid === 0) {
+                    controller.openConsole(capturedSession, "node", capturedNode, 0, capturedLabel)
+                } else {
+                    controller.openConsole(capturedSession, "lxc", capturedNode, capturedVmid, capturedLabel)
+                }
             })
             // Deliver auth header and ticket from C++ registry before open().
-            controller.deliverConsoleAuth(sessionKey, term)
-            controller.deliverConsoleTicket(sessionKey, term)
-            term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl)
+            controller.deliverConsoleAuth(requestId, term)
+            controller.deliverConsoleTicket(requestId, term)
+            term.windowPreset = Plasmoid.configuration.terminalSize || "medium"
+            term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl, trustedCertPem, trustedCertPath)
         }
         function onConsoleError(node, kind, vmid, message) {
             root.errorMessage = "Console failed: " + message
@@ -1344,16 +1212,28 @@ PlasmoidItem {
             root.errorMessage = message || ("Action failed: " + action)
             configRefreshDebounce.restart()
         }
-        function onPbsTestSucceeded(pbsHost) {
-            root.sendNotification("PBS connection OK", pbsHost || "Connection succeeded", "network-connect", "pbs-test-" + String(pbsHost || "ok"))
+        function onStatsReady(sessionKey, node, vmid, data) {
+            root.setStatsData(vmid, data)
         }
-        function onPbsTestFailed(pbsHost, message) {
-            root.errorMessage = message || ("PBS connection failed: " + String(pbsHost || ""))
+        function onStatsError(sessionKey, node, vmid, message) {
+            root.setStatsLoading(vmid, false)
+            root.setStatsData(vmid, { error: message })
         }
     }
 
     function resolveSecretIfNeeded() {
         controller.resolveSecretsIfNeeded()
+    }
+
+    function migratePbsTokenSecretBuffer() {
+        const secret = String(Plasmoid.configuration.pbsTokenSecretBuffer || "")
+        const host = String(Plasmoid.configuration.pbsHost || "").trim()
+        if (!controller || !secret.trim() || !host) return
+
+        // Remove the plaintext handoff before starting the asynchronous
+        // keychain write. The local QML value dies when this call returns.
+        Plasmoid.configuration.pbsTokenSecretBuffer = ""
+        controller.storeSinglePBSSecret(host, secret)
     }
 
     onProxmoxHostChanged: {
@@ -1377,14 +1257,7 @@ PlasmoidItem {
         if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("apiTokenSecret")
     }
-    onPbsTokenSecretBufferChanged: {
-        const secret = pbsTokenSecretBuffer
-        if (!secret || !secret.trim()) return
-        Plasmoid.configuration.pbsTokenSecretBuffer = ""
-        if (connectionMode === "single" && pbsHost && pbsHost.trim() !== "") {
-            controller.storeSinglePBSSecret(pbsHost, secret)
-        }
-    }
+    onPbsTokenSecretBufferChanged: migratePbsTokenSecretBuffer()
     onTrustedCertPemChanged: triggerRefreshFromConfigChange("trustedCertPem")
     onTrustedCertPathChanged: triggerRefreshFromConfigChange("trustedCertPath")
     onPbsTrustedCertPemChanged: triggerRefreshFromConfigChange("pbsTrustedCertPem")
@@ -1441,7 +1314,10 @@ PlasmoidItem {
     onRefreshIntervalChanged: triggerRefreshFromConfigChange("refreshInterval")
     onIgnoreSslChanged: triggerRefreshFromConfigChange("ignoreSsl")
     onPbsEnabledChanged: triggerRefreshFromConfigChange("pbsEnabled")
-    onPbsHostChanged: triggerRefreshFromConfigChange("pbsHost")
+    onPbsHostChanged: {
+        migratePbsTokenSecretBuffer()
+        triggerRefreshFromConfigChange("pbsHost")
+    }
     onPbsPortChanged: triggerRefreshFromConfigChange("pbsPort")
     onPbsTokenIdChanged: triggerRefreshFromConfigChange("pbsTokenId")
     onPbsIgnoreSslChanged: triggerRefreshFromConfigChange("pbsIgnoreSsl")
@@ -1450,7 +1326,6 @@ PlasmoidItem {
     onPbsRefreshIntervalChanged: triggerRefreshFromConfigChange("pbsRefreshInterval")
     onPbsExcludeTagChanged: triggerRefreshFromConfigChange("pbsExcludeTag")
     onPbsExcludeVmidsChanged: triggerRefreshFromConfigChange("pbsExcludeVmids")
-    onDefaultSortingChanged: triggerRefreshFromConfigChange("defaultSorting")
     onAutoRetryChanged: triggerRefreshFromConfigChange("autoRetry")
     onRetryStartMsChanged: triggerRefreshFromConfigChange("retryStartMs")
     onRetryMaxMsChanged: triggerRefreshFromConfigChange("retryMaxMs")
@@ -1465,13 +1340,7 @@ PlasmoidItem {
     onCompactModeChanged: triggerRefreshFromConfigChange("compactMode")
 
     Component.onCompleted: {
-        const pendingPbsSecret = Plasmoid.configuration.pbsTokenSecretBuffer
-        if (pendingPbsSecret && pendingPbsSecret.trim() !== "") {
-            Plasmoid.configuration.pbsTokenSecretBuffer = ""
-            if (pbsHost && pbsHost.trim() !== "") {
-                controller.storeSinglePBSSecret(pbsHost, pendingPbsSecret)
-            }
-        }
+        migratePbsTokenSecretBuffer()
 
         logDebug("Component.onCompleted: Plasmoid initialized")
         resolveSecretIfNeeded()
@@ -1494,27 +1363,24 @@ PlasmoidItem {
             root.logDebug("loadDefaults: Received response")
 
             if (data["exit code"] === 0 && data["stdout"] && !root.defaultsLoaded) {
-                try {
-                    var s = JSON.parse(data["stdout"])
-                    root.logDebug("loadDefaults: Parsed settings file")
-
-                    if (s.host) Plasmoid.configuration.proxmoxHost = s.host
-                    if (s.port) Plasmoid.configuration.proxmoxPort = s.port
-                    if (s.tokenId) Plasmoid.configuration.apiTokenId = s.tokenId
-                    if (s.refreshInterval) Plasmoid.configuration.refreshInterval = s.refreshInterval
-                    if (s.ignoreSsl !== undefined) Plasmoid.configuration.ignoreSsl = s.ignoreSsl
-                    if (s.enableNotifications !== undefined) Plasmoid.configuration.enableNotifications = s.enableNotifications
-
-                    root.proxmoxHost = s.host || ""
-                    root.proxmoxPort = s.port || 8006
-                    root.apiTokenId = s.tokenId || ""
-                    root.refreshInterval = (s.refreshInterval || 30) * 1000
-                    root.ignoreSsl = s.ignoreSsl !== false
-                    root.enableNotifications = s.enableNotifications !== false
+                // Same format as Backup/Restore: the validated export envelope.
+                // Legacy flat seeds are still understood (tokenSecret in them is
+                // never read). Values land on Plasmoid.configuration; the root
+                // property bindings and onXChanged handlers propagate from there.
+                var res = ConfigPortability.validateImportFile(data["stdout"])
+                if (!res.ok)
+                    res = ConfigPortability.parseLegacyDefaults(data["stdout"])
+                if (res.ok) {
+                    var keys = ConfigPortability.whitelistedKeys()
+                    for (var i = 0; i < keys.length; i++) {
+                        var k = keys[i]
+                        if (res.config[k] !== undefined)
+                            Plasmoid.configuration[k] = res.config[k]
+                    }
                     root.defaultsLoaded = true
-                    root.logDebug("loadDefaults: Settings applied - host: " + root.proxmoxHost)
-                } catch (e) {
-                    root.logDebug("loadDefaults: No defaults found or parse error - " + e)
+                    root.logDebug("loadDefaults: Settings applied from defaults file")
+                } else {
+                    root.logDebug("loadDefaults: No defaults found or file not recognized")
                 }
             }
             disconnectSource(source)
@@ -1522,7 +1388,7 @@ PlasmoidItem {
     }
 
     // DataSource for running local commands (notifications + reading defaults).
-    // NOTE: API calls are handled by the native ProxMon.ProxmoxClient (QNetworkAccessManager),
+    // NOTE: API calls are handled by the native ProxmoxController (QNetworkAccessManager),
     // so we intentionally do NOT fetch Proxmox data via "executable" anymore.
     Plasma5Support.DataSource {
         id: executable
@@ -1625,19 +1491,46 @@ PlasmoidItem {
                 }
             }
 
-            PlasmaComponents.BusyIndicator {
-                running: root.isRefreshing
-                visible: root.isRefreshing
-                implicitWidth: 20
-                implicitHeight: 20
-            }
-
             PlasmaComponents.Button {
-                icon.name: "view-refresh"
-                onClicked: root.fetchData()
-                visible: root.configured && !root.isRefreshing
+                icon.name: "utilities-terminal"
+                // Coerced with !! so the pre-first-data evaluation can't yield
+                // undefined ("Unable to assign [undefined] to bool" at load).
+                visible: !!(Plasmoid.configuration.consoleEnabled !== false
+                      && root.connectionMode === "single"
+                      && root.configured
+                      && root.displayedProxmoxData
+                      && root.displayedProxmoxData.data
+                      && root.displayedProxmoxData.data.length > 0)
                 implicitHeight: 28
                 implicitWidth: 28
+                onClicked: {
+                    var node = root.displayedProxmoxData.data[0].node
+                    controller.openConsole("", "node", node, 0, node)
+                }
+                PlasmaComponents.ToolTip { text: "Open host shell" }
+            }
+
+            Item {
+                visible: root.configured
+                implicitHeight: 28
+                implicitWidth: 28
+                Layout.preferredHeight: 28
+                Layout.preferredWidth: 28
+
+                PlasmaComponents.Button {
+                    anchors.fill: parent
+                    icon.name: "view-refresh"
+                    onClicked: root.fetchData()
+                    visible: !root.isRefreshing
+                }
+
+                PlasmaComponents.BusyIndicator {
+                    anchors.centerIn: parent
+                    running: root.isRefreshing
+                    visible: root.isRefreshing
+                    implicitWidth: 20
+                    implicitHeight: 20
+                }
             }
         }
 
@@ -1755,12 +1648,10 @@ PlasmoidItem {
                 clip: true
 
                 QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
-                QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
+                QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AlwaysOff
 
-                // Reserve width for overlay scrollbar so right-side actions aren't covered.
-                // Keep this small; we also reserve it inside each row.
-                readonly property int __scrollbarGap: 2
-                readonly property int __scrollbarReserve: 2 + __scrollbarGap
+                readonly property int __scrollbarGap: 0
+                readonly property int __scrollbarReserve: 10
 
                 ColumnLayout {
                     id: mainContentColumn
@@ -1769,17 +1660,20 @@ PlasmoidItem {
 
                 Repeater {
                     visible: root.connectionMode === "single"
-                    model: root.displayedProxmoxData && root.displayedProxmoxData.data ? root.displayedProxmoxData.data : []
+                    // Diffing model: rows update in place via dataChanged, so
+                    // these delegates persist across refreshes instead of
+                    // being rebuilt every poll.
+                    model: controller.nodesModel
 
                     delegate: NodeSection {
                         required property int index
-                        required property var modelData
+                        required property var itemData
 
                         nodeIndex: index
-                        nodeModel: modelData
-                        nodeVms: root.getVmsForNode(modelData ? modelData.node : "")
-                        nodeLxc: root.getLxcForNode(modelData ? modelData.node : "")
-                        isCollapsed: root.isNodeCollapsed(modelData ? modelData.node : "")
+                        nodeModel: itemData
+                        vmsModel: itemData ? itemData.vmsModel : null
+                        lxcsModel: itemData ? itemData.lxcsModel : null
+                        isCollapsed: root.isNodeCollapsed(itemData ? itemData.node : "")
                         uiRadiusS: root.uiRadiusS
                         uiRadiusL: root.uiRadiusL
                         uiBorderOpacity: root.uiBorderOpacity
@@ -1797,13 +1691,10 @@ PlasmoidItem {
                         anonymizeVmId: root.anonymizeVmId
                         anonymizeVmName: root.anonymizeVmName
                         anonymizeLxcName: root.anonymizeLxcName
+                        anonymizeIp: root.anonymizeIp
                         isActionBusy: root.isActionBusy
                         armedActionKey: root.armedActionKey
                         armedTimerRunning: armedTimer.running
-                        getRunningVmsForNode: root.getRunningVmsForNode
-                        getTotalVmsForNode: root.getTotalVmsForNode
-                        getRunningLxcForNode: root.getRunningLxcForNode
-                        getTotalLxcForNode: root.getTotalLxcForNode
                         onToggleCollapsed: function(nodeName) { root.toggleNodeCollapsed(nodeName) }
                         onAction: function(kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunAction(kind, nodeName, vmid, displayName, action)
@@ -1811,6 +1702,12 @@ PlasmoidItem {
                         onConsole: function(kind, nodeName, vmid, displayName) {
                             controller.openConsole("", kind, nodeName, vmid, displayName)
                         }
+                        onStatsToggled: function(kind, nodeName, vmid) {
+                            root.requestStats(kind, nodeName, vmid)
+                        }
+                        getStatsData: root.getStatsData
+                        isStatsLoading: root.isStatsLoading
+                        statsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
                         consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                         powerActionsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
                     }
@@ -1819,17 +1716,23 @@ PlasmoidItem {
                 // Multi-host view (group by endpoint)
                 Repeater {
                     visible: root.connectionMode === "multiHost"
-                    model: root.displayedEndpointsModel
+                    // Diffing model: endpoint rows update in place, delegates
+                    // persist across refreshes (same as the single-host path).
+                    model: controller.endpointsModel
 
                     Component.onCompleted: {
                         root.logDebug("[ProxMon UI] multi repeater visible=" + visible
                                  + " mode=" + root.connectionMode
-                                 + " modelLen=" + (root.displayedEndpointsModel ? root.displayedEndpointsModel.length : -1))
+                                 + " modelLen=" + controller.endpointsModel.count)
                     }
 
                     delegate: MultiHostEndpointSection {
-                        required property var modelData
-                        endpoint: modelData
+                        required property int index
+                        required property var itemData
+                        endpoint: itemData
+                        nodesModel: itemData ? itemData.nodesModel : null
+                        endpointIndex: index
+                        anonymized: root.devMode
                         uiRadiusL: root.uiRadiusL
                         uiBorderOpacity: root.uiBorderOpacity
                         uiMutedTextOpacity: root.uiMutedTextOpacity
@@ -1846,13 +1749,7 @@ PlasmoidItem {
                         anonymizeVmId: root.anonymizeVmId
                         anonymizeVmName: root.anonymizeVmName
                         anonymizeLxcName: root.anonymizeLxcName
-                        getVmsForNodeMulti: root.getVmsForNodeMulti
-                        getLxcForNodeMulti: root.getLxcForNodeMulti
                         isNodeCollapsed: root.isNodeCollapsed
-                        getRunningVmsForNodeMulti: root.getRunningVmsForNodeMulti
-                        getTotalVmsForNodeMulti: root.getTotalVmsForNodeMulti
-                        getRunningLxcForNodeMulti: root.getRunningLxcForNodeMulti
-                        getTotalLxcForNodeMulti: root.getTotalLxcForNodeMulti
                         isActionBusy: root.isActionBusy
                         armedActionKey: root.armedActionKey
                         armedTimerRunning: armedTimer.running
@@ -1876,7 +1773,7 @@ PlasmoidItem {
                     text: "No nodes found"
                     visible: (root.connectionMode === "single")
                         ? (!root.displayedProxmoxData || !root.displayedProxmoxData.data || root.displayedProxmoxData.data.length === 0)
-                        : (root.displayedEndpointsModel.length === 0)
+                        : (controller.endpointsModel.count === 0)
                     opacity: 0.6
                     Layout.alignment: Qt.AlignHCenter
                 }

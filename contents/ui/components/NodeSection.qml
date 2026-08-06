@@ -11,8 +11,9 @@ ColumnLayout {
     required property int nodeIndex
     required property var nodeModel
     property string nodeName: nodeModel ? nodeModel.node : ""
-    property var nodeVms: []
-    property var nodeLxc: []
+    // Per-node diffing models owned by the controller (VariantListModel).
+    property var vmsModel: null
+    property var lxcsModel: null
     property bool isCollapsed: false
     property int uiRadiusS: 4
     property int uiRadiusL: 8
@@ -31,16 +32,17 @@ ColumnLayout {
     property var anonymizeVmId: null
     property var anonymizeVmName: null
     property var anonymizeLxcName: null
+    property var anonymizeIp: null
     property var isActionBusy: null
     property string armedActionKey: ""
     property bool armedTimerRunning: false
-    property var getRunningVmsForNode: null
-    property var getTotalVmsForNode: null
-    property var getRunningLxcForNode: null
-    property var getTotalLxcForNode: null
     property var onToggleCollapsed: null
     property var onAction: null
     property var onConsole: null
+    property var onStatsToggled: null
+    property var getStatsData: null
+    property var isStatsLoading: null
+    property bool statsEnabled: true
     property bool consoleEnabled: true
     property bool powerActionsEnabled: true
 
@@ -79,15 +81,6 @@ ColumnLayout {
                     implicitHeight: 14
                 }
 
-                Rectangle {
-                    implicitWidth: 10
-                    implicitHeight: 10
-                    radius: 5
-                    color: root.nodeModel.status === "online"
-                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
-                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
-                }
-
                 PlasmaComponents.Label {
                     text: root.anonymizeNodeName(root.nodeModel.node, root.nodeIndex)
                     font.bold: true
@@ -106,7 +99,7 @@ ColumnLayout {
                     }
 
                     PlasmaComponents.Label {
-                        text: root.getRunningVmsForNode(root.nodeName) + "/" + root.getTotalVmsForNode(root.nodeName)
+                        text: (root.vmsModel ? root.vmsModel.runningCount : 0) + "/" + (root.vmsModel ? root.vmsModel.count : 0)
                         font.pixelSize: 11
                         font.family: "JetBrains Mono"
                         opacity: 0.9
@@ -121,10 +114,26 @@ ColumnLayout {
                     }
 
                     PlasmaComponents.Label {
-                        text: root.getRunningLxcForNode(root.nodeName) + "/" + root.getTotalLxcForNode(root.nodeName)
+                        text: (root.lxcsModel ? root.lxcsModel.runningCount : 0) + "/" + (root.lxcsModel ? root.lxcsModel.count : 0)
                         font.pixelSize: 11
                         font.family: "JetBrains Mono"
                         opacity: 0.9
+                    }
+                }
+
+                Rectangle {
+                    implicitWidth: 52
+                    implicitHeight: 16
+                    radius: root.uiRadiusL
+                    color: root.nodeModel.status === "online"
+                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
+                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
+
+                    PlasmaComponents.Label {
+                        anchors.centerIn: parent
+                        text: root.nodeModel.status
+                        color: "white"
+                        font.pixelSize: 9
                     }
                 }
             }
@@ -175,7 +184,7 @@ ColumnLayout {
 
         ColumnLayout {
             Layout.fillWidth: true
-            visible: root.nodeVms.length > 0
+            visible: root.vmsModel && root.vmsModel.count > 0
             spacing: 2
 
             RowLayout {
@@ -189,23 +198,23 @@ ColumnLayout {
                 }
 
                 PlasmaComponents.Label {
-                    text: "VMs (" + root.getRunningVmsForNode(root.nodeName) + "/" + root.nodeVms.length + ")"
+                    text: "VMs (" + (root.vmsModel ? root.vmsModel.runningCount : 0) + "/" + (root.vmsModel ? root.vmsModel.count : 0) + ")"
                     font.bold: true
                     font.pixelSize: 12
                 }
             }
 
             Repeater {
-                model: root.nodeVms
+                model: root.vmsModel
 
                 delegate: VmRow {
                     required property int index
-                    required property var modelData
+                    required property var itemData
 
                     vmIndex: index
-                    vmModel: modelData
+                    vmModel: itemData
                     nodeName: root.nodeName
-                    busy: root.isActionBusy(root.nodeName, "qemu", modelData.vmid)
+                    busy: root.isActionBusy(root.nodeName, "qemu", itemData.vmid)
                     armedActionKey: root.armedActionKey
                     armedTimerRunning: root.armedTimerRunning
                     uiRowHeight: root.uiRowHeight
@@ -220,6 +229,11 @@ ColumnLayout {
                     anonymizeVmName: root.anonymizeVmName
                     onAction: root.onAction
                     onConsole: root.onConsole
+                    onStatsToggled: root.onStatsToggled
+                    getStatsData: root.getStatsData
+                    isStatsLoading: root.isStatsLoading
+                    statsEnabled: root.statsEnabled
+                    anonymizeIp: root.anonymizeIp
                     consoleEnabled: root.consoleEnabled
                     powerActionsEnabled: root.powerActionsEnabled
                 }
@@ -228,7 +242,7 @@ ColumnLayout {
 
         ColumnLayout {
             Layout.fillWidth: true
-            visible: root.nodeLxc.length > 0
+            visible: root.lxcsModel && root.lxcsModel.count > 0
             spacing: 2
 
             RowLayout {
@@ -242,23 +256,23 @@ ColumnLayout {
                 }
 
                 PlasmaComponents.Label {
-                    text: "Containers (" + root.getRunningLxcForNode(root.nodeName) + "/" + root.nodeLxc.length + ")"
+                    text: "Containers (" + (root.lxcsModel ? root.lxcsModel.runningCount : 0) + "/" + (root.lxcsModel ? root.lxcsModel.count : 0) + ")"
                     font.bold: true
                     font.pixelSize: 12
                 }
             }
 
             Repeater {
-                model: root.nodeLxc
+                model: root.lxcsModel
 
                 delegate: LxcRow {
                     required property int index
-                    required property var modelData
+                    required property var itemData
 
                     ctIndex: index
-                    ctModel: modelData
+                    ctModel: itemData
                     nodeName: root.nodeName
-                    busy: root.isActionBusy(root.nodeName, "lxc", modelData.vmid)
+                    busy: root.isActionBusy(root.nodeName, "lxc", itemData.vmid)
                     armedActionKey: root.armedActionKey
                     armedTimerRunning: root.armedTimerRunning
                     uiRowHeight: root.uiRowHeight
@@ -273,6 +287,11 @@ ColumnLayout {
                     anonymizeLxcName: root.anonymizeLxcName
                     onAction: root.onAction
                     onConsole: root.onConsole
+                    onStatsToggled: root.onStatsToggled
+                    getStatsData: root.getStatsData
+                    isStatsLoading: root.isStatsLoading
+                    statsEnabled: root.statsEnabled
+                    anonymizeIp: root.anonymizeIp
                     consoleEnabled: root.consoleEnabled
                     powerActionsEnabled: root.powerActionsEnabled
                 }
@@ -281,7 +300,7 @@ ColumnLayout {
 
         PlasmaComponents.Label {
             text: "No VMs or Containers"
-            visible: root.nodeVms.length === 0 && root.nodeLxc.length === 0
+            visible: (!root.vmsModel || root.vmsModel.count === 0) && (!root.lxcsModel || root.lxcsModel.count === 0)
             opacity: 0.5
             font.pixelSize: 10
             Layout.leftMargin: 4

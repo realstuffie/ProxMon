@@ -1,5 +1,7 @@
 #include "vncframeview.h"
+#include "vncclient.h"
 
+#include <QPainter>
 #include <QSGImageNode>
 #include <QQuickWindow>
 
@@ -12,6 +14,25 @@ VncFrameView::VncFrameView(QQuickItem *parent)
     setFocus(true);
     setActiveFocusOnTab(true);
     setFlag(QQuickItem::ItemIsFocusScope);
+}
+
+void VncFrameView::setClient(VncClient *client)
+{
+    if (m_client == client) return;
+    if (m_client) {
+        QObject::disconnect(m_client, nullptr, this, nullptr);
+    }
+    m_client = client;
+    if (m_client) {
+        connect(m_client, &VncClient::frameUpdated,
+                this, &VncFrameView::updateFrame);
+        connect(m_client, &VncClient::frameSizeChanged, this, [this, client]() {
+            prepareFrame(client->frameWidth(), client->frameHeight());
+        });
+        // A size may already be known (property set after connect started).
+        prepareFrame(m_client->frameWidth(), m_client->frameHeight());
+    }
+    emit clientChanged();
 }
 
 // Returns the largest sub-rect of (0,0,viewW,viewH) that fits imgW×imgH
@@ -37,7 +58,7 @@ QSGNode *VncFrameView::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 
     // createImageNode() returns the backend-native node (OpenGL/Vulkan/Metal).
     // setOwnsTexture(true): setTexture() automatically frees the previous
-    // texture — do not delete it manually.
+    // texture - do not delete it manually.
     auto *node = static_cast<QSGImageNode *>(oldNode);
     if (!node) {
         node = window()->createImageNode();
@@ -66,10 +87,31 @@ void VncFrameView::releaseResources()
     QQuickItem::releaseResources();
 }
 
+void VncFrameView::prepareFrame(int w, int h)
+{
+    if (w <= 0 || h <= 0) return;
+    if (m_frame.size() == QSize(w, h)) return;  // reconnect at same size keeps canvas
+    m_frame = QImage(w, h, QImage::Format_ARGB32_Premultiplied);
+    m_frame.fill(Qt::black);
+    m_dirty = true;
+    update();
+}
+
 void VncFrameView::updateFrame(const QImage &image, int x, int y, int w, int h)
 {
-    Q_UNUSED(x) Q_UNUSED(y) Q_UNUSED(w) Q_UNUSED(h)
-    m_frame = image;
+    Q_UNUSED(w) Q_UNUSED(h)
+    // No canvas yet: drop the rect. prepareFrame always precedes frames of a
+    // given size (server init/resize emits frameSizeChanged first), so this
+    // only skips data a later full update repaints anyway.
+    if (m_frame.isNull() || image.isNull()) return;
+
+    // The texture created in updatePaintNode still references m_frame, so the
+    // first paint after each texture upload detaches (one full-frame memcpy).
+    // This remains on Qt Quick's stable public QImage/QSGTexture path.
+    QPainter painter(&m_frame);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.drawImage(x, y, image);
+    painter.end();
     m_dirty = true;
     update();
 }

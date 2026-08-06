@@ -1,5 +1,7 @@
 #include "vncwsproxy.h"
 
+#include "proxmoxdatautils.h"
+
 #include <QNetworkRequest>
 #include <QSslConfiguration>
 #include <QUrlQuery>
@@ -14,16 +16,20 @@ VncWsProxy::VncWsProxy(QObject *parent)
 
 VncWsProxy::~VncWsProxy()
 {
-    cleanup();
+    cleanupTransport();
+    clearCredentials();
 }
 
 // Public API
 void VncWsProxy::start()
 {
     // Clean up any prior session before re-starting.
-    cleanup();
+    // Credentials may already contain the fresh reconnect handoff, so only
+    // tear down transport state here.
+    cleanupTransport();
 
     if (!m_server->listen(QHostAddress::LocalHost, 0)) {
+        clearCredentials();
         emit errorOccurred(QStringLiteral("VncWsProxy: failed to bind local TCP server: %1")
                                .arg(m_server->errorString()));
         return;
@@ -34,16 +40,21 @@ void VncWsProxy::start()
 
 void VncWsProxy::stop()
 {
-    cleanup();
+    cleanupTransport();
+    clearCredentials();
 }
 
 void VncWsProxy::setAuthHeaderSecure(const QByteArray &header)
 {
+    m_authHeader.fill(0);
+    m_authHeader.clear();
     m_authHeader = header;
 }
 
 void VncWsProxy::setTicketSecure(const QByteArray &ticket)
 {
+    m_ticket.fill(0);
+    m_ticket.clear();
     m_ticket = ticket;
 }
 
@@ -54,7 +65,9 @@ QUrl VncWsProxy::buildWsUrl() const
     // wss://host:apiPort/api2/json/nodes/{node}/{kind}/{vmid}/vncwebsocket
     //   ?port={vncPort}&vncticket={urlEncoded(ticket)}
     QUrl url;
-    url.setScheme(m_ignoreSsl ? QStringLiteral("ws") : QStringLiteral("wss"));
+    // Transport encryption is mandatory. ignoreSsl only controls peer
+    // certificate verification; it must never downgrade the connection.
+    url.setScheme(QStringLiteral("wss"));
     url.setHost(m_host);
     url.setPort(m_apiPort);
     url.setPath(QStringLiteral("/api2/json/nodes/%1/%2/%3/vncwebsocket")
@@ -71,7 +84,7 @@ QUrl VncWsProxy::buildWsUrl() const
     return url;
 }
 
-void VncWsProxy::cleanup()
+void VncWsProxy::cleanupTransport()
 {
     if (m_tcp) {
         m_tcp->disconnect(this);
@@ -90,7 +103,15 @@ void VncWsProxy::cleanup()
     }
 }
 
-// Slots — incoming TCP connection from libvncclient
+void VncWsProxy::clearCredentials()
+{
+    m_authHeader.fill(0);
+    m_authHeader.clear();
+    m_ticket.fill(0);
+    m_ticket.clear();
+}
+
+// Slots - incoming TCP connection from libvncclient
 
 void VncWsProxy::onNewConnection()
 {
@@ -103,12 +124,17 @@ void VncWsProxy::onNewConnection()
 
     m_ws = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
 
-    if (m_ignoreSsl) {
-        // Mirror LxcTerminal's approach: modify the existing socket config.
+    {
+        // TLS trust: start from the socket's config, apply the configured
+        // custom CA (same as the API path), and only relax verification
+        // entirely when ignoreSsl is set.
         QSslConfiguration cfg = m_ws->sslConfiguration();
-        cfg.setPeerVerifyMode(QSslSocket::VerifyNone);
+        ProxmoxDataUtils::appendTrustedCertificates(cfg, m_trustedCertPem.toUtf8(), m_trustedCertPath);
+        if (m_ignoreSsl) {
+            cfg.setPeerVerifyMode(QSslSocket::VerifyNone);
+            connect(m_ws, &QWebSocket::sslErrors, this, &VncWsProxy::onWsSslErrors);
+        }
         m_ws->setSslConfiguration(cfg);
-        connect(m_ws, &QWebSocket::sslErrors, this, &VncWsProxy::onWsSslErrors);
     }
 
     connect(m_ws, &QWebSocket::connected,             this, &VncWsProxy::onWsConnected);
@@ -119,7 +145,15 @@ void VncWsProxy::onNewConnection()
     // Build the upgrade request with the auth header.
     // Do NOT set Sec-WebSocket-Protocol: Proxmox doesn't advertise "binary"
     // in its 101 response, which causes Qt to reject the handshake.
-    QNetworkRequest req(buildWsUrl());
+    const QUrl wsUrl = buildWsUrl();
+    if (!wsUrl.isValid() || wsUrl.scheme().compare(QStringLiteral("wss"), Qt::CaseInsensitive) != 0) {
+        cleanupTransport();
+        clearCredentials();
+        emit errorOccurred(QStringLiteral("Refusing non-TLS VNC WebSocket connection"));
+        return;
+    }
+
+    QNetworkRequest req(wsUrl);
     if (!m_authHeader.isEmpty()) {
         req.setRawHeader("Authorization", m_authHeader);
     }
@@ -127,15 +161,12 @@ void VncWsProxy::onNewConnection()
 }
 
 
-// Slots — WebSocket events
+// Slots - WebSocket events
 void VncWsProxy::onWsConnected()
 {
-    // HTTP upgrade complete — auth header and ticket were sent in the
+    // HTTP upgrade complete - auth header and ticket were sent in the
     // handshake request and are no longer needed. Zero then clear both.
-    m_authHeader.fill(0);
-    m_authHeader.clear();
-    m_ticket.fill(0);
-    m_ticket.clear();
+    clearCredentials();
     // Flush any bytes libvncclient already wrote while WS was connecting.
     if (m_tcp && m_tcp->bytesAvailable() > 0) {
         onTcpReadyRead();
@@ -154,24 +185,26 @@ void VncWsProxy::onWsError(QAbstractSocket::SocketError /*error*/)
 {
     const QString msg = m_ws ? m_ws->errorString() : QStringLiteral("unknown WS error");
     qWarning() << "[VncWsProxy] WebSocket error:" << msg;
+    cleanupTransport();
+    clearCredentials();
     emit errorOccurred(QStringLiteral("WebSocket error: %1").arg(msg));
-    cleanup();
 }
 
 void VncWsProxy::onWsSslErrors(const QList<QSslError> &errors)
 {
-    // ignoreSsl is set — suppress all SSL errors.
+    // ignoreSsl is set - suppress all SSL errors.
     Q_UNUSED(errors)
     if (m_ws) m_ws->ignoreSslErrors();
 }
 
 void VncWsProxy::onWsDisconnected()
 {
+    clearCredentials();
     // Close the TCP side so libvncclient sees EOF.
     if (m_tcp) m_tcp->disconnectFromHost();
 }
 
-// Slots — TCP (libvncclient) events
+// Slots - TCP (libvncclient) events
 void VncWsProxy::onTcpReadyRead()
 {
     // TCP → WS: forward raw RFB bytes from libvncclient as binary WS frames.

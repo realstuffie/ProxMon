@@ -8,7 +8,7 @@ require_cmd() {
   fi
 }
 
-# Run a command as root — tries sudo, doas, su in order.
+# Run a command as root - tries sudo, doas, su in order.
 run_root() {
   if [ "$(id -u)" -eq 0 ]; then
     "$@"
@@ -62,7 +62,7 @@ install_deps_best_effort() {
     pm_update="apt-get update"
     pm_install="apt-get install -y"
     # libvncserver-dev ships both libvncserver and libvncclient headers on Debian/Ubuntu.
-    # libqtermwidget6 dev pkg is version-suffixed on some releases — both names listed.
+    # libqtermwidget6 dev pkg is version-suffixed on some releases - both names listed.
     pkgs_build="cmake make g++ pkg-config qt6-base-dev qt6-declarative-dev qt6-websockets-dev libsecret-1-dev libvncserver-dev libutf8proc-dev qtermwidget6-data"
     pkgs_qtermwidget="libqtermwidget6-2-dev libqtermwidget6-dev"
     pkgs_ecm="extra-cmake-modules"
@@ -166,6 +166,10 @@ fi
 
 if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
   printf '%s\n' "[ git  ] Initializing submodules..."
+  # Refresh cached submodule URLs from .gitmodules first, so checkouts made
+  # before the qtkeychain fork repoint don't try to fetch the pinned commit
+  # from the old upstream URL (where it doesn't exist).
+  git submodule sync --recursive
   git submodule update --init --recursive
 fi
 
@@ -188,9 +192,19 @@ cmake --build "$BUILD_DIR" -- -j"$JOBS" || exit 1
 BUILD_END="$(date +%s)"
 printf '%s\n' "[ build] Done in $(( BUILD_END - BUILD_START ))s"
 
-# Stage .so into the plasmoid package — main.qml uses a relative import
+# Replace dst atomically via rename(2). A plain cp truncates and rewrites the
+# existing inode in place - if a running plasmashell has that .so mmap'd, its
+# code pages are corrupted under it and it segfaults (reliably so with VNC
+# console worker threads executing plugin code during the copy).
+atomic_cp() {
+  local src="$1" dst="$2"
+  [ -d "$dst" ] && dst="$dst/$(basename "$src")"
+  cp "$src" "$dst.tmp.$$" && mv -f "$dst.tmp.$$" "$dst"
+}
+
+# Stage .so into the plasmoid package - main.qml uses a relative import
 # resolved to contents/lib/proxmox/, which kpackagetool installs verbatim.
-cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/
+atomic_cp "$BUILD_DIR/libproxmoxclientplugin.so" contents/lib/proxmox/
 printf '%s\n' "[ build] Plugin staged → contents/lib/proxmox/libproxmoxclientplugin.so"
 
 detect_qt6_qml_user_dir() {
@@ -209,8 +223,8 @@ QT6_QML_USER_DIR="$(detect_qt6_qml_user_dir)"
 QML_MODULE_USER_DIR="$QT6_QML_USER_DIR/org/kde/plasma/proxmox"
 if [ "$INSTALL_STANDALONE_QML_MODULE" -eq 1 ]; then
   mkdir -p "$QML_MODULE_USER_DIR"
-  cp "$BUILD_DIR/libproxmoxclientplugin.so" "$QML_MODULE_USER_DIR/"
-  cp contents/lib/proxmox/qmldir "$QML_MODULE_USER_DIR/"
+  atomic_cp "$BUILD_DIR/libproxmoxclientplugin.so" "$QML_MODULE_USER_DIR/"
+  atomic_cp contents/lib/proxmox/qmldir "$QML_MODULE_USER_DIR/"
   printf '%s\n' "[ qml  ] Standalone module copied → $QML_MODULE_USER_DIR"
 fi
 
@@ -225,19 +239,17 @@ ICON_BASE="${XDG_DATA_HOME:-$HOME/.local/share}/icons"
 ICON_DIR="$ICON_BASE/hicolor/scalable/apps"
 
 # Checksum-based sync: copy only files whose md5 differs from the installed copy.
-# Falls back to cp -r if md5sum is unavailable.
+# Copies everything unconditionally if md5sum is unavailable.
 sync_contents() {
   local src="$1" dst="$2"
-  if ! command -v md5sum >/dev/null 2>&1; then
-    cp -r "$src/." "$dst/"
-    return
-  fi
+  local have_md5=1
+  command -v md5sum >/dev/null 2>&1 || have_md5=0
   local copied=0
   while IFS= read -r -d '' srcfile; do
     local rel="${srcfile#$src/}"
     local dstfile="$dst/$rel"
     local copy=1
-    if [ -f "$dstfile" ]; then
+    if [ "$have_md5" -eq 1 ] && [ -f "$dstfile" ]; then
       local src_sum dst_sum
       src_sum="$(md5sum "$srcfile" | cut -d' ' -f1)"
       dst_sum="$(md5sum "$dstfile" | cut -d' ' -f1)"
@@ -245,7 +257,7 @@ sync_contents() {
     fi
     if [ "$copy" -eq 1 ]; then
       mkdir -p "$(dirname "$dstfile")"
-      cp "$srcfile" "$dstfile"
+      atomic_cp "$srcfile" "$dstfile"
       copied=$(( copied + 1 ))
     fi
   done < <(find "$src" -type f -print0)
@@ -264,11 +276,11 @@ if [ ! -d "$PLASMOID_CONTENTS" ]; then
   fi
 fi
 
-# Checksum sync contents — skips unchanged files.
+# Checksum sync contents - skips unchanged files.
 # --rebuild: running from the installed dir so src == dst; install .so directly instead.
 if [ "$REBUILD_ONLY" -eq 1 ]; then
   mkdir -p "$PLASMOID_CONTENTS/lib/proxmox"
-  cp "$BUILD_DIR/libproxmoxclientplugin.so" "$PLASMOID_CONTENTS/lib/proxmox/"
+  atomic_cp "$BUILD_DIR/libproxmoxclientplugin.so" "$PLASMOID_CONTENTS/lib/proxmox/"
   printf '%s\n' "[ install] Plugin installed → $PLASMOID_CONTENTS/lib/proxmox/libproxmoxclientplugin.so"
 elif [ -d "$PLASMOID_CONTENTS" ]; then
   sync_contents "contents" "$PLASMOID_CONTENTS"
@@ -383,7 +395,7 @@ fi
 
 PLASMOID_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
 FINGERPRINT_FILE="$PLASMOID_DIR/.build_fingerprint"
-{ ldconfig -p 2>/dev/null | grep -iE 'libplasma|libQt6' || true; } \
+{ ldconfig -p 2>/dev/null | grep -iE 'libplasma|libQt6|libvncclient|libqtermwidget' || true; } \
   | awk '{print $NF}' \
   | sort \
   | xargs -r md5sum 2>/dev/null \

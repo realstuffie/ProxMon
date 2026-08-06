@@ -1,5 +1,7 @@
 #include "lxcterminal.h"
 
+#include "proxmoxdatautils.h"
+
 #include <QCloseEvent>
 #include <QContextMenuEvent>
 #include <QMenu>
@@ -24,6 +26,11 @@
 #include <qtermwidget.h>
 
 namespace {
+
+// Max wait for the server's "OK" after the WS upgrade before we treat the
+// session as failed. Proxmox auth is near-instant; this only trips on a
+// stalled or wedged endpoint.
+constexpr int kAuthTimeoutMs = 10000;
 
 // QMainWindow subclass that emits a Qt signal when closed, so LxcTerminal
 // can clean up and notify QML. Using a small lambda-friendly QObject helper
@@ -61,7 +68,9 @@ void LxcTerminal::open(const QString &host,
                        const QString &vmName,
                        int proxyPort,
                        const QString &user,
-                       bool ignoreSslErrors)
+                       bool ignoreSslErrors,
+                       const QString &trustedCertPem,
+                       const QString &trustedCertPath)
 {
     m_host       = host;
     m_apiPort    = apiPort;
@@ -71,6 +80,8 @@ void LxcTerminal::open(const QString &host,
     m_proxyPort  = proxyPort;
     m_user       = user;
     m_ignoreSsl  = ignoreSslErrors;
+    m_trustedCertPem  = trustedCertPem;
+    m_trustedCertPath = trustedCertPath;
     // m_authHeader and m_ticket are set beforehand via setAuthHeaderSecure()
     // and setTicketSecure() respectively.
 
@@ -96,11 +107,15 @@ void LxcTerminal::connectWithTicket(int proxyPort,
 
 void LxcTerminal::setAuthHeaderSecure(const QByteArray &header)
 {
+    m_authHeader.fill(0);
+    m_authHeader.clear();
     m_authHeader = header;
 }
 
 void LxcTerminal::setTicketSecure(const QByteArray &ticket)
 {
+    m_ticket.fill(0);
+    m_ticket.clear();
     m_ticket = ticket;
 }
 
@@ -114,16 +129,35 @@ void LxcTerminal::raise()
 
 void LxcTerminal::disconnect()
 {
+    stopAuthTimeout();
     if (m_ws) {
         m_ws->disconnect(this);
         m_ws->close();
         m_ws->deleteLater();
         m_ws = nullptr;
     }
+    clearCredentials();
     m_phase = Phase::Disconnected;
     m_authBuffer.clear();
     if (m_state != QStringLiteral("disconnected")) {
         setState(QStringLiteral("disconnected"));
+    }
+}
+
+void LxcTerminal::clearCredentials()
+{
+    m_authHeader.fill(0);
+    m_authHeader.clear();
+    m_ticket.fill(0);
+    m_ticket.clear();
+}
+
+void LxcTerminal::stopAuthTimeout()
+{
+    if (m_authTimer) {
+        m_authTimer->stop();
+        m_authTimer->deleteLater();
+        m_authTimer = nullptr;
     }
 }
 
@@ -145,7 +179,10 @@ void LxcTerminal::ensureWindow(const QString &vmName, const QString &nodeName)
     auto *win = new TerminalWindow();
     win->setAttribute(Qt::WA_DeleteOnClose, false);  // we manage lifetime
     win->setWindowTitle(QStringLiteral("Console — %1 (%2)").arg(vmName, nodeName));
-    win->resize(900, 560);
+    QSize winSize = {900, 560};
+    if (m_windowPreset == QStringLiteral("small"))  winSize = {700, 420};
+    if (m_windowPreset == QStringLiteral("large"))  winSize = {1200, 720};
+    win->resize(winSize);
 
     auto *central = new QWidget(win);
     auto *layout = new QVBoxLayout(central);
@@ -155,7 +192,7 @@ void LxcTerminal::ensureWindow(const QString &vmName, const QString &nodeName)
     // 0 = don't auto-start an internal shell; we drive it via sendText.
     auto *term = new QTermWidget(0, central);
     term->setColorScheme(QStringLiteral("DarkPastels"));
-    term->setScrollBarPosition(QTermWidget::ScrollBarRight);
+    term->setScrollBarPosition(QTermWidget::NoScrollBar);
     term->setTerminalFont(QFont(QStringLiteral("Monospace"), 11));
 
     // Clipboard support: Ctrl+Shift+C to copy, Ctrl+Shift+V to paste.
@@ -210,6 +247,7 @@ void LxcTerminal::destroyWindow()
 void LxcTerminal::openSocket()
 {
     if (m_host.isEmpty() || m_ticket.isEmpty() || m_user.isEmpty()) {
+        clearCredentials();
         emit errorOccurred(QStringLiteral("Missing host/ticket/user for LXC terminal"));
         setState(QStringLiteral("error"));
         return;
@@ -231,8 +269,13 @@ void LxcTerminal::openSocket()
     url.setScheme(QStringLiteral("wss"));
     url.setHost(m_host);
     url.setPort(m_apiPort);
-    url.setPath(QStringLiteral("/api2/json/nodes/%1/lxc/%2/vncwebsocket")
-                    .arg(m_node).arg(m_vmid));
+    if (m_vmid == 0) {
+        // Node-level shell: vmid=0 is the sentinel for host console
+        url.setPath(QStringLiteral("/api2/json/nodes/%1/vncwebsocket").arg(m_node));
+    } else {
+        url.setPath(QStringLiteral("/api2/json/nodes/%1/lxc/%2/vncwebsocket")
+                        .arg(m_node).arg(m_vmid));
+    }
 
     QUrlQuery q;
     q.addQueryItem(QStringLiteral("port"), QString::number(m_proxyPort));
@@ -240,34 +283,82 @@ void LxcTerminal::openSocket()
                    QString::fromLatin1(m_ticket.toPercentEncoding()));
     url.setQuery(q);
 
+    if (!url.isValid() || url.scheme().compare(QStringLiteral("wss"), Qt::CaseInsensitive) != 0) {
+        clearCredentials();
+        m_phase = Phase::Errored;
+        setState(QStringLiteral("error"));
+        emit errorOccurred(QStringLiteral("Refusing non-TLS terminal WebSocket connection"));
+        return;
+    }
+
     m_ws = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
 
-    if (m_ignoreSsl) {
+    {
+        // TLS trust: apply the configured custom CA (same as the API path);
+        // only relax verification entirely when ignoreSsl is set.
         QSslConfiguration cfg = m_ws->sslConfiguration();
-        cfg.setPeerVerifyMode(QSslSocket::VerifyNone);
+        ProxmoxDataUtils::appendTrustedCertificates(cfg, m_trustedCertPem.toUtf8(), m_trustedCertPath);
+        if (m_ignoreSsl) {
+            cfg.setPeerVerifyMode(QSslSocket::VerifyNone);
+            QObject::connect(m_ws, &QWebSocket::sslErrors, this,
+                [this](const QList<QSslError> &) {
+                    if (m_ws) m_ws->ignoreSslErrors();
+                });
+        }
         m_ws->setSslConfiguration(cfg);
-        QObject::connect(m_ws, &QWebSocket::sslErrors, this,
-            [this](const QList<QSslError> &) {
-                if (m_ws) m_ws->ignoreSslErrors();
-            });
     }
 
     QObject::connect(m_ws, &QWebSocket::connected, this, [this]() {
-        // Upgrade complete — burn auth header, send user:ticket\n, burn ticket.
+        // Upgrade complete - burn auth header, send user:ticket\n, burn ticket.
         m_authHeader.fill(0);
         m_authHeader.clear();
         m_phase = Phase::Authenticating;
+
+        // Arm the stall guard: if "OK" never arrives, surface an error
+        // instead of hanging in the connecting state forever.
+        stopAuthTimeout();
+        m_authTimer = new QTimer(this);
+        m_authTimer->setSingleShot(true);
+        m_authTimer->setInterval(kAuthTimeoutMs);
+        QObject::connect(m_authTimer, &QTimer::timeout, this, [this]() {
+            if (m_phase != Phase::Authenticating) return;
+            m_phase = Phase::Errored;
+            // Tear down the wedged socket; it completed the upgrade but never
+            // answered, so it won't close on its own.
+            if (m_ws) {
+                m_ws->disconnect(this);
+                m_ws->abort();
+                m_ws->deleteLater();
+                m_ws = nullptr;
+            }
+            clearCredentials();
+            setState(QStringLiteral("error"));
+            emit errorOccurred(QStringLiteral("LXC terminal authentication timed out"));
+        });
+        m_authTimer->start();
+
         if (m_ws) {
             QByteArray ba = m_user.toUtf8() + ':' + m_ticket + '\n';
             m_ws->sendTextMessage(QString::fromUtf8(ba));
             ba.fill(0);
-            m_ticket.fill(0);
-            m_ticket.clear();
         }
+        m_ticket.fill(0);
+        m_ticket.clear();
     });
 
     QObject::connect(m_ws, &QWebSocket::disconnected, this, [this]() {
+        clearCredentials();
+        stopAuthTimeout();
         if (m_phase == Phase::Errored) return;
+        // Proxmox closes the socket on a rejected ticket rather than sending
+        // non-"OK" bytes, so a disconnect while still authenticating is an
+        // auth failure - report it as such instead of a silent disconnect.
+        if (m_phase == Phase::Authenticating) {
+            m_phase = Phase::Errored;
+            setState(QStringLiteral("error"));
+            emit errorOccurred(QStringLiteral("LXC terminal authentication failed"));
+            return;
+        }
         setState(QStringLiteral("disconnected"));
         m_phase = Phase::Disconnected;
     });
@@ -276,6 +367,13 @@ void LxcTerminal::openSocket()
         [this](QAbstractSocket::SocketError) {
             if (!m_ws) return;
             const QString msg = m_ws->errorString();
+            QWebSocket *failedSocket = m_ws;
+            m_ws = nullptr;
+            failedSocket->disconnect(this);
+            failedSocket->abort();
+            failedSocket->deleteLater();
+            stopAuthTimeout();
+            clearCredentials();
             m_phase = Phase::Errored;
             setState(QStringLiteral("error"));
             emit errorOccurred(msg.isEmpty() ? QStringLiteral("LXC terminal error") : msg);
@@ -288,7 +386,7 @@ void LxcTerminal::openSocket()
 
     QNetworkRequest req(url);
     if (!m_authHeader.isEmpty()) {
-        // Required — Proxmox returns 401 without it.
+        // Required - Proxmox returns 401 without it.
         req.setRawHeader("Authorization", m_authHeader);
     }
     m_ws->open(req);
@@ -330,9 +428,10 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
     m_authBuffer.append(line);
 
     // Proxmox replies with literal bytes "OK" on success. Some versions
-    // include a trailing "\n", others don't — accept both. Anything else
+    // include a trailing "\n", others don't - accept both. Anything else
     // (with at least 2 bytes seen) is an auth failure.
     if (m_authBuffer.startsWith("OK")) {
+        stopAuthTimeout();
         m_phase = Phase::Connected;
         setState(QStringLiteral("connected"));
 
@@ -352,18 +451,23 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
         QTimer::singleShot(120, this, [this]() { sendCurrentResize(); });
 
         m_postAuthBytes = 0;
-        QTimer::singleShot(500, this, [this]() {
-            const int threshold = 24;
-            if (m_phase == Phase::Connected && m_ws && m_postAuthBytes < threshold) {
-                m_ws->sendTextMessage(QStringLiteral("0:1:\r"));
-            }
-        });
+        // Skip the silent-getty wake CR for node consoles (vmid==0) - it
+        // would fire mid-login-prompt and prepend a spurious newline.
+        if (m_vmid != 0) {
+            QTimer::singleShot(500, this, [this]() {
+                const int threshold = 24;
+                if (m_phase == Phase::Connected && m_ws && m_postAuthBytes < threshold) {
+                    m_ws->sendTextMessage(QStringLiteral("0:1:\r"));
+                }
+            });
+        }
         return;
     }
 
     // Need at least 2 bytes before we can be sure this isn't "OK" yet.
     if (m_authBuffer.size() < 2) return;
 
+    stopAuthTimeout();
     m_phase = Phase::Errored;
     setState(QStringLiteral("error"));
     const QString msg = m_authBuffer.isEmpty()
@@ -418,7 +522,7 @@ bool LxcTerminal::eventFilter(QObject *watched, QEvent *event)
         QTimer::singleShot(150, this, [this]() { sendCurrentResize(); });
     }
 
-    // Right-click context menu for copy/paste — intercept on any child widget
+    // Right-click context menu for copy/paste - intercept on any child widget
     // since mouse events land on QTermWidget's internal TerminalDisplay child.
     if (event->type() == QEvent::ContextMenu && m_term) {
         auto *w = qobject_cast<QWidget *>(watched);

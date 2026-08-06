@@ -4,6 +4,25 @@ Design decisions that aren't obvious from reading the code alone.
 
 ## Credential security model
 
+### Runtime isolation from QML
+
+Runtime keyring reads stay entirely in C++. `ProxmoxClient` and `SecretStore`
+are internal implementation types and are not registered with the QML engine.
+QML asks `ProxmoxController` to perform an operation using endpoint identity
+only; it never receives the resolved API token secret.
+
+`SecretStore` attaches completion callbacks to each individual QtKeychain job.
+This preserves the relationship between an endpoint lookup and its result even
+when several endpoint reads complete out of order. There is no shared
+secret-bearing Qt signal that QML can observe, and no client-wide cached token
+secret. Single-host child enumeration performs a fresh scoped keyring read,
+matching the multi-host request flow.
+
+The configuration password fields remain a deliberate exception: a secret
+typed by the user temporarily exists in the KCM's QML text field until it is
+written to the keyring and the field is cleared. Removing that configuration
+handoff is tracked separately from runtime credential isolation.
+
 ### Why credentials are never Q_PROPERTYs
 
 Qt's property system makes any value set through it visible to the QML/JavaScript V4 engine. The V4 heap is garbage-collected and makes no guarantees about when (or whether) memory is zeroed — a credential written to a Q_PROPERTY can persist as a JS string long after the call site considers it done. Strings in V4 are also reference-counted and may be interned, producing additional copies at unpredictable points.
@@ -17,14 +36,14 @@ Both are `Q_INVOKABLE` only so they can be invoked via `QMetaObject::invokeMetho
 
 ### The pending registry pattern
 
-`ProxmoxController` maintains two maps keyed by `sessionKey`:
+`ProxmoxController` maintains two maps keyed by a unique console request ID:
 
 ```cpp
 QHash<QString, QByteArray> m_pendingConsoleAuth
 QMap<QString, QByteArray>  m_pendingConsoleTicket
 ```
 
-When a proxy-ready signal arrives from `ProxmoxClient`, the controller stashes both credentials into these maps and emits `consoleReady` / `lxcConsoleReady` without the credentials in the signal arguments. QML handles the signal, creates the console object, then calls `deliverConsoleAuth` / `deliverConsoleTicket` to push credentials directly into C++ targets — they never appear in the signal args or in any JS variable.
+When a proxy-ready signal arrives from `ProxmoxClient`, the controller stashes both credentials under that request ID and emits `consoleReady` / `lxcConsoleReady` without the credentials in the signal arguments. QML passes the non-secret request ID back to `deliverConsoleAuth` / `deliverConsoleTicket`, which push credentials directly into C++ targets — they never appear in the signal args or in any JS variable. Request IDs prevent simultaneous consoles on one endpoint from consuming each other's handoff state.
 
 Each map entry is consumed exactly once. `deliverConsoleTicket` accepts a primary and optional secondary target so both `VncWsProxy` and `VncClient` can be fed from a single atomic consume.
 
@@ -62,9 +81,13 @@ Concurrent socket writes from the main thread (key/pointer/resize events via `Se
 
 libvncclient's `GotFrameBufferUpdate` callback fires once per dirty rect per `HandleRFBServerMessage` call, which can be many times per server message. Rather than emitting a signal per rect (expensive cross-thread marshalling + N repaints), the callback only sets an atomic dirty flag. The poll loop checks the flag once after `HandleRFBServerMessage` returns and emits a single `frameUpdated` signal per message.
 
-### SetDesktopSize (resize) workaround
+### Remote resize (dropped in v0.7.3)
 
-libvncclient ≤ 0.9.15 truncates the SCREEN array in its `SendExtDesktopSize` implementation (LibVNC issue #640), causing QEMU to silently reject resize requests. `VncClient::resizeRemote` hand-crafts the `SetDesktopSize` (251) wire frame directly rather than using libvncclient's helper.
+An earlier version implemented client-driven `SetDesktopSize` resize, hand-crafting the wire frame because libvncclient ≤ 0.9.15 truncates the SCREEN array in its helper (LibVNC issue #640). It was removed: behaviour across QEMU/Proxmox versions was inconsistent, and a fixed framebuffer with server-driven desktop-resize support (the `MallocFrameBuffer` realloc callback in `VncClient`) proved the better trade. The view letterboxes to fit instead.
+
+### TLS trust on the console path
+
+The WSS handshake validates the server certificate against the same configured CA as the API path. The controller resolves the cert per session (controller-wide in single-host; shared vs per-endpoint in multi-host, already resolved in `readNextMultiSecret`) and forwards it on `consoleReady` / `lxcConsoleReady`; `VncWsProxy` and `LxcTerminal` append it to their `QSslConfiguration` before `open()`. `ignoreSsl` (`VerifyNone`) takes precedence when enabled. Certificate material is public, so passing it through these signals is compatible with the credential-isolation model — it is not delivered via the pending registry.
 
 ## LXC terminal architecture
 
@@ -123,7 +146,7 @@ In single-host mode the session key is an empty string. In multi-host mode it id
 
 ### Pending console name stash
 
-`ProxmoxClient` returns `vmName` via the node children response, but the `vncProxyReady` / `ttyProxyReady` signals don't carry it (they're issued later, from a different request). `m_pendingConsoleNames` bridges the gap — populated in `readSingleSecretFor` / `readMultiSecretFor` when the console request is dispatched, drained in the proxy-ready lambdas.
+`ProxmoxClient` returns `vmName` via the node children response, but the `vncProxyReady` / `ttyProxyReady` signals don't carry it (they're issued later, from a different request). `m_pendingConsoleNames` bridges the gap — keyed by the same unique request ID, populated in `readSingleSecretFor` / `readMultiSecretFor` when the console request is dispatched, and drained in the proxy-ready lambdas.
 
 ## Multi-host vs single-host
 
@@ -132,4 +155,4 @@ The two modes share the same `ProxmoxClient` and signal paths. The only runtime 
 - **Single**: session key is `""`, endpoint config comes from controller-level properties (`m_host`, `m_port`, etc.).
 - **Multi**: session key is a stable string identifying the endpoint, config is resolved via `endpointBySession()` from `m_endpoints`.
 
-`ProxmoxController` resolves per-session overrides (api port, ignoreSsl) in the proxy-ready lambdas before emitting the console-ready signal, so callers downstream don't need to know which mode is active.
+`ProxmoxController` resolves per-session overrides (api port, ignoreSsl, trusted CA) in the proxy-ready lambdas before emitting the console-ready signal, so callers downstream don't need to know which mode is active.

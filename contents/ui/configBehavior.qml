@@ -47,7 +47,9 @@ KCM.SimpleKCM {
     property int cfg_refreshInterval: 30
     property int cfg_refreshIntervalDefault: 30
     property bool cfg_ignoreSsl: true
-    property bool cfg_ignoreSslDefault: true
+    // Matches main.xml (<default>false</default>): Restore Defaults must not
+    // silently enable Ignore SSL.
+    property bool cfg_ignoreSslDefault: false
     property string cfg_connectionMode: "single"
     property string cfg_connectionModeDefault: "single"
     property string cfg_multiHostsJson: "[]"
@@ -120,6 +122,10 @@ KCM.SimpleKCM {
     property alias cfg_consoleEnabled: consoleEnabledCheck.checked
     property bool cfg_consoleEnabledDefault: true
 
+    // Terminal size preset
+    property string cfg_terminalSize: "medium"
+    property string cfg_terminalSizeDefault: "medium"
+
     // Power actions toggle
     property alias cfg_powerActionsEnabled: powerActionsEnabledCheck.checked
     property bool cfg_powerActionsEnabledDefault: true
@@ -176,6 +182,7 @@ KCM.SimpleKCM {
                 model: ListModel {
                     id: sortingModel
                     ListElement { text: "Status (Running first)"; value: "status" }
+                    ListElement { text: "Status, then ID"; value: "statusId" }
                     ListElement { text: "Name (A-Z)"; value: "name" }
                     ListElement { text: "Name (Z-A)"; value: "nameDesc" }
                     ListElement { text: "ID (Ascending)"; value: "id" }
@@ -307,6 +314,27 @@ KCM.SimpleKCM {
             opacity: 0.6
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
+        }
+
+        RowLayout {
+            Layout.leftMargin: 35
+            spacing: 8
+
+            QQC2.Label { text: "Terminal window size:" }
+
+            QQC2.ComboBox {
+                model: ["Small (700×420)", "Medium (900×560)", "Large (1200×720)"]
+                currentIndex: {
+                    if (root.cfg_terminalSize === "small") return 0
+                    if (root.cfg_terminalSize === "large") return 2
+                    return 1
+                }
+                onActivated: {
+                    if (index === 0) root.cfg_terminalSize = "small"
+                    else if (index === 2) root.cfg_terminalSize = "large"
+                    else root.cfg_terminalSize = "medium"
+                }
+            }
         }
 
         QQC2.CheckBox {

@@ -11,11 +11,13 @@ namespace ProxmoxConst {
 namespace Kind {
     inline const QString Qemu     = QStringLiteral("qemu");
     inline const QString Lxc      = QStringLiteral("lxc");
+    inline const QString Node     = QStringLiteral("node");
     inline const QString Nodes    = QStringLiteral("nodes");
     inline const QString Children = QStringLiteral("children"); // internal multi-host dispatch
     inline const QString Action   = QStringLiteral("action");   // internal dispatch
     inline const QString Console  = QStringLiteral("console");  // internal dispatch
     inline const QString Fetch    = QStringLiteral("fetch");    // internal dispatch
+    inline const QString Stats    = QStringLiteral("stats");    // internal dispatch
 } // namespace Kind
 
 // VM / CT action verbs sent to the Proxmox API
@@ -40,6 +42,7 @@ namespace Defaults {
     constexpr int SecondsPerDay        = 86400;
     constexpr int RequestTimeoutMs     = 10000;
     constexpr int LowLatencyTimeoutMs  = 5000;
+    constexpr int TaskPollIntervalMs   = 200;
 } // namespace Defaults
 
 } // namespace ProxmoxConst

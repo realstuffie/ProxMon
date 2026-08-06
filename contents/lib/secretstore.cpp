@@ -1,14 +1,21 @@
 #include "secretstore.h"
 #include <algorithm>
 #include <qtkeychain/keychain.h>
-#include <QDBusInterface>
-#include <QDBusReply>
+#include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCall>
+#include <QDBusPendingCallWatcher>
 #include <QProcess>
 #include <QRegularExpression>
 
 using namespace QKeychain;
 
 namespace {
+
+// kwalletd holds replies while its unlock dialog is up, so all calls are
+// asynchronous and never stall the plasmashell main thread. The timeout
+// keeps failure feedback fast; a busy timeout arms a walletOpened retry.
+constexpr int kKWalletCallTimeoutMs = 5000;
 
 QStringList parseKWalletListOutput(const QString &out) {
     QStringList raw;
@@ -50,25 +57,29 @@ void SecretStore::setKey(const QString &v) {
     emit keyChanged();
 }
 
-void SecretStore::readSecret() {
+void SecretStore::readSecret(const QString &key,
+                             SecretHandler onReady,
+                             ErrorHandler onError) {
     auto *job = new ReadPasswordJob(m_service, this);
-    job->setKey(m_key);
-    connect(job, &Job::finished, this, [this, job]() {
+    job->setKey(key);
+    connect(job, &Job::finished, this,
+            [job, onReady = std::move(onReady), onError = std::move(onError)]() mutable {
         if (job->error()) {
             // NotFound is common on first run; emit empty secret and no hard error.
             if (job->error() == QKeychain::EntryNotFound) {
-                emit secretReady(QString());
+                if (onReady) onReady(QString());
                 job->deleteLater();
                 return;
             }
 
             // Hard keyring failures must not be reported as an empty/missing secret,
             // otherwise multi-host resolution can misclassify them as legacy/missing state.
-            emit error(job->errorString());
+            if (onError) onError(job->errorString());
             job->deleteLater();
             return;
         }
-        emit secretReady(job->textData());
+        const QString secret = job->textData();
+        if (onReady) onReady(secret);
         job->deleteLater();
     });
     job->start();
@@ -99,6 +110,28 @@ void SecretStore::deleteSecret() {
     job->start();
 }
 
+void SecretStore::armWalletOpenRetry() {
+    if (m_walletOpenRetryArmed) return;
+    m_walletOpenRetryArmed = QDBusConnection::sessionBus().connect(
+        QStringLiteral("org.kde.kwalletd6"),
+        QStringLiteral("/modules/kwalletd6"),
+        QStringLiteral("org.kde.KWallet"),
+        QStringLiteral("walletOpened"),
+        this, SLOT(onWalletOpened(QString)));
+}
+
+void SecretStore::onWalletOpened(const QString &wallet) {
+    Q_UNUSED(wallet);
+    QDBusConnection::sessionBus().disconnect(
+        QStringLiteral("org.kde.kwalletd6"),
+        QStringLiteral("/modules/kwalletd6"),
+        QStringLiteral("org.kde.KWallet"),
+        QStringLiteral("walletOpened"),
+        this, SLOT(onWalletOpened(QString)));
+    m_walletOpenRetryArmed = false;
+    listKWalletKeys();
+}
+
 void SecretStore::emitFilteredKWalletKeys(const QStringList &raw) {
     QStringList filtered;
     std::copy_if(raw.begin(), raw.end(), std::back_inserter(filtered), [&](const QString &k) {
@@ -112,100 +145,136 @@ void SecretStore::emitFilteredKWalletKeys(const QStringList &raw) {
     emit keysReady(filtered);
 }
 
+void SecretStore::asyncKWalletCall(const QString &method, const QVariantList &args,
+                                   std::function<void(const QDBusMessage &)> handler) {
+    QDBusMessage msg = QDBusMessage::createMethodCall(
+        QStringLiteral("org.kde.kwalletd6"),
+        QStringLiteral("/modules/kwalletd6"),
+        QStringLiteral("org.kde.KWallet"),
+        method);
+    msg.setArguments(args);
+    const QDBusPendingCall pending =
+        QDBusConnection::sessionBus().asyncCall(msg, kKWalletCallTimeoutMs);
+    auto *watcher = new QDBusPendingCallWatcher(pending, this);
+    connect(watcher, &QDBusPendingCallWatcher::finished, this,
+            [handler = std::move(handler)](QDBusPendingCallWatcher *w) {
+        handler(w->reply());
+        w->deleteLater();
+    });
+}
+
+void SecretStore::finishKeyListFailure(const QDBusMessage &reply, const QString &message) {
+    // A busy timeout means kwalletd exists but is waiting on its unlock
+    // dialog; arm a one-shot retry on walletOpened instead of giving up
+    // for the whole session.
+    const QDBusError::ErrorType err = QDBusError(reply).type();
+    if (err == QDBusError::NoReply || err == QDBusError::Timeout) {
+        armWalletOpenRetry();
+    }
+    m_listInFlight = false;
+    emit keyListError(message);
+    emit keysReady({});
+}
+
 void SecretStore::listKWalletKeys() {
-    QDBusInterface kwallet(
-        "org.kde.kwalletd6",
-        "/modules/kwalletd6",
-        "org.kde.KWallet",
-        QDBusConnection::sessionBus(),
-        this
-    );
+    if (m_listInFlight) return;
+    m_listInFlight = true;
 
-    if (!kwallet.isValid()) {
-        emit keyListError(QStringLiteral("KWallet D-Bus interface is not available"));
-        emit keysReady({});
-        return;
-    }
-
-    QDBusReply<QString> walletName = kwallet.call("networkWallet");
-    // qDebug() << "[ProxMon] networkWallet valid:" << walletName.isValid() << "value:" << walletName.value();
-    if (!walletName.isValid() || walletName.value().trimmed().isEmpty()) {
-        emit keyListError(QStringLiteral("Failed to resolve KWallet name"));
-        emit keysReady({});
-        return;
-    }
-
-    const QString wallet = walletName.value().trimmed();
-    QDBusReply<int> handle = kwallet.call("open", wallet, static_cast<qlonglong>(0), QStringLiteral("proxmox-monitor"));
-    // qDebug() << "[ProxMon] open handle valid:" << handle.isValid() << "value:" << handle.value() << "error:" << handle.error().message();
-    if (!handle.isValid() || handle.value() < 0) {
-        emit keyListError(QStringLiteral("Failed to open KWallet"));
-        emit keysReady({});
-        return;
-    }
-
-    QStringList raw;
-    QDBusReply<QStringList> keys = kwallet.call("entryList", handle.value(), QStringLiteral("ProxMon"), QStringLiteral("proxmox-monitor"));
-    // qDebug() << "[ProxMon] entryList(ProxMon) valid:" << keys.isValid() << "value:" << keys.value() << "error:" << keys.error().message();
-    if (keys.isValid()) {
-        raw = keys.value();
-    } else {
-        QDBusReply<QStringList> keysFallback = kwallet.call("entryList", handle.value(), m_service, QStringLiteral("proxmox-monitor"));
-        // qDebug() << "[ProxMon] entryList(fallback) valid:" << keysFallback.isValid() << "value:" << keysFallback.value() << "error:" << keysFallback.error().message();
-        if (keysFallback.isValid()) {
-            raw = keysFallback.value();
-        }
-    }
-
-    // Fallback: QProcess qdbus
-    if (raw.isEmpty()) {
-        if (m_kwalletListProcess) {
-            m_kwalletListProcess->deleteLater();
-            m_kwalletListProcess = nullptr;
+    asyncKWalletCall(QStringLiteral("networkWallet"), {},
+                     [this](const QDBusMessage &nameReply) {
+        const QString wallet = nameReply.type() == QDBusMessage::ReplyMessage
+            ? nameReply.arguments().value(0).toString().trimmed()
+            : QString();
+        if (wallet.isEmpty()) {
+            finishKeyListFailure(nameReply, QStringLiteral("Failed to resolve KWallet name"));
+            return;
         }
 
-        auto *proc = new QProcess(this);
-        m_kwalletListProcess = proc;
+        asyncKWalletCall(QStringLiteral("open"),
+            {wallet, static_cast<qlonglong>(0), QStringLiteral("proxmox-monitor")},
+            [this](const QDBusMessage &openReply) {
+                const int handle = openReply.type() == QDBusMessage::ReplyMessage
+                    ? openReply.arguments().value(0).toInt()
+                    : -1;
+                if (handle < 0) {
+                    finishKeyListFailure(openReply, QStringLiteral("Failed to open KWallet"));
+                    return;
+                }
+                startKWalletEntryList(handle);
+            });
+    });
+}
 
-        const QStringList args{
-            QStringLiteral("org.kde.kwalletd6"),
-            QStringLiteral("/modules/kwalletd6"),
-            QStringLiteral("org.kde.KWallet.entryList"),
-            QString::number(handle.value()),
-            QStringLiteral("ProxMon"),
-            QStringLiteral("proxmox-monitor")
-        };
-
-        connect(proc,
-                QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-                this,
-                [this, proc](int, QProcess::ExitStatus) {
-                    if (m_kwalletListProcess != proc) {
-                        proc->deleteLater();
-                        return;
-                    }
-                    m_kwalletListProcess = nullptr;
-                    emitFilteredKWalletKeys(parseKWalletListOutput(QString::fromUtf8(proc->readAllStandardOutput())));
-                    proc->deleteLater();
+void SecretStore::startKWalletEntryList(int handle) {
+    asyncKWalletCall(QStringLiteral("entryList"),
+        {handle, QStringLiteral("ProxMon"), QStringLiteral("proxmox-monitor")},
+        [this, handle](const QDBusMessage &reply) {
+            if (reply.type() == QDBusMessage::ReplyMessage) {
+                finishKeyListSuccess(reply.arguments().value(0).toStringList(), handle);
+                return;
+            }
+            asyncKWalletCall(QStringLiteral("entryList"),
+                {handle, m_service, QStringLiteral("proxmox-monitor")},
+                [this, handle](const QDBusMessage &fallbackReply) {
+                    const QStringList raw = fallbackReply.type() == QDBusMessage::ReplyMessage
+                        ? fallbackReply.arguments().value(0).toStringList()
+                        : QStringList();
+                    finishKeyListSuccess(raw, handle);
                 });
+        });
+}
 
-        connect(proc,
-                &QProcess::errorOccurred,
-                this,
-                [this, proc](QProcess::ProcessError) {
-                    if (m_kwalletListProcess != proc) {
-                        proc->deleteLater();
-                        return;
-                    }
-                    m_kwalletListProcess = nullptr;
-                    emit keyListError(QStringLiteral("Failed to read KWallet entry list"));
-                    emit keysReady({});
-                    proc->deleteLater();
-                });
-
-        proc->start(QStringLiteral("qdbus"), args);
+void SecretStore::finishKeyListSuccess(const QStringList &raw, int handle) {
+    if (!raw.isEmpty()) {
+        m_listInFlight = false;
+        emitFilteredKWalletKeys(raw);
         return;
     }
+    startQdbusFallback(handle);
+}
 
-    emitFilteredKWalletKeys(raw);
+// Fallback: QProcess qdbus
+void SecretStore::startQdbusFallback(int handle) {
+    if (m_kwalletListProcess) {
+        m_kwalletListProcess->deleteLater();
+        m_kwalletListProcess = nullptr;
+    }
+
+    auto *proc = new QProcess(this);
+    m_kwalletListProcess = proc;
+
+    const QStringList args{
+        QStringLiteral("org.kde.kwalletd6"),
+        QStringLiteral("/modules/kwalletd6"),
+        QStringLiteral("org.kde.KWallet.entryList"),
+        QString::number(handle),
+        QStringLiteral("ProxMon"),
+        QStringLiteral("proxmox-monitor")
+    };
+
+    connect(proc,QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),this,
+            [this, proc](int, QProcess::ExitStatus) {
+                if (m_kwalletListProcess != proc) {
+                    proc->deleteLater();
+                    return;
+                }
+                m_kwalletListProcess = nullptr;
+                m_listInFlight = false;
+                emitFilteredKWalletKeys(parseKWalletListOutput(QString::fromUtf8(proc->readAllStandardOutput())));
+                proc->deleteLater();
+            });
+
+    connect(proc,&QProcess::errorOccurred,this,[this, proc](QProcess::ProcessError) {
+                if (m_kwalletListProcess != proc) {
+                    proc->deleteLater();
+                    return;
+                }
+                m_kwalletListProcess = nullptr;
+                m_listInFlight = false;
+                emit keyListError(QStringLiteral("Failed to read KWallet entry list"));
+                emit keysReady({});
+                proc->deleteLater();
+            });
+
+    proc->start(QStringLiteral("qdbus"), args);
 }

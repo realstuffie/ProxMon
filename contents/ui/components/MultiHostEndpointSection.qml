@@ -9,11 +9,16 @@ ColumnLayout {
     id: root
 
     required property var endpoint
+    property int endpointIndex: 0
+    property bool anonymized: false
     property string sessionKey: endpoint ? endpoint.sessionKey : ""
-    property string endpointLabel: endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : "")
+    property string endpointLabel: anonymized
+        ? ("Endpoint " + (endpointIndex + 1))
+        : (endpoint && endpoint.label ? endpoint.label : (endpoint ? endpoint.host : ""))
     property string endpointError: endpoint && endpoint.error ? endpoint.error : ""
     property bool endpointOffline: endpoint ? !!endpoint.offline : false
-    property var nodes: endpoint && endpoint.nodes ? endpoint.nodes : []
+    // Per-endpoint diffing model owned by the controller (VariantListModel).
+    property var nodesModel: null
     property int uiRadiusL: 8
     property real uiBorderOpacity: 0.22
     property real uiMutedTextOpacity: 0.68
@@ -30,13 +35,7 @@ ColumnLayout {
     property var anonymizeVmId: null
     property var anonymizeVmName: null
     property var anonymizeLxcName: null
-    property var getVmsForNodeMulti: null
-    property var getLxcForNodeMulti: null
     property var isNodeCollapsed: null
-    property var getRunningVmsForNodeMulti: null
-    property var getTotalVmsForNodeMulti: null
-    property var getRunningLxcForNodeMulti: null
-    property var getTotalLxcForNodeMulti: null
     property var isActionBusy: null
     property string armedActionKey: ""
     property bool armedTimerRunning: false
@@ -62,20 +61,17 @@ ColumnLayout {
 
         RowLayout {
             anchors.fill: parent
-            anchors.margins: 8
+            anchors.leftMargin: 8
+            anchors.rightMargin: 8
             spacing: 6
-
-            Kirigami.Icon {
-                source: "server-database"
-                implicitWidth: 16
-                implicitHeight: 16
-                opacity: root.uiMutedTextOpacity
-            }
 
             PlasmaComponents.Label {
                 text: root.endpointLabel
                 font.bold: true
+                font.family: "JetBrains Mono"
                 Layout.fillWidth: true
+                Layout.fillHeight: true
+                verticalAlignment: Text.AlignVCenter
                 elide: Text.ElideRight
             }
 
@@ -85,12 +81,34 @@ ColumnLayout {
                 color: Kirigami.Theme.negativeTextColor
                 font.bold: true
                 font.pixelSize: 10
+                Layout.alignment: Qt.AlignVCenter
             }
 
             PlasmaComponents.Label {
-                text: root.endpoint ? (root.endpoint.host + ":" + root.endpoint.port) : ""
+                text: root.endpoint
+                    ? ((root.anonymized ? "192.168.x.x" : root.endpoint.host) + ":" + root.endpoint.port)
+                    : ""
                 opacity: 0.7
                 font.pixelSize: 10
+                Layout.alignment: Qt.AlignVCenter
+            }
+
+            PlasmaComponents.ToolButton {
+                flat: true
+                icon.name: "utilities-terminal"
+                visible: root.consoleEnabled && root.nodesModel && root.nodesModel.count === 1
+                enabled: !root.endpointOffline
+                implicitWidth: 24
+                implicitHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                    var node = root.nodesModel ? root.nodesModel.get(0) : null
+                    if (node && typeof root.onConsole === "function") {
+                        root.onConsole(root.sessionKey, "node", node.node, 0, node.node)
+                    }
+                }
+
+                PlasmaComponents.ToolTip { text: "Open host shell" }
             }
         }
     }
@@ -106,18 +124,18 @@ ColumnLayout {
     }
 
     Repeater {
-        model: root.nodes
+        model: root.nodesModel
 
         delegate: MultiHostNodeSection {
             required property int index
-            required property var modelData
+            required property var itemData
 
             sessionKey: root.sessionKey
             nodeIndex: index
-            nodeModel: modelData
-            nodeVms: root.getVmsForNodeMulti(root.sessionKey, modelData ? modelData.node : "")
-            nodeLxc: root.getLxcForNodeMulti(root.sessionKey, modelData ? modelData.node : "")
-            isCollapsed: root.isNodeCollapsed(modelData ? modelData.node : "", root.sessionKey)
+            nodeModel: itemData
+            vmsModel: itemData ? itemData.vmsModel : null
+            lxcsModel: itemData ? itemData.lxcsModel : null
+            isCollapsed: root.isNodeCollapsed(itemData ? itemData.node : "", root.sessionKey)
             uiRadiusL: root.uiRadiusL
             uiBorderOpacity: root.uiBorderOpacity
             scrollbarReserve: root.scrollbarReserve
@@ -126,10 +144,6 @@ ColumnLayout {
             anonymizeVmId: root.anonymizeVmId
             anonymizeVmName: root.anonymizeVmName
             anonymizeLxcName: root.anonymizeLxcName
-            getRunningVmsForNodeMulti: root.getRunningVmsForNodeMulti
-            getTotalVmsForNodeMulti: root.getTotalVmsForNodeMulti
-            getRunningLxcForNodeMulti: root.getRunningLxcForNodeMulti
-            getTotalLxcForNodeMulti: root.getTotalLxcForNodeMulti
             uiNodeCardOpacity: root.uiNodeCardOpacity
             uiWindowOpacity: root.uiWindowOpacity
             uiNodeColor: root.uiNodeColor

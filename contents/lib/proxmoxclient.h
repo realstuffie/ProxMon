@@ -10,58 +10,21 @@
 
 #include "pbstypes.h"
 
+class QTimer;
+
 class ProxmoxClient : public QObject {
     Q_OBJECT
-
-    Q_PROPERTY(QString host READ host WRITE setHost NOTIFY hostChanged)
-    Q_PROPERTY(int port READ port WRITE setPort NOTIFY portChanged)
-    Q_PROPERTY(QString tokenId READ tokenId WRITE setTokenId NOTIFY tokenIdChanged)
-    Q_PROPERTY(QString tokenSecret READ tokenSecret WRITE setTokenSecret NOTIFY tokenSecretChanged)
-    Q_PROPERTY(bool ignoreSslErrors READ ignoreSslErrors WRITE setIgnoreSslErrors NOTIFY ignoreSslErrorsChanged)
-    Q_PROPERTY(bool debugEnabled READ debugEnabled WRITE setDebugEnabled NOTIFY debugEnabledChanged)
 
 public:
     explicit ProxmoxClient(QObject *parent = nullptr);
     ~ProxmoxClient() override;
 
-    QString host() const { return m_host; }
-    void setHost(const QString &v);
-
-    int port() const { return m_port; }
-    void setPort(int v);
-
-    QString tokenId() const { return m_tokenId; }
-    void setTokenId(const QString &v);
-
-    QString tokenSecret() const { return m_tokenSecret; }
-    void setTokenSecret(const QString &v);
-
-    bool ignoreSslErrors() const { return m_ignoreSslErrors; }
-    void setIgnoreSslErrors(bool v);
-
-    bool debugEnabled() const { return m_debugEnabled; }
     void setDebugEnabled(bool value);
-
-    //Low latency properties for quick updates, but require mutating object state and are not multi-session friendly.
-    Q_PROPERTY(bool lowLatency READ lowLatency WRITE setLowLatency NOTIFY lowLatencyChanged)
-    Q_PROPERTY(QString trustedCertPem READ trustedCertPem WRITE setTrustedCertPem NOTIFY trustedCertPemChanged)
-    QString trustedCertPem() const { return m_trustedCertPem; }
-    void setTrustedCertPem(const QString &v);
-
-    Q_PROPERTY(QString trustedCertPath READ trustedCertPath WRITE setTrustedCertPath NOTIFY trustedCertPathChanged)
-    QString trustedCertPath() const { return m_trustedCertPath; }
-    void setTrustedCertPath(const QString &v);
-    bool lowLatency() const { return m_lowLatency; }
     void setLowLatency(bool v);
 
-    // Single-session (legacy)
-    Q_INVOKABLE void requestNodes(int seq);
-    Q_INVOKABLE void requestQemu(const QString &node, int seq);
-    Q_INVOKABLE void requestLxc(const QString &node, int seq);
-
-    // Multi-session: provide per-call connection info, without mutating object-wide properties.
+    // Per-call connection info keeps credentials scoped to one operation.
     // sessionKey is returned in reply/error so QML can merge results.
-    Q_INVOKABLE void requestNodesFor(const QString &sessionKey,
+    void requestNodesFor(const QString &sessionKey,
                                      const QString &host,
                                      int port,
                                      const QString &tokenId,
@@ -70,7 +33,7 @@ public:
                                      const QByteArray &trustedCertPem,
                                      const QString &trustedCertPath,
                                      int seq);
-    Q_INVOKABLE void requestQemuFor(const QString &sessionKey,
+    void requestQemuFor(const QString &sessionKey,
                                     const QString &host,
                                     int port,
                                     const QString &tokenId,
@@ -80,7 +43,7 @@ public:
                                     const QString &trustedCertPath,
                                     const QString &node,
                                     int seq);
-    Q_INVOKABLE void requestLxcFor(const QString &sessionKey,
+    void requestLxcFor(const QString &sessionKey,
                                    const QString &host,
                                    int port,
                                    const QString &tokenId,
@@ -90,10 +53,25 @@ public:
                                    const QString &trustedCertPath,
                                    const QString &node,
                                    int seq);
+    // Fetches RRD history (for a CPU/mem sparkline) and best-effort IP
+    // address in one call. statsKind: "qemu" | "lxc". Either leg can fail
+    // independently (e.g. no guest agent) without failing the whole call -
+    // statsError only fires if both legs come back empty.
+    void requestStatsFor(const QString &sessionKey,
+                                    const QString &host,
+                                    int port,
+                                    const QString &tokenId,
+                                    const QString &tokenSecret,
+                                    bool ignoreSslErrors,
+                                    const QByteArray &trustedCertPem,
+                                    const QString &trustedCertPath,
+                                    const QString &statsKind,
+                                    const QString &node,
+                                    int vmid,
+                                    int seq);
 
     // VM/CT actions: kind: "qemu" | "lxc"; action: "start" | "shutdown" | "reboot"
-    Q_INVOKABLE void requestAction(const QString &kind, const QString &node, int vmid, const QString &action, int seq);
-    Q_INVOKABLE void requestActionFor(const QString &sessionKey,
+    void requestActionFor(const QString &sessionKey,
                                       const QString &host,
                                       int port,
                                       const QString &tokenId,
@@ -107,7 +85,8 @@ public:
                                       const QString &action,
                                       int seq);
 
-    Q_INVOKABLE void requestVncProxy(const QString &sessionKey,
+    void requestVncProxy(const QString &sessionKey,
+                                  const QString &requestId,
                                   const QString &host,
                                   int port,
                                   const QString &tokenId,
@@ -119,7 +98,8 @@ public:
                                   const QString &kind,
                                   int vmid);
 
-    Q_INVOKABLE void requestTtyProxy(const QString &sessionKey,
+    void requestTtyProxy(const QString &sessionKey,
+                                 const QString &requestId,
                                  const QString &host,
                                  int port,
                                  const QString &tokenId,
@@ -130,11 +110,22 @@ public:
                                  const QString &node,
                                  int vmid);
 
+    void requestNodeTermProxy(const QString &sessionKey,
+                                 const QString &requestId,
+                                 const QString &host,
+                                 int port,
+                                 const QString &tokenId,
+                                 const QString &tokenSecret,
+                                 bool ignoreSslErrors,
+                                 const QByteArray &trustedCertPem,
+                                 const QString &trustedCertPath,
+                                 const QString &node);
+
     // Abort any in-flight network requests (useful when refreshing or timing out).
-    Q_INVOKABLE void cancelAll();
-    Q_INVOKABLE void cancelPVE();
-    Q_INVOKABLE void cancelPBS();
-    Q_INVOKABLE void fetchPBSDatastores(const QString &pbsHost,
+    void cancelAll();
+    void cancelRefreshRequests();
+    void cancelPBS();
+    void fetchPBSDatastores(const QString &pbsHost,
                                         int port,
                                         const QString &tokenId,
                                         const QString &tokenSecret,
@@ -146,20 +137,14 @@ signals:
     // user is the auth user returned by termproxy; sent over the
     // websocket as "user:ticket\n" before bidirectional traffic begins.
     // authHeader is the full "PVEAPIToken=USER@REALM!TOKENID=SECRET" string
-    // we used to obtain the termproxy ticket — Proxmox requires the same
+    // we used to obtain the termproxy ticket - Proxmox requires the same
     // header on the subsequent vncwebsocket upgrade or it 401s.
-    void ttyProxyReady(const QString &sessionKey, const QString &host, const QString &node, int vmid, int port, const QString &ticket, const QString &user, const QByteArray &authHeader);
-    void ttyProxyError(const QString &sessionKey, const QString &node, int vmid, const QString &error);
-    void hostChanged();
-    void portChanged();
-    void tokenIdChanged();
-    void tokenSecretChanged();
-    void ignoreSslErrorsChanged();
-    void debugEnabledChanged();
-    void trustedCertPemChanged();
-    void trustedCertPathChanged();
-    void lowLatencyChanged();
+    void ttyProxyReady(const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int vmid, int port, const QString &ticket, const QString &user, const QByteArray &authHeader);
+    void ttyProxyError(const QString &sessionKey, const QString &requestId, const QString &node, int vmid, const QString &error);
+    void nodeTermProxyReady(const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int port, const QString &ticket, const QString &user, const QByteArray &authHeader);
+    void nodeTermProxyError(const QString &sessionKey, const QString &requestId, const QString &node, const QString &error);
     void vncProxyReady(const QString &sessionKey,
+                   const QString &requestId,
                    const QString &host,
                    const QString &node,
                    const QString &kind,
@@ -170,10 +155,14 @@ signals:
                    const QByteArray &authHeader,
                    bool ignoreSsl);
     void vncProxyError(const QString &sessionKey,
+                   const QString &requestId,
                    const QString &node,
                    const QString &kind,
                    int vmid,
                    const QString &message);
+    // data is a map with optional "rrd" (array of RRD samples) and "ip" keys.
+    void statsReady(const QString &sessionKey, const QString &statsKind, const QString &node, int vmid, const QVariant &data);
+    void statsError(const QString &sessionKey, const QString &node, int vmid, const QString &message);
 
     // kind: "nodes" | "qemu" | "lxc"
     void reply(int seq, const QString &kind, const QString &node, const QVariant &data);
@@ -215,10 +204,12 @@ signals:
     void pbsSnapshotsReceived(const QString &pbsHost,
                               const QString &datastore,
                               const QList<PBSSnapshot> &snapshots);
-    void pbsError(const QString &pbsHost, const QString &message);
+    void pbsDatastoresError(const QString &pbsHost, const QString &message);
+    void pbsSnapshotsError(const QString &pbsHost,
+                           const QString &datastore,
+                           const QString &message);
 
 private:
-    void request(const QString &path, int seq, const QString &kind, const QString &node);
     void requestFor(const QString &sessionKey,
                     const QString &host,
                     int port,
@@ -232,12 +223,6 @@ private:
                     const QString &kind,
                     const QString &node);
 
-    void post(const QString &path,
-              int seq,
-              const QString &actionKind,
-              const QString &node,
-              int vmid,
-              const QString &action);
     void postFor(const QString &sessionKey,
                  const QString &host,
                  int port,
@@ -268,16 +253,11 @@ private:
                         const QString &action);
 
     QNetworkAccessManager m_nam;
-    QString m_host;
-    int m_port = 8006;
-    QString m_tokenId;
-    QString m_tokenSecret;
-    bool m_ignoreSslErrors = false;
     bool m_debugEnabled = false;
-    QString m_trustedCertPem;
-    QString m_trustedCertPath;
     bool m_lowLatency = false;
-    QSet<QNetworkReply *> m_inFlight;
+    QSet<QNetworkReply *> m_refreshInFlight;
+    QSet<QNetworkReply *> m_interactiveInFlight;
     QSet<QNetworkReply *> m_pbsInFlight;
     QSet<QNetworkReply *> m_taskInFlight;
+    QSet<QTimer *> m_taskPollTimers;
 };

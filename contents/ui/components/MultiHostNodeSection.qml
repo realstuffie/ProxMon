@@ -12,8 +12,9 @@ ColumnLayout {
     required property int nodeIndex
     required property var nodeModel
     property string nodeName: nodeModel ? nodeModel.node : ""
-    property var nodeVms: []
-    property var nodeLxc: []
+    // Per-node diffing models owned by the controller (VariantListModel).
+    property var vmsModel: null
+    property var lxcsModel: null
     property bool isCollapsed: false
     property int uiRadiusL: 8
     property real uiBorderOpacity: 0.22
@@ -30,10 +31,6 @@ ColumnLayout {
     property var anonymizeVmId: null
     property var anonymizeVmName: null
     property var anonymizeLxcName: null
-    property var getRunningVmsForNodeMulti: null
-    property var getTotalVmsForNodeMulti: null
-    property var getRunningLxcForNodeMulti: null
-    property var getTotalLxcForNodeMulti: null
     property var isActionBusy: null
     property string armedActionKey: ""
     property bool armedTimerRunning: false
@@ -50,7 +47,6 @@ ColumnLayout {
 
     Rectangle {
         Layout.fillWidth: true
-        Layout.rightMargin: root.scrollbarReserve
         Layout.preferredHeight: 70
         radius: root.uiRadiusL
         color: Qt.rgba(root.uiNodeColor.r, root.uiNodeColor.g, root.uiNodeColor.b, root.uiNodeCardOpacity * root.uiWindowOpacity)
@@ -91,24 +87,6 @@ ColumnLayout {
                     elide: Text.ElideRight
                 }
 
-                Rectangle {
-                    implicitWidth: 52
-                    implicitHeight: 16
-                    radius: root.uiRadiusL
-                    color: root.nodeModel && root.nodeModel.status === "online"
-                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
-                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
-
-                    PlasmaComponents.Label {
-                        anchors.centerIn: parent
-                        text: root.nodeModel ? root.nodeModel.status : ""
-                        color: "white"
-                        font.pixelSize: 9
-                    }
-                }
-
-                Item { }
-
                 RowLayout {
                     spacing: 4
                     visible: root.isCollapsed
@@ -121,7 +99,7 @@ ColumnLayout {
                     }
 
                     PlasmaComponents.Label {
-                        text: root.getRunningVmsForNodeMulti(root.sessionKey, root.nodeName) + "/" + root.getTotalVmsForNodeMulti(root.sessionKey, root.nodeName)
+                        text: (root.vmsModel ? root.vmsModel.runningCount : 0) + "/" + (root.vmsModel ? root.vmsModel.count : 0)
                         font.pixelSize: 10
                         opacity: 0.7
                     }
@@ -136,9 +114,25 @@ ColumnLayout {
                     }
 
                     PlasmaComponents.Label {
-                        text: root.getRunningLxcForNodeMulti(root.sessionKey, root.nodeName) + "/" + root.getTotalLxcForNodeMulti(root.sessionKey, root.nodeName)
+                        text: (root.lxcsModel ? root.lxcsModel.runningCount : 0) + "/" + (root.lxcsModel ? root.lxcsModel.count : 0)
                         font.pixelSize: 10
                         opacity: 0.7
+                    }
+                }
+
+                Rectangle {
+                    implicitWidth: 52
+                    implicitHeight: 16
+                    radius: root.uiRadiusL
+                    color: root.nodeModel && root.nodeModel.status === "online"
+                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
+                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
+
+                    PlasmaComponents.Label {
+                        anchors.centerIn: parent
+                        text: root.nodeModel ? root.nodeModel.status : ""
+                        color: "white"
+                        font.pixelSize: 9
                     }
                 }
             }
@@ -158,10 +152,22 @@ ColumnLayout {
 
                 Item { Layout.fillWidth: true }
 
-                PlasmaComponents.Label {
-                    text: root.nodeModel ? (Math.floor(root.nodeModel.uptime / 86400) + "d " + Math.floor((root.nodeModel.uptime % 86400) / 3600) + "h") : ""
-                    font.pixelSize: 11
-                    opacity: 0.7
+                RowLayout {
+                    spacing: 4
+
+                    Kirigami.Icon {
+                        implicitWidth: 18
+                        implicitHeight: 18
+                        Layout.alignment: Qt.AlignVCenter
+                        source: "chronometer"
+                    }
+
+                    PlasmaComponents.Label {
+                        text: root.nodeModel ? (Math.floor(root.nodeModel.uptime / 86400) + "d " + Math.floor((root.nodeModel.uptime % 86400) / 3600) + "h") : ""
+                        font.pixelSize: 12
+                        font.family: "JetBrains Mono"
+                        opacity: 0.85
+                    }
                 }
             }
         }
@@ -176,7 +182,7 @@ ColumnLayout {
 
         ColumnLayout {
             Layout.fillWidth: true
-            visible: root.nodeVms.length > 0
+            visible: root.vmsModel && root.vmsModel.count > 0
             spacing: 2
 
             RowLayout {
@@ -190,23 +196,23 @@ ColumnLayout {
                 }
 
                 PlasmaComponents.Label {
-                    text: "VMs (" + root.getRunningVmsForNodeMulti(root.sessionKey, root.nodeName) + "/" + root.nodeVms.length + ")"
+                    text: "VMs (" + (root.vmsModel ? root.vmsModel.runningCount : 0) + "/" + (root.vmsModel ? root.vmsModel.count : 0) + ")"
                     font.bold: true
                     font.pixelSize: 11
                 }
             }
 
             Repeater {
-                model: root.nodeVms
+                model: root.vmsModel
 
                 delegate: VmRow {
                     required property int index
-                    required property var modelData
+                    required property var itemData
 
                     vmIndex: index
-                    vmModel: modelData
+                    vmModel: itemData
                     nodeName: root.nodeName
-                    busy: root.isActionBusy(root.nodeName, "qemu", modelData.vmid, root.sessionKey)
+                    busy: root.isActionBusy(root.nodeName, "qemu", itemData.vmid, root.sessionKey)
                     armedActionKey: root.armedActionSessionKey === root.sessionKey
                         ? root.armedActionKey.replace(root.sessionKey + "::", "")
                         : ""
@@ -236,7 +242,7 @@ ColumnLayout {
 
         ColumnLayout {
             Layout.fillWidth: true
-            visible: root.nodeLxc.length > 0
+            visible: root.lxcsModel && root.lxcsModel.count > 0
             spacing: 2
 
             RowLayout {
@@ -250,23 +256,23 @@ ColumnLayout {
                 }
 
                 PlasmaComponents.Label {
-                    text: "Containers (" + root.getRunningLxcForNodeMulti(root.sessionKey, root.nodeName) + "/" + root.nodeLxc.length + ")"
+                    text: "Containers (" + (root.lxcsModel ? root.lxcsModel.runningCount : 0) + "/" + (root.lxcsModel ? root.lxcsModel.count : 0) + ")"
                     font.bold: true
                     font.pixelSize: 11
                 }
             }
 
             Repeater {
-                model: root.nodeLxc
+                model: root.lxcsModel
 
                 delegate: LxcRow {
                     required property int index
-                    required property var modelData
+                    required property var itemData
 
                     ctIndex: index
-                    ctModel: modelData
+                    ctModel: itemData
                     nodeName: root.nodeName
-                    busy: root.isActionBusy(root.nodeName, "lxc", modelData.vmid, root.sessionKey)
+                    busy: root.isActionBusy(root.nodeName, "lxc", itemData.vmid, root.sessionKey)
                     armedActionKey: root.armedActionSessionKey === root.sessionKey
                         ? root.armedActionKey.replace(root.sessionKey + "::", "")
                         : ""
@@ -295,7 +301,7 @@ ColumnLayout {
 
         PlasmaComponents.Label {
             text: "No VMs or Containers"
-            visible: root.nodeVms.length === 0 && root.nodeLxc.length === 0
+            visible: (!root.vmsModel || root.vmsModel.count === 0) && (!root.lxcsModel || root.lxcsModel.count === 0)
             opacity: 0.5
             font.pixelSize: 10
             Layout.leftMargin: 4
