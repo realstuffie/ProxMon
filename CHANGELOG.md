@@ -3,6 +3,7 @@
 ## Unreleased
 
 ## v0.8.0
+
 - fix(console): honor configured trusted CA on VNC/LXC WebSocket connections (single-host, multi-host shared or per-endpoint), matching the API path — previously only the ticket-fetch request used it
 - fix(controller): auto-retry timer now actually schedules the retry after the computed backoff (previously only the banner text was set)
 - fix(controller): wire lowLatency setting through to request timeouts (10s → 5s when enabled)
@@ -20,6 +21,7 @@
 - fix(NodeSection): add missing right margin on node card to match the VM/LXC list's scrollbar reserve
 
 ## v0.7.3
+
 - fix(proxmoxclient): isolate task poll requests from refresh cancellation to prevent stuck busy spinner
 - fix(main): add action busy guard on status change — clears spinner via checkStateChanges if onActionReply never fires
 - fix(config): UI alignment and field sizing across all config tabs for consistent cross-distro rendering
@@ -35,12 +37,14 @@
 - chore(icons): update lxc/vm icons
 
 ## v0.7.2
+
 - fix(VmRow/LxcRow): bundle JetBrains Mono for consistent cross-distro font metrics
 - fix(VmRow/LxcRow): fix monospace text vertical centering
 
 Tested on Ubuntu 26 (KDE 6.6.4), Fedora 44 (KDE 6.6.5), Manjaro (KDE 6.6.5), openSUSE Tumbleweed (KDE 6.6.5)
 
 ## v0.7.1
+
 - fix(VmRow/LxcRow): normalize row spacing, monospace stats labels at 12px, wider containers, vertical centering
 - fix(VmRow/LxcRow): add left margin to power buttons; reduce row left margin 8→4px
 - fix(VmRow/LxcRow): tighten stats block (90→80px) and mem label (46→34px) to close PBS-to-stats gap
@@ -52,6 +56,7 @@ Tested on Ubuntu 26 (KDE 6.6.4), Fedora 44 (KDE 6.6.5), Manjaro (KDE 6.6.5), ope
 - docs(README): tighten security and SSL wording
 
 ## v0.7.0
+
 - Feat: power actions toggle — enable/disable start/stop/restart buttons per endpoint
 - Fix: collapse backup status row layout when hidden (VmRow, LxcRow)
 - Fix: TapHandler hitbox by setting explicit width/height on compact representation root
@@ -153,6 +158,7 @@ Tested on Ubuntu 26 (KDE 6.6.4), Fedora 44 (KDE 6.6.5), Manjaro (KDE 6.6.5), ope
 - Fixed icon animations
 
 ## v0.3.1
+
 - Added Kirigami migration for Plasma 6.6.2 compatibility
 - Fixed PlasmaCore.Units/Theme deprecation warnings
 

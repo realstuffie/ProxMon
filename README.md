@@ -69,7 +69,7 @@
 ## Features
 
 | | |
-|---|---|
+| --- | --- |
 | **Real-time monitoring** | Node status (CPU, memory, uptime) with VM and LXC container tracking |
 | **VNC console** | GPU-accelerated in-widget VNC sessions with full keyboard, mouse, and scroll input |
 | **LXC terminal** | Native terminal emulator for containers with automatic resize |
@@ -137,6 +137,14 @@ bash install.sh --no-deps
 | Permission   | Path   | Purpose                          |
 |--------------|--------|----------------------------------|
 | `VM.Console` | `/vms` | VNC console for VMs, TTY for LXCs |
+
+**Stats panel (guest IP)**
+
+| Permission          | Path   | Purpose                                         |
+|---------------------|--------|-------------------------------------------------|
+| `VM.GuestAgent.Audit` | `/vms` | Read guest IP via the QEMU agent (VMs only; optional) |
+
+> **Note:** `VM.GuestAgent.Audit` is only needed to show a VM's IP in the stats panel, and only for VMs (it uses the QEMU guest agent). Without it, the CPU/mem graph still works and the IP simply shows N/A. Container IPs need no extra permission.
 
 > **Privilege Separation note:** if your token has privilege separation enabled, effective permissions are the *intersection* of user and token permissions. Grant roles to both, or disable privilege separation.
 
@@ -344,11 +352,13 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 <summary><strong>v0.7.2 · v0.7.1 · v0.7.0 · v0.6.x</strong></summary>
 
 **v0.7.2**
+
 - Fix: bundle JetBrains Mono for consistent cross-distro font metrics
 - Fix: monospace text vertical centering in VM and LXC rows
 - Tested on Ubuntu 26 (KDE 6.6.4), Fedora 44 (KDE 6.6.5), Manjaro (KDE 6.6.5), openSUSE Tumbleweed (KDE 6.6.5)
 
 **v0.7.1**
+
 - Fix: normalize row spacing, monospace stats labels, vertical centering in VM and LXC rows
 - Fix: tighten stats block and mem label width to close visual gap between cpu/mem and PBS column
 - Fix: add left margin to power buttons; reduce row left margin 8→4px
@@ -358,6 +368,7 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 - Fix: treat task WARNINGS as non-fatal
 
 **v0.7.0**
+
 - Power actions toggle — enable/disable start/stop/restart buttons per endpoint
 - LXC terminal: reworked data path with copy/paste support
 - SSL warning text now uses bright red; security warnings added to ignore SSL toggles
@@ -367,12 +378,14 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 - Build: mold linker support
 
 **v0.6.1**
+
 - Fix: closing the VNC console window during connection no longer crashes plasmashell (use-after-free + deadlock in teardown path)
 - Fix: PBS in-flight requests now correctly aborted by `cancelAll()` alongside PVE requests
 - Fix: per-endpoint SSL certificate now correctly passed to VNC and TTY proxy requests in multi-host mode
 - Docs: added Security section to README
 
 **v0.6.0**
+
 - VNC console for VMs — GPU-accelerated rendering, full keyboard/mouse/scroll, dynamic resize, auto-reconnect
 - LXC terminal — native terminal emulator with automatic resize and wake support for silent containers
 - Credentials handled securely in C++ — tickets and auth headers never exposed to QML
