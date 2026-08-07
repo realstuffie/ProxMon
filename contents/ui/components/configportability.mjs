@@ -52,6 +52,7 @@ const BOOL_KEYS = {
     "multiHostSharedCert": true,
     "consoleEnabled": true,
     "powerActionsEnabled": true,
+    "statsEnabled": true,
     "enableNotifications": true,
     "notifyOnStart": true,
     "notifyOnStop": true,

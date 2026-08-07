@@ -1707,7 +1707,7 @@ PlasmoidItem {
                         }
                         getStatsData: root.getStatsData
                         isStatsLoading: root.isStatsLoading
-                        statsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
+                        statsEnabled: Plasmoid.configuration.statsEnabled !== false
                         consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                         powerActionsEnabled: Plasmoid.configuration.powerActionsEnabled !== false
                     }

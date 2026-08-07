@@ -130,6 +130,10 @@ KCM.SimpleKCM {
     property alias cfg_powerActionsEnabled: powerActionsEnabledCheck.checked
     property bool cfg_powerActionsEnabledDefault: true
 
+    // Stats panel toggle
+    property alias cfg_statsEnabled: statsEnabledCheck.checked
+    property bool cfg_statsEnabledDefault: true
+
     //Low latency mode (shorter network timeouts, may increase error rate on slow connections)
     property alias cfg_lowLatency: lowLatencyCheck.checked
     property bool cfg_lowLatencyDefault: false
@@ -347,6 +351,22 @@ KCM.SimpleKCM {
 
         QQC2.Label {
             text: "Shows start, shutdown, and reboot buttons on VM and container rows. Disable to make the widget read-only."
+            font.pixelSize: 11
+            opacity: 0.6
+            Layout.fillWidth: true
+            wrapMode: Text.WordWrap
+        }
+
+        QQC2.CheckBox {
+            id: statsEnabledCheck
+            text: "Enable stats panel (CPU/memory graph, IP)"
+            checked: root.cfg_statsEnabled
+            onCheckedChanged: root.cfg_statsEnabled = checked
+            Layout.leftMargin: 35
+        }
+
+        QQC2.Label {
+            text: "Shows a stats button on VM and container rows. Clicking it expands a CPU/memory graph (last hour) and the guest IP address."
             font.pixelSize: 11
             opacity: 0.6
             Layout.fillWidth: true

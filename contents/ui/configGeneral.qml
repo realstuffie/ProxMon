@@ -75,6 +75,8 @@ KCM.SimpleKCM {
     property string cfg_terminalSizeDefault: "medium"
     property bool cfg_powerActionsEnabled: true
     property bool cfg_powerActionsEnabledDefault: true
+    property bool cfg_statsEnabled: true
+    property bool cfg_statsEnabledDefault: true
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
     property string cfg_compactMode: "cpu"
@@ -271,6 +273,7 @@ KCM.SimpleKCM {
             "consoleEnabled": cfg_consoleEnabled,
             "terminalSize": cfg_terminalSize,
             "powerActionsEnabled": cfg_powerActionsEnabled,
+            "statsEnabled": cfg_statsEnabled,
             "defaultSorting": cfg_defaultSorting,
             "compactMode": cfg_compactMode,
             "enableNotifications": cfg_enableNotifications,

@@ -41,7 +41,7 @@ TestCase {
         verify(res.ok, res.error)
         var env = JSON.parse(res.jsonText)
         var keys = CP.whitelistedKeys()
-        compare(keys.length, 46) // canary: adding a config key must be a conscious decision
+        compare(keys.length, 47) // canary: adding a config key must be a conscious decision
         for (var i = 0; i < keys.length; i++)
             verify(env.config[keys[i]] !== undefined, "export is missing key: " + keys[i])
     }

@@ -174,15 +174,19 @@ Rectangle {
         }
 
         Item {
-            // Fixed-width reservation so row width stays consistent across
-            // all rows regardless of how many icons are visible (stats +
-            // shutdown + reboot together need 74px - 48 was too narrow).
-            // Actual buttons live in an inner RowLayout anchored to the
-            // right edge, so they stay flush against the console button
-            // instead of being left-packed with dead space trailing.
-            Layout.preferredWidth: 80
-            Layout.minimumWidth: 80
-            Layout.maximumWidth: 80
+            // Fixed-width reservation so row width stays consistent across all
+            // rows regardless of running state. Width tracks which features are
+            // enabled: stats needs 1 slot, power actions up to 2 (shutdown +
+            // reboot). Each slot is a button plus its spacing, so the
+            // reservation shrinks when a feature is toggled off instead of
+            // leaving dead space. Actual buttons live in an inner RowLayout
+            // anchored to the right edge so they stay flush against the console
+            // button.
+            readonly property int reserveSlots: (root.statsEnabled ? 1 : 0) + (root.powerActionsEnabled ? 2 : 0)
+            readonly property int reservePx: reserveSlots > 0 ? reserveSlots * (root.uiActionButtonSize + 4) : 0
+            Layout.preferredWidth: reservePx
+            Layout.minimumWidth: reservePx
+            Layout.maximumWidth: reservePx
             Layout.leftMargin: 6
             Layout.rightMargin: 1
             Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
