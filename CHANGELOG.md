@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## v0.8.1
+
+- feat(configBehavior): add a toggle to enable/disable the stats panel, independent of power actions (defaults on; included in Backup/Restore and defaults)
+- fix(VmRow/LxcRow): action-button reservation width now tracks which features are enabled, so the row tightens up instead of leaving dead space when the stats or power buttons are toggled off
+
 ## v0.8.0
 
 - fix(console): honor configured trusted CA on VNC/LXC WebSocket connections (single-host, multi-host shared or per-endpoint), matching the API path — previously only the ticket-fetch request used it

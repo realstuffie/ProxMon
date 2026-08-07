@@ -9,7 +9,7 @@
 <p>Live node, VM &amp; container stats · in-widget VNC &amp; LXC consoles · PBS backup status · multi-host.</p>
 
 <p>
-  <img src="https://img.shields.io/badge/version-0.8.0-1d99f3" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.8.1-1d99f3" alt="Version" />
   <img src="https://img.shields.io/badge/license-GPL--3.0--or--later-4caf50" alt="License" />
   <img src="https://img.shields.io/badge/KDE%20Plasma-6.0%2B-1d99f3?logo=kde&amp;logoColor=white" alt="KDE Plasma 6" />
   <img src="https://img.shields.io/badge/Proxmox%20VE-7.0%2B-e57000?logo=proxmox&amp;logoColor=white" alt="Proxmox VE 7+" />
@@ -309,7 +309,15 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 ## Changelog
 
 <details>
-<summary><strong>v0.8.0</strong> (latest)</summary>
+<summary><strong>v0.8.1</strong> (latest)</summary>
+
+- New: toggle to enable/disable the stats panel, independent of power actions
+- Fixed: action-button reservation width now tracks enabled features, no dead space when toggled off
+
+</details>
+
+<details>
+<summary><strong>v0.8.0</strong></summary>
 
 - Fix: honor configured trusted CA on VNC/LXC WebSocket connections
 - Fix: auto-retry timer now schedules the retry after the computed backoff
