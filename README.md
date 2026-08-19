@@ -33,7 +33,7 @@
   <tr>
     <td rowspan="2" align="center" valign="middle"><div align="center">
       <img src="screenshots/widget-expanded.png" alt="Expanded view" width="330" /><br />
-      <em>Expanded view — nodes, VMs &amp; containers</em>
+      <em>Expanded view: nodes, VMs &amp; containers</em>
     </div></td>
     <td align="center" valign="top"><div align="center">
       <img src="screenshots/widget-pannel.png" alt="Compact panel label" width="360" /><br />
@@ -77,7 +77,7 @@
 | **Multi-host** | Monitor up to 5 Proxmox endpoints simultaneously |
 | **Power commands** | Start, stop, and restart VMs and containers |
 | **Desktop notifications** | State-change alerts with rate limiting and filters |
-| **Secure by design** | API token auth, keychain storage, custom CA support — [details below](#security) |
+| **Secure by design** | API token auth, keychain storage, custom CA support, [details below](#security) |
 | **Appearance controls** | Custom running/stopped/node colors with live preview, card tint, window opacity |
 | **Flexible panel label** | Show average CPU, running workloads, error state, or last update time |
 | **Theme integration** | Adapts to your Plasma theme with per-color fallback to theme defaults |
@@ -160,9 +160,9 @@ pveum user token add monitor@pve plasma-monitor
 
 ## Proxmox Backup Server Setup
 
-1. **Configuration → Access Control → Users → Add** — create e.g. `proxmon@pbs`
-2. **Configuration → Access Control → API Tokens → Add** — select the user, set a token name
-3. **Configuration → Access Control → Permissions → Add** — path `/datastore/YourDatastoreName`, role `DatastoreReader`. Copy the token secret (shown only once).
+1. **Configuration → Access Control → Users → Add.** Create e.g. `proxmon@pbs`
+2. **Configuration → Access Control → API Tokens → Add.** Select the user, set a token name
+3. **Configuration → Access Control → Permissions → Add.** Path `/datastore/YourDatastoreName`, role `DatastoreReader`. Copy the token secret (shown only once).
 
 Token ID format: `user@pbs!tokenname`
 
@@ -179,17 +179,17 @@ Token ID format: `user@pbs!tokenname`
 
 Right-click the widget → **Configure Proxmox Monitor**.
 
-- **Connection** — Host, Port, Token ID (`user@realm!tokenname`), Token Secret, SSL verification, trusted cert PEM or file path, refresh interval. Click **Update Keyring** after changing the secret.
-- **Behavior** — Sorting, compact panel label mode (Avg CPU, running workloads, error state, last update), notifications, rate limiting, privacy (redact token fragments in notifications).
-- **Appearance** — Custom running/stopped/node colors, per-color hex or RGB input, card tint opacity, window opacity, live preview with one-click theme defaults.
+- **Connection.** Host, Port, Token ID (`user@realm!tokenname`), Token Secret, SSL verification, trusted cert PEM or file path, refresh interval. Click **Update Keyring** after changing the secret.
+- **Behavior.** Sorting, compact panel label mode (Avg CPU, running workloads, error state, last update), notifications, rate limiting, privacy (redact token fragments in notifications).
+- **Appearance.** Custom running/stopped/node colors, per-color hex or RGB input, card tint opacity, window opacity, live preview with one-click theme defaults.
 
 ## Security
 
-- **Keychain storage** — API token secrets live in your system keyring (QtKeychain), never written to disk in plaintext. Read on demand and held in memory only for the duration of a request.
-- **Isolated from the UI layer** — Credentials are never exposed to the QML/JavaScript layer. Auth tokens and VNC tickets pass directly between native C++ components and are zeroed from memory immediately after use.
-- **SSL/TLS** — Connections use HTTPS/WSS. Supply your own CA certificate for self-signed setups. "Ignore SSL" disables all TLS verification and encryption — only enable it when **all** other options are exhausted.
-- **Notification privacy** — Token identifiers are redacted from desktop notifications by default.
-- **Known limitation** — The VNC console uses a local loopback socket to bridge the native VNC client and the Proxmox WebSocket endpoint. There's a brief window where another local process could connect to that socket; worst case is a failed connection — no credentials can be extracted this way.
+- **Keychain storage.** API token secrets live in your system keyring (QtKeychain), never written to disk in plaintext. They're read on demand and held in memory only for the duration of a request.
+- **Isolated from the UI layer.** Credentials are never exposed to the QML/JavaScript layer. Auth tokens and VNC tickets pass directly between native C++ components and are zeroed from memory immediately after use.
+- **SSL/TLS.** Connections use HTTPS/WSS. Supply your own CA certificate for self-signed setups. "Ignore SSL" disables all TLS verification and encryption, so only enable it once **all** other options are exhausted.
+- **Notification privacy.** Token identifiers are redacted from desktop notifications by default.
+- **Known limitation.** The VNC console uses a local loopback socket to bridge the native VNC client and the Proxmox WebSocket endpoint. There's a brief window where another local process could connect to that socket. Worst case is a failed connection; no credentials can be extracted this way.
 
 ## Troubleshooting
 
@@ -245,7 +245,7 @@ tail -f ~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/rebuild.log
 <summary><strong>Known bugs / limitations</strong></summary>
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Legacy keys are no longer auto-migrated and can break the widget. If you see "Missing Token Secret" or odd behavior, open KWallet, remove any ProxMon-related entries, re-enter the secret in settings, and click **Update Keyring**. Wait a moment, or log out and back in.
-- **LXC terminal — resize reflow not guaranteed:** resizing the terminal window sends `SIGWINCH` to the running process, but reflow behavior varies by application. Shells and editors usually redraw correctly; other programs may not reflow until the next render or keypress. This is a quirk of most terminal emulators, not specific to ProxMon.
+- **LXC terminal resize, reflow not guaranteed.** Resizing the terminal window sends `SIGWINCH` to the running process, but reflow behavior varies by application. Shells and editors usually redraw correctly; other programs may not reflow until the next render or keypress. This is a quirk of most terminal emulators, not specific to ProxMon.
 
 </details>
 
@@ -285,12 +285,12 @@ rm -f ~/.local/share/icons/hicolor/scalable/apps/lxc.svg
 
 ## Credits
 
-- [Proxmox VE](https://www.proxmox.com/) — Virtualization platform
-- [KDE Plasma](https://kde.org/plasma-desktop/) — Desktop environment
-- [noVNC](https://github.com/novnc/noVNC) — DOM key table ported from `core/input/domkeytable.js` (MPL 2.0)
-- [QTermWidget](https://github.com/lxqt/qtermwidget) — LXC terminal emulator widget (LGPL-2.0+)
-- [LibVNCClient](https://github.com/LibVNC/libvncserver) — VNC client support (GPL-2.0-or-later)
-- [QtKeychain](https://github.com/frankosterfeld/qtkeychain) — secure credential storage (BSD-3-Clause)
+- [Proxmox VE](https://www.proxmox.com/), virtualization platform
+- [KDE Plasma](https://kde.org/plasma-desktop/), desktop environment
+- [noVNC](https://github.com/novnc/noVNC), DOM key table ported from `core/input/domkeytable.js` (MPL 2.0)
+- [QTermWidget](https://github.com/lxqt/qtermwidget), LXC terminal emulator widget (LGPL-2.0+)
+- [LibVNCClient](https://github.com/LibVNC/libvncserver), VNC client support (GPL-2.0-or-later)
+- [QtKeychain](https://github.com/frankosterfeld/qtkeychain), secure credential storage (BSD-3-Clause)
 
 ### Unit tests
 
@@ -340,7 +340,7 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 <details>
 <summary><strong>v0.7.3</strong></summary>
 
-- Refactor: node card header — status pill replaces computer icon, always-visible VM/CT counts
+- Refactor: node card header, status pill replaces computer icon, always-visible VM/CT counts
 - Refactor: uptime shows alarm icon, JetBrains Mono font, right-aligned in stats row
 - Chore: remove legacy secret key candidate fallback chain
 - Fix: isolate task poll requests from refresh cancellation to prevent stuck busy spinner
@@ -377,7 +377,7 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 
 **v0.7.0**
 
-- Power actions toggle — enable/disable start/stop/restart buttons per endpoint
+- Power actions toggle: enable/disable start/stop/restart buttons per endpoint
 - LXC terminal: reworked data path with copy/paste support
 - SSL warning text now uses bright red; security warnings added to ignore SSL toggles
 - Renamed Console section to Features in behavior settings
@@ -394,10 +394,10 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 
 **v0.6.0**
 
-- VNC console for VMs — GPU-accelerated rendering, full keyboard/mouse/scroll, dynamic resize, auto-reconnect
-- LXC terminal — native terminal emulator with automatic resize and wake support for silent containers
-- Credentials handled securely in C++ — tickets and auth headers never exposed to QML
-- Multi-host trusted cert toggle — shared or per-endpoint
+- VNC console for VMs: GPU-accelerated rendering, full keyboard/mouse/scroll, dynamic resize, auto-reconnect
+- LXC terminal: native terminal emulator with automatic resize and wake support for silent containers
+- Credentials handled securely in C++: tickets and auth headers never exposed to QML
+- Multi-host trusted cert toggle: shared or per-endpoint
 - Various config and stability fixes; bump bundled QtKeychain
 
 </details>

@@ -13,5 +13,5 @@
 
 Include your KDE Plasma version (`plasmashell --version`), Proxmox VE version,
 and steps to reproduce. Never include API token IDs, secrets, keyring contents,
-or VNC tickets in a report — the widget's debug-info copy is redacted, but
+or VNC tickets in a report. The widget's debug-info copy is redacted, but
 check it before pasting.

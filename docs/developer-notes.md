@@ -30,7 +30,7 @@ ls ~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/lib/proxmox/
 
 ### Notes
 
-- `kpackagetool6` can report success even if the `.so` is missing — always verify the file is present.
+- `kpackagetool6` can report success even if the `.so` is missing, so always verify the file is present.
 - The `--install-standalone-qml-module` flag copies the plugin to the user-local Qt6 QML path as a fallback for distros that block loading from the plasmoid package path.
 
 ## Install script
@@ -86,7 +86,7 @@ rm -f ~/.local/share/icons/hicolor/scalable/apps/lxc.svg
 rm -rf ~/.config/proxmox-plasmoid/
 ```
 
-## Proxmox API — privilege separation
+## Proxmox API privilege separation
 
 If an API token is created with **Privilege Separation** enabled (`-privsep 1`), the token does **not** automatically inherit the user's ACLs. Per Proxmox docs, effective permissions are the **intersection** of user permissions and token permissions. You must grant roles to both the user and the token, or disable privilege separation.
 
@@ -145,7 +145,7 @@ By default, sensitive identity fragments are redacted from notification text (e.
 - **Node cards**: CPU, memory, uptime per node
 - **Click node**: Expand/collapse VM and container lists
 - **Status indicators**: Green = running, gray = stopped
-- **Power actions**: Icon buttons (Start/Shutdown/Reboot) on each VM/CT — requires `VM.PowerMgmt`
+- **Power actions**: Icon buttons (Start/Shutdown/Reboot) on each VM/CT; requires `VM.PowerMgmt`
 - **Footer**: Quick stats and last update time
 
 ### Developer mode
@@ -156,7 +156,7 @@ Triple-click the footer to enable:
 - Anonymized data (for screenshots)
 - Test notification button
 
-### VNC console — black screen on guest VMs running a full desktop (e.g. Kubuntu)
+### VNC console: black screen on guest VMs running a full desktop (e.g. Kubuntu)
 
 **Symptom:** The VNC console goes black and appears unresponsive. The screen is also black in Proxmox's own noVNC console, ruling out a bug in this widget's VNC client.
 
@@ -167,7 +167,7 @@ Triple-click the footer to enable:
 - System Settings → Power Management → Energy Saving → set screen blanking and display power management to **Never**
 - This is a per-user KDE setting; apply it for any user account that runs the desktop session
 
-**Screen lock (SDDM) is not affected** — if the KDE screen locker fires, it renders the SDDM lock screen through VNC, which remains visible and interactive. Only Energy Saving (blank/off) causes the unrecoverable black screen.
+**Screen lock (SDDM) is not affected.** If the KDE screen locker fires, it renders the SDDM lock screen through VNC, which remains visible and interactive. Only Energy Saving (blank/off) causes the unrecoverable black screen.
 
 **Note:** This applies to any VM running a KDE desktop (Kubuntu, KDE Neon, openSUSE KDE, etc.). Other desktop environments have equivalent settings under different names (GNOME: Settings → Power, XFCE: Power Manager).
 
@@ -175,7 +175,7 @@ Triple-click the footer to enable:
 
 ### Favourites / pinned rows
 
-Pin specific VMs or LXCs to the top of their type section (VMs or LXCs) within their node card. Favourites stay scoped per-node to avoid cross-node VMID collisions. In multi-host mode the key would be `sessionKey::nodeName:vmid`, mirroring the existing action/state key pattern. A star toggle on `VmRow`/`LxcRow` (visible on hover, always visible when starred) would persist the favourites set to config. `getVmsForNode` / `getLxcForNode` (and multi-host equivalents) would partition favourites to the top, sort the remainder normally, then concatenate. No conflict with existing `defaultSorting` options since favourites float within — not above — the type group.
+Pin specific VMs or LXCs to the top of their type section (VMs or LXCs) within their node card. Favourites stay scoped per-node to avoid cross-node VMID collisions. In multi-host mode the key would be `sessionKey::nodeName:vmid`, mirroring the existing action/state key pattern. A star toggle on `VmRow`/`LxcRow` (visible on hover, always visible when starred) would persist the favourites set to config. `getVmsForNode` / `getLxcForNode` (and multi-host equivalents) would partition favourites to the top, sort the remainder normally, then concatenate. No conflict with existing `defaultSorting` options since favourites float within the type group, not above it.
 
 ### Desktop planar compact indicator (StatusNotifierItem)
 
@@ -187,7 +187,7 @@ When the widget is placed on the desktop (planar formFactor), the full represent
 
 Residual threat is DoS only. The Proxmox VNC ticket lives in this process and is never echoed to the loopback client, so an attacker grabbing the slot cannot read it. The PVE auth header is sent outbound on the WebSocket and is never echoed either. Without the ticket the attacker fails the RFB auth handshake, the WS server tears down, and the user gets an error and retries. No data or credentials leak.
 
-`SO_PEERCRED` is **not** a viable check here — it is documented for AF_UNIX only, and on AF_INET returns `ENOPROTOOPT` on Linux (0/0/0 on some older kernels).
+`SO_PEERCRED` is **not** a viable check here. It's documented for AF_UNIX only, and on AF_INET returns `ENOPROTOOPT` on Linux (0/0/0 on some older kernels).
 
 - If you configured the widget in older versions, your API token secret may have been stored under a slightly different keyring key (e.g. due to host casing/whitespace). Legacy keys are **no longer auto-migrated** (removed in v0.7.3) and can leave the widget showing "Missing Token Secret": remove any ProxMon-related entries in KWallet, re-enter the secret in settings, and click **Update Keyring**. Wait a moment, or restart plasmashell.
 
@@ -195,4 +195,4 @@ Residual threat is DoS only. The Proxmox VNC ticket lives in this process and is
 
 Expansion is driven from two places that complement each other: `activationTogglesExpanded: true` on the `PlasmoidItem` in main.qml lets Plasma toggle the popup on activation, and a `TapHandler` in CompactRepresentation.qml calls `root.expanded = !root.expanded` on direct taps. `root` resolves through the component creation context at tap time.
 
-One known cosmetic quirk: the handler's `enabled: !Plasmoid.editMode` binding cannot resolve `Plasmoid` inside that component and logs one harmless `ReferenceError: Plasmoid is not defined` per plasmashell load. The handler is load-bearing — do not remove it to silence the warning (tap-to-expand stops working; verified at runtime). A `HoverHandler` provides passive hover highlighting. `Kirigami.Icon` absorbs plain `MouseArea` clicks over the icon area (KDE bug 518024), which is why the handler sits at the root item level.
+One known cosmetic quirk: the handler's `enabled: !Plasmoid.editMode` binding cannot resolve `Plasmoid` inside that component and logs one harmless `ReferenceError: Plasmoid is not defined` per plasmashell load. The handler is load-bearing; do not remove it to silence the warning (tap-to-expand stops working; verified at runtime). A `HoverHandler` provides passive hover highlighting. `Kirigami.Icon` absorbs plain `MouseArea` clicks over the icon area (KDE bug 518024), which is why the handler sits at the root item level.
