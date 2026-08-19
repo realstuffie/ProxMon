@@ -15,6 +15,9 @@ Rectangle {
     property string nodeName: ""
     property int vmIndex: 0
     property bool busy: false
+    // Which power action is currently in flight ("start"/"shutdown"/"reboot"),
+    // set on click so the spinner can replace the exact button that was used.
+    property string activeAction: ""
     property string armedActionKey: ""
     property bool armedTimerRunning: false
     property int uiRowHeight: 30
@@ -203,7 +206,7 @@ Rectangle {
 
             PlasmaComponents.ToolButton {
                 flat: true
-                icon.name: "utilities-system-monitor"
+                icon.name: "view-statistics"
                 implicitWidth: root.uiActionButtonSize
                 implicitHeight: root.uiActionButtonSize
                 visible: root.statsEnabled
@@ -225,77 +228,141 @@ Rectangle {
                 }
             }
 
-            PlasmaComponents.BusyIndicator {
-                visible: root.busy
-                running: root.busy
-                implicitWidth: root.busy ? root.uiBusyIndicatorSize : 0
-                implicitHeight: root.uiBusyIndicatorSize
-            }
-
-            PlasmaComponents.ToolButton {
-                flat: true
-                icon.name: (root.armedActionKey === ("qemu:" + root.nodeName + ":" + root.vmModel.vmid + ":start") && root.armedTimerRunning)
-                    ? "dialog-ok"
-                    : "media-playback-start"
-                implicitWidth: root.uiActionButtonSize
+            // Power-action area: a fixed two-slot-wide box so the row never
+            // shifts between running / stopped / busy. Buttons live left-aligned
+            // inside it; while an action is in flight a single spinner replaces
+            // them in place (centered) rather than taking an extra slot.
+            Item {
+                visible: root.powerActionsEnabled
+                implicitWidth: 2 * root.uiActionButtonSize + 4
                 implicitHeight: root.uiActionButtonSize
-                visible: root.vmModel && !root.busy && root.vmModel.status !== "running"
+                Layout.alignment: Qt.AlignVCenter
 
-                PlasmaComponents.ToolTip { text: "Start" }
+                RowLayout {
+                    anchors.left: parent.left
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4
 
-                background: Rectangle {
-                    radius: 4
-                    color: parent.hovered
-                        ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, root.uiButtonHoverOpacity)
-                        : "transparent"
+                    // Each action gets a fixed-width slot that holds its position
+                    // whether idle or busy. The button shows when idle; a spinner
+                    // takes over that same slot only for the action in flight, so
+                    // the spinner replaces exactly the button that was clicked.
+
+                    // Start slot (stopped VMs)
+                    Item {
+                        implicitWidth: root.uiActionButtonSize
+                        implicitHeight: root.uiActionButtonSize
+                        visible: root.vmModel && root.vmModel.status !== "running"
+
+                        PlasmaComponents.ToolButton {
+                            anchors.fill: parent
+                            flat: true
+                            icon.name: (root.armedActionKey === ("qemu:" + root.nodeName + ":" + root.vmModel.vmid + ":start") && root.armedTimerRunning)
+                                ? "dialog-ok"
+                                : "media-playback-start"
+                            visible: !root.busy
+
+                            PlasmaComponents.ToolTip { text: "Start" }
+
+                            background: Rectangle {
+                                radius: 4
+                                color: parent.hovered
+                                    ? Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, root.uiButtonHoverOpacity)
+                                    : "transparent"
+                            }
+
+                            onClicked: {
+                                root.activeAction = "start"
+                                if (typeof root.onAction === "function") root.onAction("qemu", root.nodeName, root.vmModel.vmid, root.vmModel.name, "start")
+                            }
+                        }
+
+                        PlasmaComponents.BusyIndicator {
+                            anchors.centerIn: parent
+                            visible: root.busy && root.activeAction === "start"
+                            running: visible
+                            implicitWidth: root.uiBusyIndicatorSize
+                            implicitHeight: root.uiBusyIndicatorSize
+                        }
+                    }
+
+                    // Shutdown slot (running VMs)
+                    Item {
+                        implicitWidth: root.uiActionButtonSize
+                        implicitHeight: root.uiActionButtonSize
+                        visible: root.vmModel && root.vmModel.status === "running"
+
+                        PlasmaComponents.ToolButton {
+                            anchors.fill: parent
+                            flat: true
+                            icon.name: (root.armedActionKey === ("qemu:" + root.nodeName + ":" + root.vmModel.vmid + ":shutdown") && root.armedTimerRunning)
+                                ? "dialog-ok"
+                                : "system-shutdown"
+                            visible: !root.busy
+
+                            PlasmaComponents.ToolTip { text: "Shutdown" }
+
+                            background: Rectangle {
+                                radius: 4
+                                color: parent.hovered
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, root.uiButtonHoverDangerOpacity)
+                                    : "transparent"
+                            }
+
+                            onClicked: {
+                                root.activeAction = "shutdown"
+                                if (typeof root.onAction === "function") root.onAction("qemu", root.nodeName, root.vmModel.vmid, root.vmModel.name, "shutdown")
+                            }
+                        }
+
+                        PlasmaComponents.BusyIndicator {
+                            anchors.centerIn: parent
+                            visible: root.busy && root.activeAction === "shutdown"
+                            running: visible
+                            implicitWidth: root.uiBusyIndicatorSize
+                            implicitHeight: root.uiBusyIndicatorSize
+                        }
+                    }
+
+                    // Reboot slot (running VMs)
+                    Item {
+                        implicitWidth: root.uiActionButtonSize
+                        implicitHeight: root.uiActionButtonSize
+                        visible: root.vmModel && root.vmModel.status === "running"
+
+                        PlasmaComponents.ToolButton {
+                            anchors.fill: parent
+                            flat: true
+                            icon.name: (root.armedActionKey === ("qemu:" + root.nodeName + ":" + root.vmModel.vmid + ":reboot") && root.armedTimerRunning)
+                                ? "dialog-ok"
+                                : "system-reboot"
+                            visible: !root.busy
+
+                            PlasmaComponents.ToolTip { text: "Reboot" }
+
+                            background: Rectangle {
+                                radius: 4
+                                color: parent.hovered
+                                    ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, root.uiButtonHoverDangerOpacity)
+                                    : "transparent"
+                            }
+
+                            onClicked: {
+                                root.activeAction = "reboot"
+                                if (typeof root.onAction === "function") root.onAction("qemu", root.nodeName, root.vmModel.vmid, root.vmModel.name, "reboot")
+                            }
+                        }
+
+                        PlasmaComponents.BusyIndicator {
+                            anchors.centerIn: parent
+                            visible: root.busy && root.activeAction === "reboot"
+                            running: visible
+                            implicitWidth: root.uiBusyIndicatorSize
+                            implicitHeight: root.uiBusyIndicatorSize
+                        }
+                    }
                 }
-
-                onClicked: if (typeof root.onAction === "function") root.onAction("qemu", root.nodeName, root.vmModel.vmid, root.vmModel.name, "start")
             }
-
-            PlasmaComponents.ToolButton {
-                flat: true
-                icon.name: (root.armedActionKey === ("qemu:" + root.nodeName + ":" + root.vmModel.vmid + ":shutdown") && root.armedTimerRunning)
-                    ? "dialog-ok"
-                    : "system-shutdown"
-                implicitWidth: root.uiActionButtonSize
-                implicitHeight: root.uiActionButtonSize
-                visible: root.vmModel && !root.busy && root.vmModel.status === "running"
-
-                PlasmaComponents.ToolTip { text: "Shutdown" }
-
-                background: Rectangle {
-                    radius: 4
-                    color: parent.hovered
-                        ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, root.uiButtonHoverDangerOpacity)
-                        : "transparent"
-                }
-
-                onClicked: if (typeof root.onAction === "function") root.onAction("qemu", root.nodeName, root.vmModel.vmid, root.vmModel.name, "shutdown")
-            }
-            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.vmModel || root.busy }
-
-            PlasmaComponents.ToolButton {
-                flat: true
-                icon.name: (root.armedActionKey === ("qemu:" + root.nodeName + ":" + root.vmModel.vmid + ":reboot") && root.armedTimerRunning)
-                    ? "dialog-ok"
-                    : "system-reboot"
-                implicitWidth: root.uiActionButtonSize
-                implicitHeight: root.uiActionButtonSize
-                visible: root.vmModel && !root.busy && root.vmModel.status === "running"
-
-                PlasmaComponents.ToolTip { text: "Reboot" }
-
-                background: Rectangle {
-                    radius: 4
-                    color: parent.hovered
-                        ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, root.uiButtonHoverDangerOpacity)
-                        : "transparent"
-                }
-
-                onClicked: if (typeof root.onAction === "function") root.onAction("qemu", root.nodeName, root.vmModel.vmid, root.vmModel.name, "reboot")
-            }
-            Item { implicitWidth: root.uiActionButtonSize; implicitHeight: root.uiActionButtonSize; visible: !root.vmModel || root.busy || root.vmModel.status !== "running" }
             }
         }
 
