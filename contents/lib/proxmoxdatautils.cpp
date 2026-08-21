@@ -37,6 +37,12 @@ QString pveSecretKey(const QString &host, int port, const QString &tokenId) {
         .arg(port);
 }
 
+QString pbsSecretKey(const QString &host, int port, const QString &tokenId) {
+    return QStringLiteral("pbsTokenSecret:%1@%2:%3")
+        .arg(tokenId.trimmed(), host.trimmed().toLower())
+        .arg(port);
+}
+
 QVariantList buildEndpointQueue(const QVariantList &entries, bool defaultIgnoreSsl) {
     QVariantList queue;
     for (const QVariant &entryValue : entries) {
@@ -74,6 +80,8 @@ QVariantList buildEndpointQueue(const QVariantList &entries, bool defaultIgnoreS
         item.insert(QStringLiteral("pbsPort"), pbsPort);
         item.insert(QStringLiteral("pbsTokenId"), entry.value(QStringLiteral("pbsTokenId")).toString().trimmed());
         item.insert(QStringLiteral("pbsIgnoreSsl"), entry.value(QStringLiteral("pbsIgnoreSsl"), false));
+        item.insert(QStringLiteral("pbsTrustedCertPem"), entry.value(QStringLiteral("pbsTrustedCertPem")));
+        item.insert(QStringLiteral("pbsTrustedCertPath"), entry.value(QStringLiteral("pbsTrustedCertPath")).toString().trimmed());
         item.insert(QStringLiteral("pbsBackupWarningDays"),
                     std::max(1, entry.value(QStringLiteral("pbsBackupWarningDays"), 7).toInt()));
         item.insert(QStringLiteral("pbsBackupStaleDays"),

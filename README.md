@@ -175,6 +175,8 @@ Token ID format: `user@pbs!tokenname`
 
 </details>
 
+**Sharing one PBS across multiple Proxmox endpoints:** scope each endpoint's token to its own datastore so it only sees that cluster's backups. ProxMon matches backup rows to VMs/CTs by endpoint + VM/CT ID, so a token that can read several datastores can mix backup state across endpoints.
+
 ## Configuration
 
 Right-click the widget → **Configure Proxmox Monitor**.

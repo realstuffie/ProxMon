@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- fix(pbs): keyring entries are now identified by token identity (`pbsTokenSecret:<tokenId>@<host>:<port>`) instead of host alone, so two endpoints sharing one PBS server no longer overwrite each other's secrets; PBS secrets stored before this change are not migrated and must be re-entered (old `proxmon-pbs-<host>` entries are unreachable and can be removed manually with kwalletmanager)
+- fix(pbs): backup-status rows are now scoped by endpoint, so one PBS server holding backups for multiple Proxmox clusters no longer attributes one cluster's backup state to another cluster's VM/CT rows (requires each endpoint's PBS token to be scoped to that endpoint's datastores)
+- fix(config): multi-host PBS secret stash keys on token identity (was host only) and clears each stored entry individually instead of wiping the whole stash
+- fix(controller): multi-host PBS refresh iterates the validated endpoint queue, so endpoints missing a PVE host/token ID are no longer fetched for PBS
+- test(pbs): regression tests for key-identity discrimination (distinct tokens/ports on a shared PBS host) and debug-log redaction of the new key format
+
 ## v0.8.1
 
 - feat(configBehavior): add a toggle to enable/disable the stats panel, independent of power actions (defaults on; included in Backup/Restore and defaults)

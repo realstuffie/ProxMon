@@ -190,9 +190,9 @@ public:
     Q_INVOKABLE void resolveSecretsIfNeeded();
     Q_INVOKABLE void listStoredKeys();
     Q_INVOKABLE void storeSingleSecret(const QString &secret);
-    Q_INVOKABLE void storeSinglePBSSecret(const QString &host, const QString &secret);
+    Q_INVOKABLE void storeSinglePBSSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
-    Q_INVOKABLE void storeMultiHostPBSSecret(const QString &host, const QString &secret);
+    Q_INVOKABLE void storeMultiHostPBSSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void fetchData();
     Q_INVOKABLE void cancelRefresh();
     Q_INVOKABLE bool runAction(const QString &sessionKey,
@@ -398,7 +398,7 @@ private:
     BackupStatus evaluateBackupStatus(qint64 lastBackupTime, int warningDays, int staleDays) const;
     QString lastBackupDisplay(qint64 backupTime) const;
     void correlateBackups();
-    QString pbsKeyForHost(const QString &host) const;
+    QString pbsKeyFor(const QString &host, int port, const QString &tokenId) const;
     QString normalizedHost(const QString &host) const;
     QString resolvedHostFingerprint(const QString &host) const;
     QString normalizedTokenId(const QString &tokenId) const;

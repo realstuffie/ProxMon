@@ -512,7 +512,8 @@ void ProxmoxClient::postFor(const QString &sessionKey,
     });
 }
 
-void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
+void ProxmoxClient::fetchPBSDatastores(const QString &requesterKey,
+                                      const QString &pbsHost,
                                       int port,
                                       const QString &tokenId,
                                       const QString &tokenSecret,
@@ -563,7 +564,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
     }
 
     QObject::connect(r, &QNetworkReply::finished, this,
-                     [this, r, pbsHost, port, tokenId, pbsSecret = std::move(pbsSecret),
+                     [this, r, requesterKey, pbsHost, port, tokenId, pbsSecret = std::move(pbsSecret),
                       ignoreSslErrors, resolvedCertPem]() mutable {
         auto clearSecret = [&pbsSecret]() {
             pbsSecret.fill(0);
@@ -613,7 +614,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
                     });
                 }
 
-                QObject::connect(snapshotReply, &QNetworkReply::finished, this, [this, snapshotReply, pbsHost, datastore]() {
+                QObject::connect(snapshotReply, &QNetworkReply::finished, this, [this, snapshotReply, requesterKey, pbsHost, datastore]() {
                     if (!m_pbsInFlight.remove(snapshotReply)) {
                         snapshotReply->deleteLater();
                         return;
@@ -643,7 +644,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
                             snapshot.pbsHost = pbsHost;
                             snapshots.push_back(snapshot);
                         }
-                        emit pbsSnapshotsReceived(pbsHost, datastore, snapshots);
+                        emit pbsSnapshotsReceived(requesterKey, pbsHost, datastore, snapshots);
                     };
                     handleFinishedReply(snapshotReply, 0, QStringLiteral("pbs-snapshots"), datastore, QString(), emitSnapErr, emitSnapOk);
                 });

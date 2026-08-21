@@ -148,9 +148,9 @@ ProxmoxController::ProxmoxController(QObject *parent)
         m_pendingConsoleNames.remove(requestId);
         emit consoleError(node, ProxmoxConst::Kind::Lxc, vmid, message);
     });
-    connect(m_api, &ProxmoxClient::pbsSnapshotsReceived, this, [this](const QString &pbsHost, const QString &, const QList<PBSSnapshot> &snapshots) {
+    connect(m_api, &ProxmoxClient::pbsSnapshotsReceived, this, [this](const QString &requesterKey, const QString &pbsHost, const QString &, const QList<PBSSnapshot> &snapshots) {
         for (const PBSSnapshot &snapshot : snapshots) {
-            const QString backupKey = QStringLiteral("%1|%2|%3").arg(normalizedHost(pbsHost), snapshot.backupType, QString::number(snapshot.vmid));
+            const QString backupKey = QStringLiteral("%1|%2|%3|%4").arg(requesterKey, normalizedHost(pbsHost), snapshot.backupType, QString::number(snapshot.vmid));
             auto it = m_latestBackups.find(backupKey);
             if (it == m_latestBackups.end() || snapshot.backupTime > it.value().backupTime) {
                 m_latestBackups.insert(backupKey, snapshot);
@@ -646,8 +646,8 @@ void ProxmoxController::clearMultiHostModels() {
     m_lxcModelsBySessionNode.clear();
 }
 
-QString ProxmoxController::pbsKeyForHost(const QString &host) const {
-    return QStringLiteral("proxmon-pbs-%1").arg(normalizedHost(host));
+QString ProxmoxController::pbsKeyFor(const QString &host, int port, const QString &tokenId) const {
+    return ProxmoxDataUtils::pbsSecretKey(host, port, tokenId);
 }
 
 void ProxmoxController::resolveSecretsIfNeeded() {
@@ -692,13 +692,17 @@ void ProxmoxController::storeSingleSecret(const QString &secret) {
     m_singleSecretStore->writeSecret(secret);
 }
 
-void ProxmoxController::storeSinglePBSSecret(const QString &host, const QString &secret) {
-    const QString key = pbsKeyForHost(host);
-    appendDebugLog(QStringLiteral("[ProxmoxController] storeSinglePBSSecret host=%1 key=%2 secretEmpty=%3")
-        .arg(host, key, secret.trimmed().isEmpty() ? QStringLiteral("true") : QStringLiteral("false")));
-    if (secret.trimmed().isEmpty() || host.trimmed().isEmpty()) {
+void ProxmoxController::storeSinglePBSSecret(const QString &host, int port, const QString &tokenId, const QString &secret) {
+    if (secret.trimmed().isEmpty() || host.trimmed().isEmpty() || tokenId.trimmed().isEmpty()) {
+        appendDebugLog(QStringLiteral("[ProxmoxController] storeSinglePBSSecret rejected hostEmpty=%1 tokenIdEmpty=%2 secretEmpty=%3")
+            .arg(host.trimmed().isEmpty() ? QStringLiteral("true") : QStringLiteral("false"),
+                 tokenId.trimmed().isEmpty() ? QStringLiteral("true") : QStringLiteral("false"),
+                 secret.trimmed().isEmpty() ? QStringLiteral("true") : QStringLiteral("false")));
         return;
     }
+    const QString key = pbsKeyFor(host, port, tokenId);
+    appendDebugLog(QStringLiteral("[ProxmoxController] storeSinglePBSSecret host=%1 port=%2 key=%3")
+        .arg(host).arg(port).arg(key));
     m_singleSecretStore->setKey(key);
     m_singleSecretStore->writeSecret(secret);
 }
@@ -711,13 +715,17 @@ void ProxmoxController::storeMultiHostSecret(const QString &host, int port, cons
     m_multiSecretStore->writeSecret(secret);
 }
 
-void ProxmoxController::storeMultiHostPBSSecret(const QString &host, const QString &secret) {
-    const QString key = pbsKeyForHost(host);
-    appendDebugLog(QStringLiteral("[ProxmoxController] storeMultiHostPBSSecret host=%1 key=%2 secretEmpty=%3")
-        .arg(host, key, secret.trimmed().isEmpty() ? QStringLiteral("true") : QStringLiteral("false")));
-    if (secret.trimmed().isEmpty() || host.trimmed().isEmpty()) {
+void ProxmoxController::storeMultiHostPBSSecret(const QString &host, int port, const QString &tokenId, const QString &secret) {
+    if (secret.trimmed().isEmpty() || host.trimmed().isEmpty() || tokenId.trimmed().isEmpty()) {
+        appendDebugLog(QStringLiteral("[ProxmoxController] storeMultiHostPBSSecret rejected hostEmpty=%1 tokenIdEmpty=%2 secretEmpty=%3")
+            .arg(host.trimmed().isEmpty() ? QStringLiteral("true") : QStringLiteral("false"),
+                 tokenId.trimmed().isEmpty() ? QStringLiteral("true") : QStringLiteral("false"),
+                 secret.trimmed().isEmpty() ? QStringLiteral("true") : QStringLiteral("false")));
         return;
     }
+    const QString key = pbsKeyFor(host, port, tokenId);
+    appendDebugLog(QStringLiteral("[ProxmoxController] storeMultiHostPBSSecret host=%1 port=%2 key=%3")
+        .arg(host).arg(port).arg(key));
     m_multiSecretStore->setKey(key);
     m_multiSecretStore->writeSecret(secret);
 }
@@ -1107,7 +1115,7 @@ QString ProxmoxController::sanitizeDebugString(const QString &value) const {
     static const QRegularExpression reApiToken(
         QStringLiteral("((?:PVE|PBS)APIToken\\s*=\\s*)[^\\s,;]+"), caseInsensitive);
     static const QRegularExpression reSecretField(
-        QStringLiteral("((?:apiTokenSecret|tokenSecret|secret|password)\\s*[:=]\\s*)[^\\s,;]+"),
+        QStringLiteral("((?:apiTokenSecret|pbsTokenSecret|tokenSecret|secret|password)\\s*[:=]\\s*)[^\\s,;]+"),
         caseInsensitive);
     static const QRegularExpression reTicketField(
         QStringLiteral("((?:vncTicket|ticket)\\s*[:=]\\s*)[^\\s,;]+"), caseInsensitive);
@@ -2107,10 +2115,10 @@ void ProxmoxController::refreshPBSNow() {
             auto *store = new SecretStore(this);
             store->setService(QStringLiteral("ProxMon"));
             const QString pbsHost = m_pbsHost.trimmed();
-            const QString key = pbsKeyForHost(pbsHost);
-            appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single readKey host=%1 key=%2").arg(pbsHost, key));
             const int pbsPort = m_pbsPort > 0 ? m_pbsPort : ProxmoxConst::Defaults::PbsPort;
             const QString pbsTokenId = m_pbsTokenId.trimmed();
+            const QString key = pbsKeyFor(pbsHost, pbsPort, pbsTokenId);
+            appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single readKey host=%1 key=%2").arg(pbsHost, key));
             const bool pbsEnabled = m_pbsEnabled;
             const bool pbsIgnoreSsl = m_pbsIgnoreSsl;
             m_pbsRefreshInterval = m_pbsRefreshInterval > 0 ? m_pbsRefreshInterval : ProxmoxConst::Defaults::PbsRefreshInterval;
@@ -2137,7 +2145,7 @@ void ProxmoxController::refreshPBSNow() {
                     return;
                 }
                 m_pendingPbsEndpoints = 1;
-                m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
+                m_api->fetchPBSDatastores(QString(), pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
             }, [this, store, generation, pbsHost](const QString &message) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretError host=%1 message=%2").arg(pbsHost, message));
                 store->deleteLater();
@@ -2157,30 +2165,34 @@ void ProxmoxController::refreshPBSNow() {
         return;
     }
 
-    const QVariantList entries = parseMultiHosts();
+    // Iterate the same queue the request path builds, so the keyring key,
+    // the sessionKey used for backup-status correlation, and the displayed
+    // endpoint row all describe the same endpoint identity. Entries the queue
+    // drops (no PVE host/tokenId) have no row to attach results to.
+    const QVariantList endpoints = buildSecretQueue();
     bool anyConfigured = false;
-    for (const QVariant &entryValue : entries) {
+    for (const QVariant &entryValue : endpoints) {
         const QVariantMap entry = entryValue.toMap();
-        if (entry.value(QStringLiteral("enabled"), true).toBool() == false) continue;
         if (!entry.value(QStringLiteral("pbsEnabled"), false).toBool()) continue;
         const QString pbsHost = entry.value(QStringLiteral("pbsHost")).toString().trimmed();
+        const int pbsPort = entry.value(QStringLiteral("pbsPort"), ProxmoxConst::Defaults::PbsPort).toInt();
         const QString pbsTokenId = entry.value(QStringLiteral("pbsTokenId")).toString().trimmed();
         if (pbsHost.isEmpty() || pbsTokenId.isEmpty()) continue;
         anyConfigured = true;
         auto *store = new SecretStore(this);
-        const QString key = pbsKeyForHost(pbsHost);
-        appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi readKey host=%1 key=%2").arg(pbsHost, key));
         store->setService(QStringLiteral("ProxMon"));
+        const QString key = pbsKeyFor(pbsHost, pbsPort, pbsTokenId);
+        appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi readKey host=%1 key=%2").arg(pbsHost, key));
         m_pendingPbsEndpoints += 1;
-        const int pbsPort = entry.value(QStringLiteral("pbsPort"), ProxmoxConst::Defaults::PbsPort).toInt() > 0 ? entry.value(QStringLiteral("pbsPort"), ProxmoxConst::Defaults::PbsPort).toInt() : ProxmoxConst::Defaults::PbsPort;
         const bool pbsIgnoreSsl = entry.value(QStringLiteral("pbsIgnoreSsl"), false).toBool();
-        const QString pbsTrustedCertPem = entry.contains(QStringLiteral("pbsTrustedCertPem"))
-            ? entry.value(QStringLiteral("pbsTrustedCertPem")).toString()
-            : m_pbsTrustedCertPem;
-        const QString pbsTrustedCertPath = entry.contains(QStringLiteral("pbsTrustedCertPath"))
-            ? entry.value(QStringLiteral("pbsTrustedCertPath")).toString().trimmed()
-            : m_pbsTrustedCertPath;
-        store->readSecret(key, [this, store, generation, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl, pbsTrustedCertPem, pbsTrustedCertPath](const QString &secret) {
+        const QString pbsTrustedCertPem = entry.value(QStringLiteral("pbsTrustedCertPem")).toString().isEmpty()
+            ? m_pbsTrustedCertPem
+            : entry.value(QStringLiteral("pbsTrustedCertPem")).toString();
+        const QString pbsTrustedCertPath = entry.value(QStringLiteral("pbsTrustedCertPath")).toString().trimmed().isEmpty()
+            ? m_pbsTrustedCertPath
+            : entry.value(QStringLiteral("pbsTrustedCertPath")).toString().trimmed();
+        const QString sessionKey = entry.value(QStringLiteral("sessionKey")).toString();
+        store->readSecret(key, [this, store, generation, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl, pbsTrustedCertPem, pbsTrustedCertPath, sessionKey](const QString &secret) {
             store->deleteLater();
             if (generation != m_pbsRefreshGeneration) return;
             if (secret.isEmpty()) {
@@ -2190,7 +2202,7 @@ void ProxmoxController::refreshPBSNow() {
                 checkPBSRequestsComplete();
                 return;
             }
-            m_api->fetchPBSDatastores(pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, pbsTrustedCertPem.toUtf8(), pbsTrustedCertPath);
+            m_api->fetchPBSDatastores(sessionKey, pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, pbsTrustedCertPem.toUtf8(), pbsTrustedCertPath);
         }, [this, store, generation, pbsHost](const QString &message) {
             appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi secretError host=%1 message=%2").arg(pbsHost, message));
             store->deleteLater();
@@ -2300,7 +2312,7 @@ void ProxmoxController::applyBackupState(QVariantList &items, const QVariantMap 
         const QString pbsHost = sessionKey.isEmpty()
             ? m_pbsHost.trimmed()
             : endpoint.value(QStringLiteral("pbsHost")).toString().trimmed();
-        const QString backupKey = QStringLiteral("%1|%2|%3").arg(normalizedHost(pbsHost), expectedType, QString::number(vmid));
+        const QString backupKey = QStringLiteral("%1|%2|%3|%4").arg(sessionKey, normalizedHost(pbsHost), expectedType, QString::number(vmid));
         const auto backupIt = m_latestBackups.constFind(QStringView{backupKey});
         const PBSSnapshot snapshot = backupIt == m_latestBackups.constEnd() ? PBSSnapshot{} : backupIt.value();
         const bool typeMatch = snapshot.backupType.isEmpty() || snapshot.backupType == expectedType;

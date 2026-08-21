@@ -1228,12 +1228,15 @@ PlasmoidItem {
     function migratePbsTokenSecretBuffer() {
         const secret = String(Plasmoid.configuration.pbsTokenSecretBuffer || "")
         const host = String(Plasmoid.configuration.pbsHost || "").trim()
-        if (!controller || !secret.trim() || !host) return
+        const rawPort = Number(Plasmoid.configuration.pbsPort)
+        const port = rawPort > 0 ? rawPort : 8007
+        const tokenId = String(Plasmoid.configuration.pbsTokenId || "").trim()
+        if (!controller || !secret.trim() || !host || !tokenId) return
 
         // Remove the plaintext handoff before starting the asynchronous
         // keychain write. The local QML value dies when this call returns.
         Plasmoid.configuration.pbsTokenSecretBuffer = ""
-        controller.storeSinglePBSSecret(host, secret)
+        controller.storeSinglePBSSecret(host, port, tokenId, secret)
     }
 
     onProxmoxHostChanged: {
@@ -1257,7 +1260,7 @@ PlasmoidItem {
         if (connectionMode === "single") triggerSecretResolveFromConfigChange()
         triggerRefreshFromConfigChange("apiTokenSecret")
     }
-    onPbsTokenSecretBufferChanged: migratePbsTokenSecretBuffer()
+    onPbsTokenSecretBufferChanged: Qt.callLater(migratePbsTokenSecretBuffer)
     onTrustedCertPemChanged: triggerRefreshFromConfigChange("trustedCertPem")
     onTrustedCertPathChanged: triggerRefreshFromConfigChange("trustedCertPath")
     onPbsTrustedCertPemChanged: triggerRefreshFromConfigChange("pbsTrustedCertPem")
@@ -1283,19 +1286,27 @@ PlasmoidItem {
                 var host = at > 0 ? left.slice(at + 1) : ""
                 if (!host || !tokenId) continue
                 controller.storeMultiHostSecret(host, port > 0 ? port : 8006, tokenId, secret)
+                delete map[key]
                 wrote = true
                 continue
             }
 
             if (key.indexOf("pbsTokenSecret:") === 0) {
-                var pbsHost = key.slice("pbsTokenSecret:".length).trim()
-                if (!pbsHost) continue
-                controller.storeMultiHostPBSSecret(pbsHost, secret)
+                var pbsBody = key.slice("pbsTokenSecret:".length)
+                var pbsColon = pbsBody.lastIndexOf(":")
+                var pbsLeft = pbsColon > 0 ? pbsBody.slice(0, pbsColon) : ""
+                var pbsPort = pbsColon > 0 ? Number(pbsBody.slice(pbsColon + 1)) : 8007
+                var pbsAt = pbsLeft.lastIndexOf("@")
+                var pbsTokenId = pbsAt > 0 ? pbsLeft.slice(0, pbsAt) : ""
+                var pbsHost = pbsAt > 0 ? pbsLeft.slice(pbsAt + 1) : ""
+                if (!pbsHost || !pbsTokenId) continue
+                controller.storeMultiHostPBSSecret(pbsHost, pbsPort > 0 ? pbsPort : 8007, pbsTokenId, secret)
+                delete map[key]
                 wrote = true
             }
         }
         if (wrote) {
-            Plasmoid.configuration.multiHostSecretsJson = "{}"
+            Plasmoid.configuration.multiHostSecretsJson = JSON.stringify(map)
         }
     }
     onMultiHostSharedCertChanged: triggerRefreshFromConfigChange("multiHostSharedCert")
@@ -1315,11 +1326,17 @@ PlasmoidItem {
     onIgnoreSslChanged: triggerRefreshFromConfigChange("ignoreSsl")
     onPbsEnabledChanged: triggerRefreshFromConfigChange("pbsEnabled")
     onPbsHostChanged: {
-        migratePbsTokenSecretBuffer()
+        Qt.callLater(migratePbsTokenSecretBuffer)
         triggerRefreshFromConfigChange("pbsHost")
     }
-    onPbsPortChanged: triggerRefreshFromConfigChange("pbsPort")
-    onPbsTokenIdChanged: triggerRefreshFromConfigChange("pbsTokenId")
+    onPbsPortChanged: {
+        Qt.callLater(migratePbsTokenSecretBuffer)
+        triggerRefreshFromConfigChange("pbsPort")
+    }
+    onPbsTokenIdChanged: {
+        Qt.callLater(migratePbsTokenSecretBuffer)
+        triggerRefreshFromConfigChange("pbsTokenId")
+    }
     onPbsIgnoreSslChanged: triggerRefreshFromConfigChange("pbsIgnoreSsl")
     onPbsBackupWarningDaysChanged: triggerRefreshFromConfigChange("pbsBackupWarningDays")
     onPbsBackupStaleDaysChanged: triggerRefreshFromConfigChange("pbsBackupStaleDays")
