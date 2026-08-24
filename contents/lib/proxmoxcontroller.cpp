@@ -150,7 +150,7 @@ ProxmoxController::ProxmoxController(QObject *parent)
     });
     connect(m_api, &ProxmoxClient::pbsSnapshotsReceived, this, [this](const QString &requesterKey, const QString &pbsHost, const QString &, const QList<PBSSnapshot> &snapshots) {
         for (const PBSSnapshot &snapshot : snapshots) {
-            const QString backupKey = QStringLiteral("%1|%2|%3|%4").arg(requesterKey, normalizedHost(pbsHost), snapshot.backupType, QString::number(snapshot.vmid));
+            const QString backupKey = ProxmoxDataUtils::backupStatusKey(requesterKey, pbsHost, snapshot.backupType, snapshot.vmid);
             auto it = m_latestBackups.find(backupKey);
             if (it == m_latestBackups.end() || snapshot.backupTime > it.value().backupTime) {
                 m_latestBackups.insert(backupKey, snapshot);
@@ -165,7 +165,17 @@ ProxmoxController::ProxmoxController(QObject *parent)
         if (m_pendingPbsEndpoints > 0) {
             m_pendingPbsEndpoints -= 1;
         }
-        m_pendingPbsSnapshotRequests += datastores.size();
+        m_pendingPbsNamespaceRequests += datastores.size();
+        checkPBSRequestsComplete();
+    });
+    connect(m_api, &ProxmoxClient::pbsNamespacesReceived, this, [this](const QString &, const QString &, const QList<QString> &namespaces) {
+        // Decrement this tier and add the next one in the same slot, so the
+        // aggregate pending count never reaches zero while requests are still
+        // to be issued and correlateBackups() cannot fire early.
+        if (m_pendingPbsNamespaceRequests > 0) {
+            m_pendingPbsNamespaceRequests -= 1;
+        }
+        m_pendingPbsSnapshotRequests += namespaces.size();
         checkPBSRequestsComplete();
     });
     connect(m_api, &ProxmoxClient::pbsDatastoresError, this, [this](const QString &pbsHost, const QString &message) {
@@ -2078,11 +2088,12 @@ void ProxmoxController::refreshPBS() {
 }
 
 void ProxmoxController::checkPBSRequestsComplete() {
-    if (m_pendingPbsSnapshotRequests > 0 || m_pendingPbsEndpoints > 0) {
+    if (m_pendingPbsSnapshotRequests > 0 || m_pendingPbsNamespaceRequests > 0 || m_pendingPbsEndpoints > 0) {
         return;
     }
 
     m_pendingPbsSnapshotRequests = 0;
+    m_pendingPbsNamespaceRequests = 0;
     m_pendingPbsEndpoints = 0;
     correlateBackups();
 }
@@ -2096,6 +2107,7 @@ void ProxmoxController::refreshPBSNow() {
     appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS mode=%1").arg(m_connectionMode));
     m_latestBackups.clear();
     m_pendingPbsSnapshotRequests = 0;
+    m_pendingPbsNamespaceRequests = 0;
     m_pendingPbsEndpoints = 0;
     if (!m_pbsRefreshError.isEmpty()) {
         m_pbsRefreshError.clear();
@@ -2312,7 +2324,7 @@ void ProxmoxController::applyBackupState(QVariantList &items, const QVariantMap 
         const QString pbsHost = sessionKey.isEmpty()
             ? m_pbsHost.trimmed()
             : endpoint.value(QStringLiteral("pbsHost")).toString().trimmed();
-        const QString backupKey = QStringLiteral("%1|%2|%3|%4").arg(sessionKey, normalizedHost(pbsHost), expectedType, QString::number(vmid));
+        const QString backupKey = ProxmoxDataUtils::backupStatusKey(sessionKey, pbsHost, expectedType, vmid);
         const auto backupIt = m_latestBackups.constFind(QStringView{backupKey});
         const PBSSnapshot snapshot = backupIt == m_latestBackups.constEnd() ? PBSSnapshot{} : backupIt.value();
         const bool typeMatch = snapshot.backupType.isEmpty() || snapshot.backupType == expectedType;

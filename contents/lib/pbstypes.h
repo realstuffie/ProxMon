@@ -9,6 +9,10 @@ struct PBSSnapshot {
     qint64 size = 0;
     QString verifyState;
     QString datastoreName;
+    // PBS namespace the snapshot was listed from; empty means the root
+    // namespace. Snapshot rows carry no namespace field, so this is
+    // stamped from the request that produced the row.
+    QString backupNamespace;
     QString pbsHost;
 };
 

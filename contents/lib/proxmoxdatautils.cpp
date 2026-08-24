@@ -43,6 +43,34 @@ QString pbsSecretKey(const QString &host, int port, const QString &tokenId) {
         .arg(port);
 }
 
+QString backupStatusKey(const QString &sessionKey,
+                        const QString &host,
+                        const QString &backupType,
+                        int vmid) {
+    return QStringLiteral("%1|%2|%3|%4")
+        .arg(sessionKey, host.trimmed().toLower(), backupType)
+        .arg(vmid);
+}
+
+QList<QString> parsePbsNamespaces(const QVariant &response) {
+    QList<QString> namespaces;
+    const QVariantList rows = response.toMap().value(QStringLiteral("data")).toList();
+    for (const QVariant &rowValue : rows) {
+        const QVariantMap row = rowValue.toMap();
+        if (!row.contains(QStringLiteral("ns"))) {
+            continue;
+        }
+        const QString ns = row.value(QStringLiteral("ns")).toString();
+        if (!namespaces.contains(ns)) {
+            namespaces.push_back(ns);
+        }
+    }
+    if (namespaces.isEmpty()) {
+        namespaces.push_back(QString());
+    }
+    return namespaces;
+}
+
 QVariantList buildEndpointQueue(const QVariantList &entries, bool defaultIgnoreSsl) {
     QVariantList queue;
     for (const QVariant &entryValue : entries) {

@@ -460,6 +460,7 @@ private:
     QTimer *m_retryTimer = nullptr;
     QString m_pbsRefreshError;
     int m_pendingPbsEndpoints = 0;
+    int m_pendingPbsNamespaceRequests = 0;
     // Bumped by every refreshPBSNow() run; PBS keychain callbacks capture the
     // value and drop themselves when a newer cycle (or a config change that
     // retriggers PBS refresh) has superseded them. Keychain reads cannot be

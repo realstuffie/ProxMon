@@ -202,6 +202,11 @@ signals:
                         const QString &message);
     void pbsDatastoresReceived(const QString &pbsHost,
                                const QList<QString> &datastores);
+    // Emitted before the per-namespace snapshot requests are issued, so a
+    // listener can account for them in the same slot.
+    void pbsNamespacesReceived(const QString &pbsHost,
+                               const QString &datastore,
+                               const QList<QString> &namespaces);
     void pbsSnapshotsReceived(const QString &requesterKey,
                               const QString &pbsHost,
                               const QString &datastore,
