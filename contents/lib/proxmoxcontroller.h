@@ -7,6 +7,7 @@
 #include <QVariant>
 
 #include "pbstypes.h"
+#include "pbsrequesttally.h"
 #include "variantlistmodel.h"
 
 class ProxmoxClient;
@@ -459,8 +460,7 @@ private:
     // (success, config change, mode change) and by cancelRefresh().
     QTimer *m_retryTimer = nullptr;
     QString m_pbsRefreshError;
-    int m_pendingPbsEndpoints = 0;
-    int m_pendingPbsNamespaceRequests = 0;
+    PbsRequestTally m_pbsTally;
     // Bumped by every refreshPBSNow() run; PBS keychain callbacks capture the
     // value and drop themselves when a newer cycle (or a config change that
     // retriggers PBS refresh) has superseded them. Keychain reads cannot be
@@ -487,7 +487,6 @@ private:
     QHash<QString, PBSSnapshot> m_latestBackups;
     QTimer *m_pbsTimer = nullptr;
     QTimer *m_pbsDebounceTimer = nullptr;
-    int m_pendingPbsSnapshotRequests = 0;
     QHash<QString, QByteArray> m_pendingConsoleAuth;
     QMap<QString, QByteArray>  m_pendingConsoleTicket;
     ProxmoxClient *m_api;

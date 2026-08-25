@@ -138,3 +138,16 @@ if(QMLTESTRUNNER_EXECUTABLE)
 else()
     message(STATUS "qmltestrunner not found — skipping the configportability QML test")
 endif()
+
+qt_add_executable(tst_pbsrequesttally
+    tst_pbsrequesttally.cpp
+)
+
+target_include_directories(tst_pbsrequesttally PRIVATE ..)
+
+target_link_libraries(tst_pbsrequesttally PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+add_test(NAME pbsrequesttally COMMAND tst_pbsrequesttally)

@@ -156,56 +156,41 @@ ProxmoxController::ProxmoxController(QObject *parent)
                 m_latestBackups.insert(backupKey, snapshot);
             }
         }
-        if (m_pendingPbsSnapshotRequests > 0) {
-            m_pendingPbsSnapshotRequests -= 1;
-        }
+        m_pbsTally.snapshotFinished();
         checkPBSRequestsComplete();
     });
     connect(m_api, &ProxmoxClient::pbsDatastoresReceived, this, [this](const QString &, const QList<QString> &datastores) {
-        if (m_pendingPbsEndpoints > 0) {
-            m_pendingPbsEndpoints -= 1;
-        }
-        m_pendingPbsNamespaceRequests += datastores.size();
+        m_pbsTally.datastoresReceived(datastores.size());
         checkPBSRequestsComplete();
     });
     connect(m_api, &ProxmoxClient::pbsNamespacesReceived, this, [this](const QString &, const QString &, const QList<QString> &namespaces) {
-        // Decrement this tier and add the next one in the same slot, so the
-        // aggregate pending count never reaches zero while requests are still
-        // to be issued and correlateBackups() cannot fire early.
-        if (m_pendingPbsNamespaceRequests > 0) {
-            m_pendingPbsNamespaceRequests -= 1;
-        }
-        m_pendingPbsSnapshotRequests += namespaces.size();
+        m_pbsTally.namespacesReceived(namespaces.size());
         checkPBSRequestsComplete();
     });
     connect(m_api, &ProxmoxClient::pbsDatastoresError, this, [this](const QString &pbsHost, const QString &message) {
         appendDebugLog(QStringLiteral("[ProxmoxController] pbs datastore error host=%1 pendingSnapshots=%2 pendingEndpoints=%3 message=%4")
             .arg(pbsHost)
-            .arg(m_pendingPbsSnapshotRequests)
-            .arg(m_pendingPbsEndpoints)
+            .arg(m_pbsTally.pendingSnapshots())
+            .arg(m_pbsTally.pendingEndpoints())
             .arg(message));
         if (m_pbsRefreshError != message) {
             m_pbsRefreshError = message;
             emit pbsLastErrorChanged();
         }
-        if (m_pendingPbsEndpoints > 0) {
-            m_pendingPbsEndpoints -= 1;
-        }
+        m_pbsTally.endpointFailed();
         checkPBSRequestsComplete();
     });
     connect(m_api, &ProxmoxClient::pbsSnapshotsError, this, [this](const QString &pbsHost, const QString &datastore, const QString &message) {
         appendDebugLog(QStringLiteral("[ProxmoxController] pbs snapshot error host=%1 datastore=%2 pendingSnapshots=%3 pendingEndpoints=%4 message=%5")
             .arg(pbsHost, datastore)
-            .arg(m_pendingPbsSnapshotRequests)
-            .arg(m_pendingPbsEndpoints)
+            .arg(m_pbsTally.pendingSnapshots())
+            .arg(m_pbsTally.pendingEndpoints())
             .arg(message));
         if (m_pbsRefreshError != message) {
             m_pbsRefreshError = message;
             emit pbsLastErrorChanged();
         }
-        if (m_pendingPbsSnapshotRequests > 0) {
-            m_pendingPbsSnapshotRequests -= 1;
-        }
+        m_pbsTally.snapshotFinished();
         checkPBSRequestsComplete();
     });
     m_pbsTimer = new QTimer(this);
@@ -2088,13 +2073,11 @@ void ProxmoxController::refreshPBS() {
 }
 
 void ProxmoxController::checkPBSRequestsComplete() {
-    if (m_pendingPbsSnapshotRequests > 0 || m_pendingPbsNamespaceRequests > 0 || m_pendingPbsEndpoints > 0) {
+    if (!m_pbsTally.isComplete()) {
         return;
     }
 
-    m_pendingPbsSnapshotRequests = 0;
-    m_pendingPbsNamespaceRequests = 0;
-    m_pendingPbsEndpoints = 0;
+    m_pbsTally.reset();
     correlateBackups();
 }
 
@@ -2106,9 +2089,7 @@ void ProxmoxController::refreshPBSNow() {
     const quint64 generation = ++m_pbsRefreshGeneration;
     appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS mode=%1").arg(m_connectionMode));
     m_latestBackups.clear();
-    m_pendingPbsSnapshotRequests = 0;
-    m_pendingPbsNamespaceRequests = 0;
-    m_pendingPbsEndpoints = 0;
+    m_pbsTally.reset();
     if (!m_pbsRefreshError.isEmpty()) {
         m_pbsRefreshError.clear();
         emit pbsLastErrorChanged();
@@ -2156,7 +2137,7 @@ void ProxmoxController::refreshPBSNow() {
                     correlateBackups();
                     return;
                 }
-                m_pendingPbsEndpoints = 1;
+                m_pbsTally.addEndpoint();
                 m_api->fetchPBSDatastores(QString(), pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
             }, [this, store, generation, pbsHost](const QString &message) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretError host=%1 message=%2").arg(pbsHost, message));
@@ -2166,9 +2147,7 @@ void ProxmoxController::refreshPBSNow() {
                     m_pbsRefreshError = message;
                     emit pbsLastErrorChanged();
                 }
-                if (m_pendingPbsEndpoints > 0) {
-                    m_pendingPbsEndpoints -= 1;
-                }
+                m_pbsTally.endpointFailed();
                 checkPBSRequestsComplete();
             });
             return;
@@ -2195,7 +2174,7 @@ void ProxmoxController::refreshPBSNow() {
         store->setService(QStringLiteral("ProxMon"));
         const QString key = pbsKeyFor(pbsHost, pbsPort, pbsTokenId);
         appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi readKey host=%1 key=%2").arg(pbsHost, key));
-        m_pendingPbsEndpoints += 1;
+        m_pbsTally.addEndpoint();
         const bool pbsIgnoreSsl = entry.value(QStringLiteral("pbsIgnoreSsl"), false).toBool();
         const QString pbsTrustedCertPem = entry.value(QStringLiteral("pbsTrustedCertPem")).toString().isEmpty()
             ? m_pbsTrustedCertPem
@@ -2208,9 +2187,7 @@ void ProxmoxController::refreshPBSNow() {
             store->deleteLater();
             if (generation != m_pbsRefreshGeneration) return;
             if (secret.isEmpty()) {
-                if (m_pendingPbsEndpoints > 0) {
-                    m_pendingPbsEndpoints -= 1;
-                }
+                m_pbsTally.endpointFailed();
                 checkPBSRequestsComplete();
                 return;
             }
@@ -2223,9 +2200,7 @@ void ProxmoxController::refreshPBSNow() {
                 m_pbsRefreshError = message;
                 emit pbsLastErrorChanged();
             }
-            if (m_pendingPbsEndpoints > 0) {
-                m_pendingPbsEndpoints -= 1;
-            }
+            m_pbsTally.endpointFailed();
             checkPBSRequestsComplete();
         });
     }
