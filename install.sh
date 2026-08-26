@@ -284,6 +284,12 @@ if [ "$REBUILD_ONLY" -eq 1 ]; then
   printf '%s\n' "[ install] Plugin installed → $PLASMOID_CONTENTS/lib/proxmox/libproxmoxclientplugin.so"
 elif [ -d "$PLASMOID_CONTENTS" ]; then
   sync_contents "contents" "$PLASMOID_CONTENTS"
+  # metadata.json sits at the package root, outside contents/, so the sync
+  # above never reaches it. kpackagetool only runs on a first install, so
+  # without this the About tab keeps reporting whichever version was
+  # current when the plasmoid was first installed.
+  atomic_cp "metadata.json" "$(dirname "$PLASMOID_CONTENTS")/"
+  printf '%s\n' "[ install] metadata.json synced → $(dirname "$PLASMOID_CONTENTS")/metadata.json"
 fi
 
 mkdir -p "$ICON_DIR"
