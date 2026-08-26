@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.8.3
+
 - feat(pbs): the PBS refresh interval is a free value from 5 minutes to 24 hours, replacing six fixed presets with a 30 minute minimum
 - fix(install): `metadata.json` is synced on every install rather than only the first; `kpackagetool` runs once and the incremental sync only covered `contents/`, so the About tab kept reporting whichever version was current when the plasmoid was first installed
 
