@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## v0.8.2
+
+- feat(pbs): snapshots are listed across every namespace the token can see instead of the root namespace only; the namespace tree is enumerated once per datastore and each namespace fetched separately, so guests backed up into a non-root namespace now report their backup status (the snapshots endpoint returns only the requested namespace and rejects `max-depth`, so the tree has to be walked client-side)
+- fix(pbs): a namespace listing that fails or returns nothing usable falls back to the root namespace rather than leaving the datastore with no snapshots, covering tokens without namespace-listing privilege and PBS versions predating the endpoint
+- refactor(pbs): the three tiers of in-flight PBS requests are tracked by one type (`PbsRequestTally`) that drains a tier and registers the requests it spawned in the same step, so backup correlation cannot run against a partial result
+- refactor(pbs): backup-status key derivation moved into `ProxmoxDataUtils::backupStatusKey()`; it was previously built from two independent format strings about 2000 lines apart with no test
+- test(pbs): coverage for namespace-response parsing (malformed rows, duplicates and empty payloads all degrading to root) and for request-tier accounting, including a datastore draining fully while another namespace listing is still outstanding
 - fix(pbs): keyring entries are now identified by token identity (`pbsTokenSecret:<tokenId>@<host>:<port>`) instead of host alone, so two endpoints sharing one PBS server no longer overwrite each other's secrets; PBS secrets stored before this change are not migrated and must be re-entered (old `proxmon-pbs-<host>` entries are unreachable and can be removed manually with kwalletmanager)
 - fix(pbs): backup-status rows are now scoped by endpoint, so one PBS server holding backups for multiple Proxmox clusters no longer attributes one cluster's backup state to another cluster's VM/CT rows (requires each endpoint's PBS token to be scoped to that endpoint's datastores)
 - fix(config): multi-host PBS secret stash keys on token identity (was host only) and clears each stored entry individually instead of wiping the whole stash
