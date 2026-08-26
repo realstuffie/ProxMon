@@ -161,7 +161,7 @@ PlasmoidItem {
     property bool pbsIgnoreSsl: Plasmoid.configuration.pbsIgnoreSsl === true
     property int pbsBackupWarningDays: Math.max(1, Plasmoid.configuration.pbsBackupWarningDays || 7)
     property int pbsBackupStaleDays: Math.max(1, Plasmoid.configuration.pbsBackupStaleDays || 14)
-    property int pbsRefreshInterval: Math.max(1800, Plasmoid.configuration.pbsRefreshInterval || 3600)
+    property int pbsRefreshInterval: Math.max(300, Plasmoid.configuration.pbsRefreshInterval || 3600)
     property string pbsExcludeTag: Plasmoid.configuration.pbsExcludeTag || ""
     property string pbsExcludeVmids: Plasmoid.configuration.pbsExcludeVmids || ""
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"

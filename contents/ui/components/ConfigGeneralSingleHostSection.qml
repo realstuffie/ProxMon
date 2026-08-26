@@ -275,26 +275,17 @@ GridLayout {
                 implicitWidth: Math.max(200, contentWidth + leftPadding + rightPadding + 20)
                 placeholderText: "/path/to/cert.pem (optional)"
             }
-            QQC2.Label { text: "PBS Refresh:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
-            QQC2.ComboBox {
+            QQC2.Label { text: "PBS Refresh (minutes):"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }
+            QQC2.SpinBox {
                 id: pbsRefreshField
-                implicitWidth: 90
-                model: [
-                    { text: "30 min", value: 1800 },
-                    { text: "1 hour", value: 3600 },
-                    { text: "3 hours", value: 10800 },
-                    { text: "6 hours", value: 21600 },
-                    { text: "12 hours", value: 43200 },
-                    { text: "24 hours", value: 86400 }
-                ]
-                textRole: "text"
-                valueRole: "value"
-                onActivated: root.pbsRefreshInterval = currentValue
-                Component.onCompleted: {
-                    var intervals = [1800, 3600, 10800, 21600, 43200, 86400]
-                    var idx = intervals.indexOf(root.pbsRefreshInterval)
-                    currentIndex = idx >= 0 ? idx : 1
-                }
+                from: 5
+                to: 1440
+                stepSize: 5
+                editable: true
+                // Seeded rather than bound, so writing back in onValueModified
+                // cannot feed into the binding. Matches the other fields here.
+                onValueModified: root.pbsRefreshInterval = value * 60
+                Component.onCompleted: value = Math.min(1440, Math.max(5, Math.round(root.pbsRefreshInterval / 60)))
             }
 
             QQC2.Label { text: "Warning threshold:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }

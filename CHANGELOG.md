@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- feat(pbs): the PBS refresh interval is a free value from 5 minutes to 24 hours, replacing six fixed presets with a 30 minute minimum
+
 ## v0.8.2
 
 - feat(pbs): snapshots are listed across every namespace the token can see instead of the root namespace only; the namespace tree is enumerated once per datastore and each namespace fetched separately, so guests backed up into a non-root namespace now report their backup status (the snapshots endpoint returns only the requested namespace and rejects `max-depth`, so the tree has to be walked client-side)

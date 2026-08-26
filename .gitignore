@@ -100,3 +100,4 @@ Doxyfile
 docs/html/
 docs/latex/
 proxmon.png
+dist/
