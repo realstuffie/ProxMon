@@ -26,6 +26,9 @@ void DebugSanitizerTest::redactsSensitiveValues_data() {
     QTest::newRow("session-secret")
         << QStringLiteral("session=apiTokenSecret:super-secret count=1")
         << QStringLiteral("session=apiTokenSecret:REDACTED count=1");
+    QTest::newRow("pbs-keyring-key")
+        << QStringLiteral("key=pbsTokenSecret:backup@pbs!monitor@backup.example:8007 secretEmpty=false")
+        << QStringLiteral("key=pbsTokenSecret:REDACTED secretEmpty=false");
     QTest::newRow("pve-api-token")
         << QStringLiteral("auth=PVEAPIToken=other@pam!reader=uuid-secret next=true")
         << QStringLiteral("auth=PVEAPIToken=REDACTED next=true");

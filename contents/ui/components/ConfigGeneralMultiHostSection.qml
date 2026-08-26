@@ -11,6 +11,7 @@ ColumnLayout {
     property var ensureMultiHostsLen: null
     property var saveMultiHosts: null
     property var multiHostSecretKey: null
+    property var pbsMultiHostSecretKey: null
     property string trustedCertPem: ""
     property string trustedCertPath: ""
     property string cfg_multiHostSecretsJson: "{}"
@@ -408,12 +409,12 @@ ColumnLayout {
                             onClicked: {
                                 var arr = root.ensureMultiHostsLen(5)
                                 var entryNow = arr[card.index]
-                                var host = String(entryNow.pbsHost || "").trim()
-                                if (!host) return
+                                var key = root.pbsMultiHostSecretKey(entryNow)
+                                if (!key) return
 
                                 var map = {}
                                 try { map = JSON.parse(root.cfg_multiHostSecretsJson || "{}") } catch (e) { map = {} }
-                                map["pbsTokenSecret:" + host] = pbsSecretField.text
+                                map[key] = pbsSecretField.text
                                 root.updateSecretsJson(JSON.stringify(map))
                                 pbsSecretField.text = ""
                             }

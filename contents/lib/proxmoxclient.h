@@ -125,13 +125,14 @@ public:
     void cancelAll();
     void cancelRefreshRequests();
     void cancelPBS();
-    void fetchPBSDatastores(const QString &pbsHost,
-                                        int port,
-                                        const QString &tokenId,
-                                        const QString &tokenSecret,
-                                        bool ignoreSslErrors,
-                                        const QByteArray &trustedCertPem,
-                                        const QString &trustedCertPath);
+    void fetchPBSDatastores(const QString &requesterKey,
+                            const QString &pbsHost,
+                            int port,
+                            const QString &tokenId,
+                            const QString &tokenSecret,
+                            bool ignoreSslErrors,
+                            const QByteArray &trustedCertPem,
+                            const QString &trustedCertPath);
 
 signals:
     // user is the auth user returned by termproxy; sent over the
@@ -201,7 +202,13 @@ signals:
                         const QString &message);
     void pbsDatastoresReceived(const QString &pbsHost,
                                const QList<QString> &datastores);
-    void pbsSnapshotsReceived(const QString &pbsHost,
+    // Emitted before the per-namespace snapshot requests are issued, so a
+    // listener can account for them in the same slot.
+    void pbsNamespacesReceived(const QString &pbsHost,
+                               const QString &datastore,
+                               const QList<QString> &namespaces);
+    void pbsSnapshotsReceived(const QString &requesterKey,
+                              const QString &pbsHost,
                               const QString &datastore,
                               const QList<PBSSnapshot> &snapshots);
     void pbsDatastoresError(const QString &pbsHost, const QString &message);

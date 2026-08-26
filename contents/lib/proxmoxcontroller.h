@@ -7,6 +7,7 @@
 #include <QVariant>
 
 #include "pbstypes.h"
+#include "pbsrequesttally.h"
 #include "variantlistmodel.h"
 
 class ProxmoxClient;
@@ -190,9 +191,9 @@ public:
     Q_INVOKABLE void resolveSecretsIfNeeded();
     Q_INVOKABLE void listStoredKeys();
     Q_INVOKABLE void storeSingleSecret(const QString &secret);
-    Q_INVOKABLE void storeSinglePBSSecret(const QString &host, const QString &secret);
+    Q_INVOKABLE void storeSinglePBSSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
-    Q_INVOKABLE void storeMultiHostPBSSecret(const QString &host, const QString &secret);
+    Q_INVOKABLE void storeMultiHostPBSSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void fetchData();
     Q_INVOKABLE void cancelRefresh();
     Q_INVOKABLE bool runAction(const QString &sessionKey,
@@ -398,7 +399,7 @@ private:
     BackupStatus evaluateBackupStatus(qint64 lastBackupTime, int warningDays, int staleDays) const;
     QString lastBackupDisplay(qint64 backupTime) const;
     void correlateBackups();
-    QString pbsKeyForHost(const QString &host) const;
+    QString pbsKeyFor(const QString &host, int port, const QString &tokenId) const;
     QString normalizedHost(const QString &host) const;
     QString resolvedHostFingerprint(const QString &host) const;
     QString normalizedTokenId(const QString &tokenId) const;
@@ -459,7 +460,7 @@ private:
     // (success, config change, mode change) and by cancelRefresh().
     QTimer *m_retryTimer = nullptr;
     QString m_pbsRefreshError;
-    int m_pendingPbsEndpoints = 0;
+    PbsRequestTally m_pbsTally;
     // Bumped by every refreshPBSNow() run; PBS keychain callbacks capture the
     // value and drop themselves when a newer cycle (or a config change that
     // retriggers PBS refresh) has superseded them. Keychain reads cannot be
@@ -486,7 +487,6 @@ private:
     QHash<QString, PBSSnapshot> m_latestBackups;
     QTimer *m_pbsTimer = nullptr;
     QTimer *m_pbsDebounceTimer = nullptr;
-    int m_pendingPbsSnapshotRequests = 0;
     QHash<QString, QByteArray> m_pendingConsoleAuth;
     QMap<QString, QByteArray>  m_pendingConsoleTicket;
     ProxmoxClient *m_api;

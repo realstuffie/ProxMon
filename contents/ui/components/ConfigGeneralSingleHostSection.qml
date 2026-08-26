@@ -233,7 +233,9 @@ GridLayout {
 
                 QQC2.Button {
                     text: "Update Keyring"
-                    enabled: pbsTokenSecretField.text && pbsTokenSecretField.text.trim() !== ""
+                    enabled: pbsTokenSecretField.text.trim() !== ""
+                             && pbsHostField.text.trim() !== ""
+                             && pbsTokenIdField.text.trim() !== ""
                     onClicked: {
                         root.stashPbsSecret(pbsTokenSecretField.text)
                         pbsTokenSecretField.text = ""

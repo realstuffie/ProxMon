@@ -42,6 +42,21 @@ target_link_libraries(tst_consolecredentials PRIVATE
 
 add_test(NAME consolecredentials COMMAND tst_consolecredentials)
 
+qt_add_executable(tst_secretkeyderivation
+    tst_secretkeyderivation.cpp
+)
+
+target_include_directories(tst_secretkeyderivation PRIVATE ..)
+
+target_link_libraries(tst_secretkeyderivation PRIVATE
+    proxmoxclientplugin
+    Qt6::Core
+    Qt6::Network
+    Qt6::Test
+)
+
+add_test(NAME secretkeyderivation COMMAND tst_secretkeyderivation)
+
 qt_add_executable(tst_proxmoxtaskutils
     tst_proxmoxtaskutils.cpp
     ../proxmoxtaskutils.cpp
@@ -123,3 +138,16 @@ if(QMLTESTRUNNER_EXECUTABLE)
 else()
     message(STATUS "qmltestrunner not found — skipping the configportability QML test")
 endif()
+
+qt_add_executable(tst_pbsrequesttally
+    tst_pbsrequesttally.cpp
+)
+
+target_include_directories(tst_pbsrequesttally PRIVATE ..)
+
+target_link_libraries(tst_pbsrequesttally PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+add_test(NAME pbsrequesttally COMMAND tst_pbsrequesttally)

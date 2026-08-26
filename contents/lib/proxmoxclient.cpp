@@ -13,6 +13,7 @@
 #include <QSslConfiguration>
 #include <QTimer>
 #include <QUrl>
+#include <QUrlQuery>
 
 #include <utility>
 
@@ -169,6 +170,10 @@ void ProxmoxClient::requestActionFor(const QString &sessionKey,
 
 namespace {
 
+// PBS caps namespace nesting at 7 levels, so one listing at this depth
+// returns the whole tree for a datastore.
+constexpr int PbsMaxNamespaceDepth = 7;
+
 QNetworkRequest buildRequest(const QString &host,
                              int port,
                              const QString &path,
@@ -176,8 +181,12 @@ QNetworkRequest buildRequest(const QString &host,
                              const QString &tokenSecret,
                              const QByteArray &trustedCertPem,
                              const QString &trustedCertPath,
-                             int transferTimeoutMs = ProxmoxConst::Defaults::RequestTimeoutMs) {
-    const QUrl url(QStringLiteral("https://%1:%2/api2/json%3").arg(host).arg(port).arg(path));
+                             int transferTimeoutMs = ProxmoxConst::Defaults::RequestTimeoutMs,
+                             const QUrlQuery &query = QUrlQuery()) {
+    QUrl url(QStringLiteral("https://%1:%2/api2/json%3").arg(host).arg(port).arg(path));
+    if (!query.isEmpty()) {
+        url.setQuery(query);
+    }
 
     QNetworkRequest req(url);
     req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("ProxMon"));
@@ -512,7 +521,8 @@ void ProxmoxClient::postFor(const QString &sessionKey,
     });
 }
 
-void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
+void ProxmoxClient::fetchPBSDatastores(const QString &requesterKey,
+                                      const QString &pbsHost,
                                       int port,
                                       const QString &tokenId,
                                       const QString &tokenSecret,
@@ -563,7 +573,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
     }
 
     QObject::connect(r, &QNetworkReply::finished, this,
-                     [this, r, pbsHost, port, tokenId, pbsSecret = std::move(pbsSecret),
+                     [this, r, requesterKey, pbsHost, port, tokenId, pbsSecret = std::move(pbsSecret),
                       ignoreSslErrors, resolvedCertPem]() mutable {
         auto clearSecret = [&pbsSecret]() {
             pbsSecret.fill(0);
@@ -592,60 +602,136 @@ void ProxmoxClient::fetchPBSDatastores(const QString &pbsHost,
             }
             emit pbsDatastoresReceived(pbsHost, datastores);
             for (const QString &datastore : datastores) {
-                QNetworkRequest snapshotReq = buildRequest(pbsHost,
-                                                           port,
-                                                           QStringLiteral("/admin/datastore/%1/snapshots").arg(QString::fromUtf8(QUrl::toPercentEncoding(datastore))),
-                                                           tokenId,
-                                                           QString(),
-                                                           resolvedCertPem,
-                                                           QString(),
-                                                           m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs);
-                QByteArray snapshotAuthorization = QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + pbsSecret;
-                snapshotReq.setRawHeader("Authorization", snapshotAuthorization);
-                snapshotAuthorization.fill(0);
-                snapshotAuthorization.clear();
+                const QString encodedStore = QString::fromUtf8(QUrl::toPercentEncoding(datastore));
 
-                QNetworkReply *snapshotReply = m_nam.get(snapshotReq);
-                m_pbsInFlight.insert(snapshotReply);
+                // The snapshots endpoint has no max-depth of its own, so the
+                // namespace tree is enumerated here and fanned out into one
+                // snapshots request per namespace.
+                QUrlQuery nsQuery;
+                nsQuery.addQueryItem(QStringLiteral("max-depth"), QString::number(PbsMaxNamespaceDepth));
+                QNetworkRequest nsReq = buildRequest(pbsHost,
+                                                     port,
+                                                     QStringLiteral("/admin/datastore/%1/namespace").arg(encodedStore),
+                                                     tokenId,
+                                                     QString(),
+                                                     resolvedCertPem,
+                                                     QString(),
+                                                     m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs,
+                                                     nsQuery);
+                QByteArray nsAuthorization = QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + pbsSecret;
+                nsReq.setRawHeader("Authorization", nsAuthorization);
+                nsAuthorization.fill(0);
+                nsAuthorization.clear();
+
+                QNetworkReply *nsReply = m_nam.get(nsReq);
+                m_pbsInFlight.insert(nsReply);
                 if (ignoreSslErrors) {
-                    QObject::connect(snapshotReply, &QNetworkReply::sslErrors, snapshotReply, [snapshotReply](const QList<QSslError> &) {
-                        snapshotReply->ignoreSslErrors();
+                    QObject::connect(nsReply, &QNetworkReply::sslErrors, nsReply, [nsReply](const QList<QSslError> &) {
+                        nsReply->ignoreSslErrors();
                     });
                 }
 
-                QObject::connect(snapshotReply, &QNetworkReply::finished, this, [this, snapshotReply, pbsHost, datastore]() {
-                    if (!m_pbsInFlight.remove(snapshotReply)) {
-                        snapshotReply->deleteLater();
+                // Snapshot requests are issued from this callback, which runs
+                // after the enclosing datastore callback has zeroed its own
+                // copy, so this tier needs a copy it zeroes itself.
+                QByteArray secretForNs = pbsSecret;
+                QObject::connect(nsReply, &QNetworkReply::finished, this,
+                                 [this, nsReply, requesterKey, pbsHost, port, tokenId, datastore, encodedStore,
+                                  nsSecret = std::move(secretForNs), ignoreSslErrors, resolvedCertPem]() mutable {
+                    auto clearNsSecret = [&nsSecret]() {
+                        nsSecret.fill(0);
+                        nsSecret.clear();
+                    };
+                    if (!m_pbsInFlight.remove(nsReply)) {
+                        clearNsSecret();
+                        nsReply->deleteLater();
                         return;
                     }
-                    auto emitSnapErr = [&](const QString &msg) {
-                        if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSSnapshots error host=%1 datastore=%2 message=%3").arg(pbsHost, datastore, msg);
-                        emit pbsSnapshotsError(pbsHost, datastore, msg);
-                    };
-                    auto emitSnapOk = [&](const QVariant &snapData) {
-                        if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSSnapshots ok host=%1 datastore=%2").arg(pbsHost, datastore);
-                        QList<PBSSnapshot> snapshots;
-                        const QVariantList rows = snapData.toMap().value(QStringLiteral("data")).toList();
-                        for (const QVariant &rowValue : rows) {
-                            const QVariantMap row = rowValue.toMap();
-                            bool vmidOk = false;
-                            const int vmid = row.value(QStringLiteral("backup-id")).toString().toInt(&vmidOk);
-                            if (!vmidOk) {
-                                continue;
+
+                    auto requestSnapshots = [&](const QList<QString> &namespaces) {
+                        // Emitted before the requests exist so a listener can
+                        // count them in the same slot; the pending total must
+                        // never hit zero while work is still to be issued.
+                        emit pbsNamespacesReceived(pbsHost, datastore, namespaces);
+                        for (const QString &backupNs : namespaces) {
+                            QUrlQuery snapshotQuery;
+                            if (!backupNs.isEmpty()) {
+                                snapshotQuery.addQueryItem(QStringLiteral("ns"), backupNs);
                             }
-                            PBSSnapshot snapshot;
-                            snapshot.vmid = vmid;
-                            snapshot.backupType = row.value(QStringLiteral("backup-type")).toString();
-                            snapshot.backupTime = row.value(QStringLiteral("backup-time")).toLongLong();
-                            snapshot.size = row.value(QStringLiteral("size")).toLongLong();
-                            snapshot.verifyState = row.value(QStringLiteral("verification")).toMap().value(QStringLiteral("state")).toString();
-                            snapshot.datastoreName = datastore;
-                            snapshot.pbsHost = pbsHost;
-                            snapshots.push_back(snapshot);
+                            QNetworkRequest snapshotReq = buildRequest(pbsHost,
+                                                                       port,
+                                                                       QStringLiteral("/admin/datastore/%1/snapshots").arg(encodedStore),
+                                                                       tokenId,
+                                                                       QString(),
+                                                                       resolvedCertPem,
+                                                                       QString(),
+                                                                       m_lowLatency ? ProxmoxConst::Defaults::LowLatencyTimeoutMs : ProxmoxConst::Defaults::RequestTimeoutMs,
+                                                                       snapshotQuery);
+                            QByteArray snapshotAuthorization = QByteArray("PBSAPIToken=") + tokenId.toUtf8() + ":" + nsSecret;
+                            snapshotReq.setRawHeader("Authorization", snapshotAuthorization);
+                            snapshotAuthorization.fill(0);
+                            snapshotAuthorization.clear();
+
+                            QNetworkReply *snapshotReply = m_nam.get(snapshotReq);
+                            m_pbsInFlight.insert(snapshotReply);
+                            if (ignoreSslErrors) {
+                                QObject::connect(snapshotReply, &QNetworkReply::sslErrors, snapshotReply, [snapshotReply](const QList<QSslError> &) {
+                                    snapshotReply->ignoreSslErrors();
+                                });
+                            }
+
+                            QObject::connect(snapshotReply, &QNetworkReply::finished, this, [this, snapshotReply, requesterKey, pbsHost, datastore, backupNs]() {
+                                if (!m_pbsInFlight.remove(snapshotReply)) {
+                                    snapshotReply->deleteLater();
+                                    return;
+                                }
+                                auto emitSnapErr = [&](const QString &msg) {
+                                    if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSSnapshots error host=%1 datastore=%2 ns=%3 message=%4").arg(pbsHost, datastore, backupNs, msg);
+                                    emit pbsSnapshotsError(pbsHost, datastore, msg);
+                                };
+                                auto emitSnapOk = [&](const QVariant &snapData) {
+                                    if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSSnapshots ok host=%1 datastore=%2 ns=%3").arg(pbsHost, datastore, backupNs);
+                                    QList<PBSSnapshot> snapshots;
+                                    const QVariantList rows = snapData.toMap().value(QStringLiteral("data")).toList();
+                                    for (const QVariant &rowValue : rows) {
+                                        const QVariantMap row = rowValue.toMap();
+                                        bool vmidOk = false;
+                                        const int vmid = row.value(QStringLiteral("backup-id")).toString().toInt(&vmidOk);
+                                        if (!vmidOk) {
+                                            continue;
+                                        }
+                                        PBSSnapshot snapshot;
+                                        snapshot.vmid = vmid;
+                                        snapshot.backupType = row.value(QStringLiteral("backup-type")).toString();
+                                        snapshot.backupTime = row.value(QStringLiteral("backup-time")).toLongLong();
+                                        snapshot.size = row.value(QStringLiteral("size")).toLongLong();
+                                        snapshot.verifyState = row.value(QStringLiteral("verification")).toMap().value(QStringLiteral("state")).toString();
+                                        snapshot.datastoreName = datastore;
+                                        snapshot.backupNamespace = backupNs;
+                                        snapshot.pbsHost = pbsHost;
+                                        snapshots.push_back(snapshot);
+                                    }
+                                    emit pbsSnapshotsReceived(requesterKey, pbsHost, datastore, snapshots);
+                                };
+                                handleFinishedReply(snapshotReply, 0, QStringLiteral("pbs-snapshots"), datastore, QString(), emitSnapErr, emitSnapOk);
+                            });
                         }
-                        emit pbsSnapshotsReceived(pbsHost, datastore, snapshots);
                     };
-                    handleFinishedReply(snapshotReply, 0, QStringLiteral("pbs-snapshots"), datastore, QString(), emitSnapErr, emitSnapOk);
+
+                    auto emitNsErr = [&](const QString &msg) {
+                        if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSNamespaces error host=%1 datastore=%2 message=%3 falling back to root").arg(pbsHost, datastore, msg);
+                        // A token without namespace-listing privilege, or a PBS
+                        // predating the endpoint, must still yield root-namespace
+                        // data rather than an empty backup panel.
+                        requestSnapshots({QString()});
+                    };
+                    auto emitNsOk = [&](const QVariant &nsData) {
+                        const QList<QString> namespaces = ProxmoxDataUtils::parsePbsNamespaces(nsData);
+                        if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSNamespaces ok host=%1 datastore=%2 count=%3").arg(pbsHost, datastore).arg(namespaces.size());
+                        requestSnapshots(namespaces);
+                    };
+                    handleFinishedReply(nsReply, 0, QStringLiteral("pbs-namespaces"), datastore, QString(), emitNsErr, emitNsOk);
+                    clearNsSecret();
                 });
             }
         };

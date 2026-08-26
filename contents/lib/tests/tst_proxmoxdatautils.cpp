@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QJsonDocument>
 
 #include "proxmoxdatautils.h"
 
@@ -13,6 +14,8 @@ private slots:
     void responseRowsHandleMissingData();
     void endpointBucketsMergeAndSort();
     void sortStatusIdGroupsRunningThenId();
+    void backupStatusKeyIsStableAndDiscriminating();
+    void pbsNamespacesParseTreeAndAlwaysYieldRoot();
 };
 
 void ProxmoxDataUtilsTest::multiHostJsonRejectsMalformedInput() {
@@ -223,6 +226,69 @@ void ProxmoxDataUtilsTest::sortStatusIdGroupsRunningThenId() {
     QCOMPARE(items.at(1).toMap().value(QStringLiteral("vmid")).toInt(), 101);
     QCOMPARE(items.at(2).toMap().value(QStringLiteral("vmid")).toInt(), 200);
     QCOMPARE(items.at(3).toMap().value(QStringLiteral("vmid")).toInt(), 300);
+}
+
+void ProxmoxDataUtilsTest::backupStatusKeyIsStableAndDiscriminating() {
+    // The key is built independently at insert time and at lookup time, so its
+    // exact form is a contract, not an implementation detail.
+    QCOMPARE(ProxmoxDataUtils::backupStatusKey(QStringLiteral("apiTokenSecret:mon@pbs!k@pve.example:8006"),
+                                               QStringLiteral("PBS.Example "),
+                                               QStringLiteral("vm"),
+                                               100),
+             QStringLiteral("apiTokenSecret:mon@pbs!k@pve.example:8006|pbs.example|vm|100"));
+
+    // Host normalization must match ProxmoxController::normalizedHost().
+    QCOMPARE(ProxmoxDataUtils::backupStatusKey(QStringLiteral("k"), QStringLiteral("  PBS.Example  "), QStringLiteral("vm"), 100),
+             ProxmoxDataUtils::backupStatusKey(QStringLiteral("k"), QStringLiteral("pbs.example"), QStringLiteral("vm"), 100));
+
+    // Every component discriminates: two endpoints sharing a PBS host, two
+    // hosts under one endpoint, ct vs vm, and distinct vmids.
+    const QString base = ProxmoxDataUtils::backupStatusKey(QStringLiteral("k1"), QStringLiteral("h1"), QStringLiteral("vm"), 100);
+    QVERIFY(base != ProxmoxDataUtils::backupStatusKey(QStringLiteral("k2"), QStringLiteral("h1"), QStringLiteral("vm"), 100));
+    QVERIFY(base != ProxmoxDataUtils::backupStatusKey(QStringLiteral("k1"), QStringLiteral("h2"), QStringLiteral("vm"), 100));
+    QVERIFY(base != ProxmoxDataUtils::backupStatusKey(QStringLiteral("k1"), QStringLiteral("h1"), QStringLiteral("ct"), 100));
+    QVERIFY(base != ProxmoxDataUtils::backupStatusKey(QStringLiteral("k1"), QStringLiteral("h1"), QStringLiteral("vm"), 101));
+
+    // Single-host mode uses an empty sessionKey; it must still be well formed.
+    QCOMPARE(ProxmoxDataUtils::backupStatusKey(QString(), QStringLiteral("h1"), QStringLiteral("ct"), 7),
+             QStringLiteral("|h1|ct|7"));
+}
+
+void ProxmoxDataUtilsTest::pbsNamespacesParseTreeAndAlwaysYieldRoot() {
+    auto ns = [](const QString &json) {
+        return ProxmoxDataUtils::parsePbsNamespaces(
+            QJsonDocument::fromJson(json.toUtf8()).toVariant());
+    };
+
+    // Root-only store, as PBS actually answers it.
+    QCOMPARE(ns(QStringLiteral(R"({"data":[{"ns":""}]})")), QList<QString>{QString()});
+
+    // A tree. Order is preserved and the empty root entry is kept, since an
+    // empty ns is a real namespace rather than a missing value.
+    const QList<QString> tree = ns(QStringLiteral(
+        R"({"data":[{"ns":""},{"ns":"test"},{"ns":"cust/a"},{"ns":"cust/a/deep"}]})"));
+    QCOMPARE(tree.size(), 4);
+    QCOMPARE(tree.at(0), QString());
+    QCOMPARE(tree.at(1), QStringLiteral("test"));
+    QCOMPARE(tree.at(2), QStringLiteral("cust/a"));
+    QCOMPARE(tree.at(3), QStringLiteral("cust/a/deep"));
+
+    // Rows with no "ns" key are malformed and skipped, but a payload of only
+    // such rows must still degrade to the root namespace, not to nothing.
+    QCOMPARE(ns(QStringLiteral(R"({"data":[{"comment":"x"},{"ns":"keep"}]})")),
+             QList<QString>{QStringLiteral("keep")});
+    QCOMPARE(ns(QStringLiteral(R"({"data":[{"comment":"x"}]})")), QList<QString>{QString()});
+
+    // Duplicates would fan out duplicate snapshot requests and inflate the
+    // pending count, so they are collapsed.
+    QCOMPARE(ns(QStringLiteral(R"({"data":[{"ns":"a"},{"ns":"a"}]})")),
+             QList<QString>{QStringLiteral("a")});
+
+    // Every unusable shape degrades to the root namespace.
+    QCOMPARE(ns(QStringLiteral(R"({"data":[]})")), QList<QString>{QString()});
+    QCOMPARE(ns(QStringLiteral(R"({"data":"nonsense"})")), QList<QString>{QString()});
+    QCOMPARE(ns(QStringLiteral(R"({})")), QList<QString>{QString()});
+    QCOMPARE(ProxmoxDataUtils::parsePbsNamespaces(QVariant()), QList<QString>{QString()});
 }
 
 QTEST_APPLESS_MAIN(ProxmoxDataUtilsTest)

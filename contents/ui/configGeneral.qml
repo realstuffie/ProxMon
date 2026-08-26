@@ -241,6 +241,14 @@ KCM.SimpleKCM {
         return key
     }
 
+    function pbsMultiHostSecretKey(entry) {
+        var host = (entry && entry.pbsHost) ? String(entry.pbsHost).trim().toLowerCase() : ""
+        var port = (entry && entry.pbsPort) ? String(entry.pbsPort) : "8007"
+        var tokenId = (entry && entry.pbsTokenId) ? String(entry.pbsTokenId).trim() : ""
+        var key = (!host || !tokenId) ? "" : ("pbsTokenSecret:" + tokenId + "@" + host + ":" + port)
+        return key
+    }
+
     // --- Backup / Restore -------------------------------------------------
     // Values handed to the export builder. Deliberately covers ONLY the
     // whitelisted, non-secret settings — apiTokenSecret, pbsTokenSecretBuffer
@@ -390,6 +398,7 @@ KCM.SimpleKCM {
             ensureMultiHostsLen: root.ensureMultiHostsLen
             saveMultiHosts: root.saveMultiHosts
             multiHostSecretKey: root.multiHostSecretKey
+            pbsMultiHostSecretKey: root.pbsMultiHostSecretKey
             cfg_multiHostSecretsJson: root.cfg_multiHostSecretsJson
             controller: typeof kcm !== "undefined" && kcm.controller ? kcm.controller : null // qmllint disable unqualified
             onUpdateSecretsJson: function(value) {
