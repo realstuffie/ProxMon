@@ -5,6 +5,11 @@ import QtQuick.Layouts
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 
+/**
+ * Multi-host view of one node. Identical widgets to the single-host
+ * NodeSection; the difference is that every callback carries a session key and
+ * the armed-action key is namespaced per endpoint.
+ */
 ColumnLayout {
     id: root
 
@@ -41,135 +46,50 @@ ColumnLayout {
     property bool consoleEnabled: true
     property bool powerActionsEnabled: true
 
+    // Armed state is stored globally as "<sessionKey>::<rowKey>". Rows only
+    // ever see their own endpoint's key, so an armed action on one host can
+    // never light up the same vmid on another.
+    readonly property string scopedArmedActionKey: root.armedActionSessionKey === root.sessionKey
+        ? root.armedActionKey.replace(root.sessionKey + "::", "")
+        : ""
+
+    function busyFor(kind, vmid) {
+        return !!(root.isActionBusy && root.isActionBusy(root.nodeName, kind, vmid, root.sessionKey))
+    }
+
+    function forwardAction(kind, nodeName, vmid, displayName, action) {
+        if (typeof root.onAction === "function")
+            root.onAction(root.sessionKey, kind, nodeName, vmid, displayName, action)
+    }
+
+    function forwardConsole(kind, nodeName, vmid, displayName) {
+        if (typeof root.onConsole === "function")
+            root.onConsole(root.sessionKey, kind, nodeName, vmid, displayName)
+    }
+
     Layout.fillWidth: true
     Layout.alignment: Qt.AlignTop
     spacing: 4
 
-    Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 70
-        radius: root.uiRadiusL
-        color: Qt.rgba(root.uiNodeColor.r, root.uiNodeColor.g, root.uiNodeColor.b, root.uiNodeCardOpacity * root.uiWindowOpacity)
-        border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r, Kirigami.Theme.disabledTextColor.g, Kirigami.Theme.disabledTextColor.b, root.uiBorderOpacity)
-        border.width: 1
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: if (typeof root.onToggleCollapsed === "function") root.onToggleCollapsed(root.nodeName, root.sessionKey)
-            cursorShape: Qt.PointingHandCursor
-        }
-
-        ColumnLayout {
-            anchors.fill: parent
-            anchors.margins: 10
-            spacing: 4
-
-            RowLayout {
-                spacing: 8
-                Layout.fillWidth: true
-
-                Kirigami.Icon {
-                    source: root.isCollapsed ? "arrow-right" : "arrow-down"
-                    implicitWidth: 14
-                    implicitHeight: 14
-                }
-
-                Kirigami.Icon {
-                    source: "computer"
-                    implicitWidth: 18
-                    implicitHeight: 18
-                }
-
-                PlasmaComponents.Label {
-                    text: root.anonymizeNodeName(root.nodeName, root.nodeIndex)
-                    font.bold: true
-                    Layout.fillWidth: true
-                    elide: Text.ElideRight
-                }
-
-                RowLayout {
-                    spacing: 4
-                    visible: root.isCollapsed
-
-                    Kirigami.Icon {
-                        source: "vm"
-                        implicitWidth: 12
-                        implicitHeight: 12
-                        opacity: 0.7
-                    }
-
-                    PlasmaComponents.Label {
-                        text: (root.vmsModel ? root.vmsModel.runningCount : 0) + "/" + (root.vmsModel ? root.vmsModel.count : 0)
-                        font.pixelSize: 10
-                        opacity: 0.7
-                    }
-
-                    Item { implicitWidth: 4 }
-
-                    Kirigami.Icon {
-                        source: "lxc"
-                        implicitWidth: 12
-                        implicitHeight: 12
-                        opacity: 0.7
-                    }
-
-                    PlasmaComponents.Label {
-                        text: (root.lxcsModel ? root.lxcsModel.runningCount : 0) + "/" + (root.lxcsModel ? root.lxcsModel.count : 0)
-                        font.pixelSize: 10
-                        opacity: 0.7
-                    }
-                }
-
-                Rectangle {
-                    implicitWidth: 52
-                    implicitHeight: 16
-                    radius: root.uiRadiusL
-                    color: root.nodeModel && root.nodeModel.status === "online"
-                        ? Qt.rgba(root.uiRunningColor.r, root.uiRunningColor.g, root.uiRunningColor.b, 0.82)
-                        : Qt.rgba(root.uiStoppedColor.r, root.uiStoppedColor.g, root.uiStoppedColor.b, 0.82)
-
-                    PlasmaComponents.Label {
-                        anchors.centerIn: parent
-                        text: root.nodeModel ? root.nodeModel.status : ""
-                        color: "white"
-                        font.pixelSize: 9
-                    }
-                }
-            }
-
-            RowLayout {
-                spacing: 12
-
-                PlasmaComponents.Label {
-                    text: root.nodeModel ? ("CPU: " + root.safeCpuPercent(root.nodeModel.cpu).toFixed(1) + "%") : ""
-                    font.pixelSize: 12
-                }
-
-                PlasmaComponents.Label {
-                    text: root.nodeModel ? ("Mem: " + (root.nodeModel.mem / 1073741824).toFixed(1) + "/" + (root.nodeModel.maxmem / 1073741824).toFixed(1) + "G") : ""
-                    font.pixelSize: 12
-                }
-
-                Item { Layout.fillWidth: true }
-
-                RowLayout {
-                    spacing: 4
-
-                    Kirigami.Icon {
-                        implicitWidth: 18
-                        implicitHeight: 18
-                        Layout.alignment: Qt.AlignVCenter
-                        source: "chronometer"
-                    }
-
-                    PlasmaComponents.Label {
-                        text: root.nodeModel ? (Math.floor(root.nodeModel.uptime / 86400) + "d " + Math.floor((root.nodeModel.uptime % 86400) / 3600) + "h") : ""
-                        font.pixelSize: 12
-                        font.family: "JetBrains Mono"
-                        opacity: 0.85
-                    }
-                }
-            }
+    NodeCard {
+        nodeModel: root.nodeModel
+        nodeIndex: root.nodeIndex
+        nodeName: root.nodeName
+        isCollapsed: root.isCollapsed
+        vmsModel: root.vmsModel
+        lxcsModel: root.lxcsModel
+        uiRadiusL: root.uiRadiusL
+        uiBorderOpacity: root.uiBorderOpacity
+        uiNodeCardOpacity: root.uiNodeCardOpacity
+        uiWindowOpacity: root.uiWindowOpacity
+        uiNodeColor: root.uiNodeColor
+        uiRunningColor: root.uiRunningColor
+        uiStoppedColor: root.uiStoppedColor
+        safeCpuPercent: root.safeCpuPercent
+        anonymizeNodeName: root.anonymizeNodeName
+        onToggleCollapsed: function() {
+            if (typeof root.onToggleCollapsed === "function")
+                root.onToggleCollapsed(root.nodeName, root.sessionKey)
         }
     }
 
@@ -178,130 +98,64 @@ ColumnLayout {
         Layout.leftMargin: 12
         Layout.rightMargin: root.scrollbarReserve
         visible: !root.isCollapsed
-        spacing: 4
+        spacing: 5
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            visible: root.vmsModel && root.vmsModel.count > 0
-            spacing: 2
-
-            RowLayout {
-                Layout.preferredHeight: 22
-                spacing: 6
-
-                Kirigami.Icon {
-                    source: "vm"
-                    implicitWidth: 14
-                    implicitHeight: 14
-                }
-
-                PlasmaComponents.Label {
-                    text: "VMs (" + (root.vmsModel ? root.vmsModel.runningCount : 0) + "/" + (root.vmsModel ? root.vmsModel.count : 0) + ")"
-                    font.bold: true
-                    font.pixelSize: 11
-                }
-            }
-
-            Repeater {
-                model: root.vmsModel
-
-                delegate: VmRow {
-                    required property int index
-                    required property var itemData
-
-                    vmIndex: index
-                    vmModel: itemData
-                    nodeName: root.nodeName
-                    busy: root.isActionBusy(root.nodeName, "qemu", itemData.vmid, root.sessionKey)
-                    armedActionKey: root.armedActionSessionKey === root.sessionKey
-                        ? root.armedActionKey.replace(root.sessionKey + "::", "")
-                        : ""
-                    armedTimerRunning: root.armedTimerRunning
-                    uiRowHeight: 28
-                    uiRadiusS: 4
-                    uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
-                    uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
-                    uiRunningColor: root.uiRunningColor
-                    uiStoppedColor: root.uiStoppedColor
-                    uiWindowOpacity: root.uiWindowOpacity
-                    scrollbarReserve: 0
-                    anonymizeVmId: root.anonymizeVmId
-                    anonymizeVmName: root.anonymizeVmName
-                    onAction: function(kind, nodeName, vmid, displayName, action) {
-                        if (typeof root.onAction === "function") root.onAction(root.sessionKey, kind, nodeName, vmid, displayName, action)
-
-                    }
-                    onConsole: function(kind, nodeName, vmid, displayName) {
-                        if (typeof root.onConsole === "function") root.onConsole(root.sessionKey, kind, nodeName, vmid, displayName)
-                    }
-                    consoleEnabled: root.consoleEnabled
-                    powerActionsEnabled: root.powerActionsEnabled
-                }
-            }
+        GuestSection {
+            kind: "qemu"
+            title: "VMs"
+            iconName: "vm"
+            guestsModel: root.vmsModel
+            nodeName: root.nodeName
+            uiRowHeight: 28
+            uiRadiusS: 4
+            uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
+            uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
+            uiRunningColor: root.uiRunningColor
+            uiStoppedColor: root.uiStoppedColor
+            uiWindowOpacity: root.uiWindowOpacity
+            scrollbarReserve: 0
+            armedActionKey: root.scopedArmedActionKey
+            armedTimerRunning: root.armedTimerRunning
+            busyFor: root.busyFor
+            anonymizeVmId: root.anonymizeVmId
+            anonymizeName: root.anonymizeVmName
+            onAction: root.forwardAction
+            onConsole: root.forwardConsole
+            statsEnabled: false
+            consoleEnabled: root.consoleEnabled
+            powerActionsEnabled: root.powerActionsEnabled
         }
 
-        ColumnLayout {
-            Layout.fillWidth: true
-            visible: root.lxcsModel && root.lxcsModel.count > 0
-            spacing: 2
-
-            RowLayout {
-                Layout.preferredHeight: 22
-                spacing: 6
-
-                Kirigami.Icon {
-                    source: "lxc"
-                    implicitWidth: 14
-                    implicitHeight: 14
-                }
-
-                PlasmaComponents.Label {
-                    text: "Containers (" + (root.lxcsModel ? root.lxcsModel.runningCount : 0) + "/" + (root.lxcsModel ? root.lxcsModel.count : 0) + ")"
-                    font.bold: true
-                    font.pixelSize: 11
-                }
-            }
-
-            Repeater {
-                model: root.lxcsModel
-
-                delegate: LxcRow {
-                    required property int index
-                    required property var itemData
-
-                    ctIndex: index
-                    ctModel: itemData
-                    nodeName: root.nodeName
-                    busy: root.isActionBusy(root.nodeName, "lxc", itemData.vmid, root.sessionKey)
-                    armedActionKey: root.armedActionSessionKey === root.sessionKey
-                        ? root.armedActionKey.replace(root.sessionKey + "::", "")
-                        : ""
-                    armedTimerRunning: root.armedTimerRunning
-                    uiRowHeight: 28
-                    uiRadiusS: 4
-                    uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
-                    uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
-                    uiRunningColor: root.uiRunningColor
-                    uiStoppedColor: root.uiStoppedColor
-                    uiWindowOpacity: root.uiWindowOpacity
-                    scrollbarReserve: 0
-                    anonymizeVmId: root.anonymizeVmId
-                    anonymizeLxcName: root.anonymizeLxcName
-                    onAction: function(kind, nodeName, vmid, displayName, action) {
-                        if (typeof root.onAction === "function") root.onAction(root.sessionKey, kind, nodeName, vmid, displayName, action)
-                    }
-                    onConsole: function(kind, nodeName, vmid, displayName) {
-                        if (typeof root.onConsole === "function") root.onConsole(root.sessionKey, kind, nodeName, vmid, displayName)
-                    }
-                    consoleEnabled: root.consoleEnabled
-                    powerActionsEnabled: root.powerActionsEnabled
-                }
-            }
+        GuestSection {
+            kind: "lxc"
+            title: "Containers"
+            iconName: "lxc"
+            guestsModel: root.lxcsModel
+            nodeName: root.nodeName
+            uiRowHeight: 28
+            uiRadiusS: 4
+            uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
+            uiSurfaceAltOpacity: root.uiSurfaceAltOpacity
+            uiRunningColor: root.uiRunningColor
+            uiStoppedColor: root.uiStoppedColor
+            uiWindowOpacity: root.uiWindowOpacity
+            scrollbarReserve: 0
+            armedActionKey: root.scopedArmedActionKey
+            armedTimerRunning: root.armedTimerRunning
+            busyFor: root.busyFor
+            anonymizeVmId: root.anonymizeVmId
+            anonymizeName: root.anonymizeLxcName
+            onAction: root.forwardAction
+            onConsole: root.forwardConsole
+            statsEnabled: false
+            consoleEnabled: root.consoleEnabled
+            powerActionsEnabled: root.powerActionsEnabled
         }
 
         PlasmaComponents.Label {
             text: "No VMs or Containers"
-            visible: (!root.vmsModel || root.vmsModel.count === 0) && (!root.lxcsModel || root.lxcsModel.count === 0)
+            visible: (!root.vmsModel || root.vmsModel.count === 0)
+                && (!root.lxcsModel || root.lxcsModel.count === 0)
             opacity: 0.5
             font.pixelSize: 10
             Layout.leftMargin: 4

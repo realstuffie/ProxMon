@@ -1,0 +1,134 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import QtQuick.Layouts
+import org.kde.plasma.components as PlasmaComponents
+import org.kde.kirigami as Kirigami
+
+/**
+ * One titled group of guests ("VMs" / "Containers") plus its rows.
+ *
+ * Both the single-host and multi-host node views render two of these, so the
+ * section header and the row wiring are declared once. Callers hand in
+ * callbacks that are already bound to their own context (node, and session key
+ * in the multi-host case), which is what lets the two views share this.
+ */
+ColumnLayout {
+    id: section
+
+    required property string kind
+    required property string title
+    required property string iconName
+    property var guestsModel: null
+    property string nodeName: ""
+
+    // Theming forwarded to each row.
+    property int uiRowHeight: 30
+    property int uiRadiusS: 4
+    property real uiSurfaceRunningOpacity: 0.12
+    property real uiSurfaceAltOpacity: 0.10
+    property color uiRunningColor: Kirigami.Theme.positiveTextColor
+    property color uiStoppedColor: Kirigami.Theme.disabledTextColor
+    property real uiWindowOpacity: 1.0
+    property int scrollbarReserve: 0
+
+    property string armedActionKey: ""
+    property bool armedTimerRunning: false
+
+    // (kind, vmid) -> bool. Bound by the caller to its node/session.
+    property var busyFor: null
+
+    property var anonymizeVmId: null
+    property var anonymizeName: null
+    property var anonymizeIp: null
+    property var onAction: null
+    property var onConsole: null
+    property var onStatsToggled: null
+    property var getStatsData: null
+    property var isStatsLoading: null
+
+    property bool statsEnabled: false
+    property bool consoleEnabled: true
+    property bool powerActionsEnabled: true
+
+    readonly property int totalCount: guestsModel ? guestsModel.count : 0
+    readonly property int runningCount: guestsModel ? guestsModel.runningCount : 0
+
+    Layout.fillWidth: true
+    visible: totalCount > 0
+    spacing: 2
+
+    RowLayout {
+        Layout.preferredHeight: 20
+        Layout.bottomMargin: 1
+        spacing: 6
+
+        Kirigami.Icon {
+            source: section.iconName
+            implicitWidth: 13
+            implicitHeight: 13
+            opacity: 0.85
+        }
+
+        PlasmaComponents.Label {
+            text: section.title
+            font.bold: true
+            font.pixelSize: 11
+        }
+
+        PlasmaComponents.Label {
+            text: section.runningCount + "/" + section.totalCount
+            font.pixelSize: 10
+            font.family: "JetBrains Mono"
+            opacity: 0.6
+        }
+
+        // Hairline running to the right edge, so the eye can find where one
+        // group ends and the next begins without another block of bold text.
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            Layout.rightMargin: 2
+            height: 1
+            color: Qt.rgba(Kirigami.Theme.textColor.r,
+                           Kirigami.Theme.textColor.g,
+                           Kirigami.Theme.textColor.b, 0.12)
+        }
+    }
+
+    Repeater {
+        model: section.guestsModel
+
+        delegate: GuestRow {
+            required property int index
+            required property var itemData
+
+            kind: section.kind
+            guestIndex: index
+            guestModel: itemData
+            nodeName: section.nodeName
+            busy: !!(section.busyFor && itemData && section.busyFor(section.kind, itemData.vmid))
+            armedActionKey: section.armedActionKey
+            armedTimerRunning: section.armedTimerRunning
+            uiRowHeight: section.uiRowHeight
+            uiRadiusS: section.uiRadiusS
+            uiSurfaceRunningOpacity: section.uiSurfaceRunningOpacity
+            uiSurfaceAltOpacity: section.uiSurfaceAltOpacity
+            uiRunningColor: section.uiRunningColor
+            uiStoppedColor: section.uiStoppedColor
+            uiWindowOpacity: section.uiWindowOpacity
+            scrollbarReserve: section.scrollbarReserve
+            anonymizeVmId: section.anonymizeVmId
+            anonymizeName: section.anonymizeName
+            anonymizeIp: section.anonymizeIp
+            onAction: section.onAction
+            onConsole: section.onConsole
+            onStatsToggled: section.onStatsToggled
+            getStatsData: section.getStatsData
+            isStatsLoading: section.isStatsLoading
+            statsEnabled: section.statsEnabled
+            consoleEnabled: section.consoleEnabled
+            powerActionsEnabled: section.powerActionsEnabled
+        }
+    }
+}

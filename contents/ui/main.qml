@@ -333,14 +333,41 @@ PlasmoidItem {
     readonly property int nodeCount: displayedProxmoxData && displayedProxmoxData.data ? displayedProxmoxData.data.length : 0
     readonly property int vmCount: displayedVmData.length
     readonly property int lxcCount: displayedLxcData.length
+    // Layout metrics are declared once and consumed both here and by the
+    // expanded panel below, so the height estimate cannot drift away from what
+    // the panel actually renders (the previous constants were each 4-8px out).
+    readonly property int uiHeaderHeight: 36
+    readonly property int uiFooterHeight: 24
+    readonly property int uiTopMargin: 8
+    readonly property int uiBottomMargin: 8
+    readonly property int uiSectionSpacing: 4
+    readonly property int uiNodeCardHeight: 60
+    readonly property int uiSectionHeaderHeight: 21
+    readonly property int uiRowSpacing: 2
+    readonly property int uiGroupSpacing: 5
+    readonly property int uiNodeBlockSpacing: 8
+    readonly property int uiScrollBottomPadding: 4
+
+    function guestGroupHeight(count) {
+        if (count <= 0) return 0
+        return root.uiSectionHeaderHeight + root.uiGroupSpacing
+             + (count * (root.uiRowHeight + root.uiRowSpacing))
+    }
+
     readonly property int calculatedHeight: {
-        var h = 50
         if (!configured) return 200
-        if (displayedProxmoxData && displayedProxmoxData.data) h += displayedProxmoxData.data.length * 90
-        if (vmCount > 0) h += 28 + (vmCount * 36)
-        if (lxcCount > 0) h += 28 + (lxcCount * 36)
-        h += 40
-        h += 20
+
+        // Fixed chrome: top margin, header, the gaps around the scroll area,
+        // and the footer with its bottom margin.
+        var h = root.uiTopMargin + root.uiHeaderHeight + (root.uiSectionSpacing * 3)
+              + root.uiScrollBottomPadding + root.uiFooterHeight + root.uiBottomMargin
+
+        // One card per node, plus the spacing between node blocks.
+        h += nodeCount * (root.uiNodeCardHeight + root.uiSectionSpacing)
+        if (nodeCount > 1) h += (nodeCount - 1) * root.uiNodeBlockSpacing
+
+        h += root.guestGroupHeight(vmCount) + root.guestGroupHeight(lxcCount)
+
         return Math.max(200, Math.min(h, 600))
     }
 
@@ -1447,13 +1474,13 @@ PlasmoidItem {
         Layout.minimumHeight: 200
         Layout.maximumHeight: 600
 
-        readonly property int headerHeight: 36
-        readonly property int footerHeight: 24
+        readonly property int headerHeight: root.uiHeaderHeight
+        readonly property int footerHeight: root.uiFooterHeight
         readonly property int horizontalMargin: 10
         readonly property int scrollSideMargin: 6
-        readonly property int topMargin: 8
-        readonly property int sectionSpacing: 4
-        readonly property int bottomMargin: 8
+        readonly property int topMargin: root.uiTopMargin
+        readonly property int sectionSpacing: root.uiSectionSpacing
+        readonly property int bottomMargin: root.uiBottomMargin
 
         // Header
         RowLayout {
@@ -1527,6 +1554,20 @@ PlasmoidItem {
                 PlasmaComponents.ToolTip { text: "Open host shell" }
             }
 
+            // Sorting was reachable only through Configure -> Behavior, even
+            // though it is a per-glance decision. The mode is still persisted
+            // in the same config key, so the settings page stays in sync.
+            PlasmaComponents.Button {
+                id: sortButton
+                icon.name: "view-sort"
+                visible: root.configured
+                implicitHeight: 28
+                implicitWidth: 28
+                onClicked: sortMenu.popup(sortButton, 0, sortButton.height)
+
+                PlasmaComponents.ToolTip { text: "Sort guests" }
+            }
+
             Item {
                 visible: root.configured
                 implicitHeight: 28
@@ -1548,6 +1589,48 @@ PlasmoidItem {
                     implicitWidth: 20
                     implicitHeight: 20
                 }
+            }
+        }
+
+        QQC2.Menu {
+            id: sortMenu
+
+            // A checkable MenuItem would have its `checked` binding overwritten
+            // by the first click, so the active mode is shown with a bound icon.
+            QQC2.MenuItem {
+                text: "Status (running first)"
+                icon.name: root.defaultSorting === "status" ? "checkmark" : ""
+                onTriggered: Plasmoid.configuration.defaultSorting = "status"
+            }
+
+            QQC2.MenuItem {
+                text: "Status, then ID"
+                icon.name: root.defaultSorting === "statusId" ? "checkmark" : ""
+                onTriggered: Plasmoid.configuration.defaultSorting = "statusId"
+            }
+
+            QQC2.MenuItem {
+                text: "Name (A-Z)"
+                icon.name: root.defaultSorting === "name" ? "checkmark" : ""
+                onTriggered: Plasmoid.configuration.defaultSorting = "name"
+            }
+
+            QQC2.MenuItem {
+                text: "Name (Z-A)"
+                icon.name: root.defaultSorting === "nameDesc" ? "checkmark" : ""
+                onTriggered: Plasmoid.configuration.defaultSorting = "nameDesc"
+            }
+
+            QQC2.MenuItem {
+                text: "ID (ascending)"
+                icon.name: root.defaultSorting === "id" ? "checkmark" : ""
+                onTriggered: Plasmoid.configuration.defaultSorting = "id"
+            }
+
+            QQC2.MenuItem {
+                text: "ID (descending)"
+                icon.name: root.defaultSorting === "idDesc" ? "checkmark" : ""
+                onTriggered: Plasmoid.configuration.defaultSorting = "idDesc"
             }
         }
 
@@ -1665,7 +1748,10 @@ PlasmoidItem {
                 clip: true
 
                 QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
-                QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AlwaysOff
+                // The guest list is routinely taller than the panel. Hiding the
+                // scrollbar left a row clipped mid-height as the only hint that
+                // more content existed.
+                QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
 
                 readonly property int __scrollbarGap: 0
                 readonly property int __scrollbarReserve: 10
