@@ -51,11 +51,43 @@ ColumnLayout {
     property bool consoleEnabled: true
     property bool powerActionsEnabled: true
 
+    property string filterText: ""
+
     readonly property int totalCount: guestsModel ? guestsModel.count : 0
     readonly property int runningCount: guestsModel ? guestsModel.runningCount : 0
+    readonly property bool filtering: section.filterText !== ""
+
+    // Match against what is actually on screen, so a filter still works while
+    // dev-mode anonymisation is replacing the real names.
+    function haystackFor(item, index) {
+        if (!item) return ""
+        const id = section.anonymizeVmId ? section.anonymizeVmId(item.vmid, index) : item.vmid
+        const nm = section.anonymizeName ? section.anonymizeName(item.name, index) : item.name
+        return (id + " " + nm).toString().toLowerCase()
+    }
+
+    function matchesFilter(item, index) {
+        if (!section.filtering) return true
+        if (!item) return false
+        return section.haystackFor(item, index).indexOf(section.filterText.toLowerCase()) !== -1
+    }
+
+    // Recomputed when the filter changes or the model's length changes. A row
+    // renamed in place without a count change will not re-trigger this; the
+    // next refresh that adds or removes anything corrects it.
+    readonly property int matchCount: {
+        if (!section.guestsModel) return 0
+        const n = section.guestsModel.count
+        if (!section.filtering) return n
+        let hits = 0
+        for (let i = 0; i < n; i++) {
+            if (section.matchesFilter(section.guestsModel.get(i), i)) hits++
+        }
+        return hits
+    }
 
     Layout.fillWidth: true
-    visible: totalCount > 0
+    visible: totalCount > 0 && matchCount > 0
     spacing: 2
 
     RowLayout {
@@ -77,7 +109,9 @@ ColumnLayout {
         }
 
         PlasmaComponents.Label {
-            text: section.runningCount + "/" + section.totalCount
+            text: section.filtering
+                ? section.matchCount + " of " + section.totalCount
+                : section.runningCount + "/" + section.totalCount
             font.pixelSize: 10
             font.family: "JetBrains Mono"
             opacity: 0.6
@@ -106,6 +140,7 @@ ColumnLayout {
             kind: section.kind
             guestIndex: index
             guestModel: itemData
+            visible: section.matchesFilter(itemData, index)
             nodeName: section.nodeName
             busy: !!(section.busyFor && itemData && section.busyFor(section.kind, itemData.vmid))
             armedActionKey: section.armedActionKey

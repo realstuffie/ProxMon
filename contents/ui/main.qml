@@ -166,6 +166,16 @@ PlasmoidItem {
     property string pbsExcludeVmids: Plasmoid.configuration.pbsExcludeVmids || ""
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
 
+    // Guest filter. Deliberately session-only and not persisted: a filter left
+    // over from last time would silently hide guests on the next expand.
+    property string filterText: ""
+    property bool searchActive: false
+
+    function clearSearch() {
+        root.filterText = ""
+        root.searchActive = false
+    }
+
     // Auto-retry/backoff
     property bool autoRetry: Plasmoid.configuration.autoRetry !== false
     property int retryStartMs: Math.max(1000, (Plasmoid.configuration.retryStartSeconds || 5) * 1000)
@@ -1554,6 +1564,21 @@ PlasmoidItem {
                 PlasmaComponents.ToolTip { text: "Open host shell" }
             }
 
+            PlasmaComponents.Button {
+                icon.name: "search"
+                visible: root.configured
+                checkable: true
+                checked: root.searchActive
+                implicitHeight: 28
+                implicitWidth: 28
+                onToggled: {
+                    root.searchActive = checked
+                    if (!checked) root.filterText = ""
+                }
+
+                PlasmaComponents.ToolTip { text: "Filter guests" }
+            }
+
             // Sorting was reachable only through Configure -> Behavior, even
             // though it is a per-glance decision. The mode is still persisted
             // in the same config key, so the settings page stays in sync.
@@ -1704,9 +1729,41 @@ PlasmoidItem {
             }
         }
 
+        // Collapses to zero height when inactive so it costs nothing in a
+        // panel that is already short on vertical space.
+        Item {
+            id: searchRow
+            anchors.top: headerRow.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: fullRep.horizontalMargin
+            anchors.rightMargin: fullRep.horizontalMargin
+            anchors.topMargin: root.searchActive ? fullRep.sectionSpacing : 0
+            height: root.searchActive ? 28 : 0
+            visible: root.searchActive && root.configured
+
+            Behavior on height {
+                NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            }
+
+            PlasmaComponents.TextField {
+                id: searchField
+                anchors.fill: parent
+                placeholderText: "Filter by name or ID"
+                text: root.filterText
+                onTextChanged: root.filterText = text
+
+                onActiveFocusChanged: if (!activeFocus && text === "") root.searchActive = false
+
+                Keys.onEscapePressed: root.clearSearch()
+            }
+
+            onVisibleChanged: if (visible) searchField.forceActiveFocus()
+        }
+
         StatusBanner {
             id: statusBanner
-            anchors.top: headerRow.bottom
+            anchors.top: searchRow.bottom
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.leftMargin: fullRep.horizontalMargin
@@ -1777,6 +1834,7 @@ PlasmoidItem {
                         vmsModel: itemData ? itemData.vmsModel : null
                         lxcsModel: itemData ? itemData.lxcsModel : null
                         isCollapsed: root.isNodeCollapsed(itemData ? itemData.node : "")
+                        filterText: root.filterText
                         uiRadiusS: root.uiRadiusS
                         uiRadiusL: root.uiRadiusL
                         uiBorderOpacity: root.uiBorderOpacity
@@ -1853,6 +1911,7 @@ PlasmoidItem {
                         anonymizeVmName: root.anonymizeVmName
                         anonymizeLxcName: root.anonymizeLxcName
                         isNodeCollapsed: root.isNodeCollapsed
+                        filterText: root.filterText
                         isActionBusy: root.isActionBusy
                         armedActionKey: root.armedActionKey
                         armedTimerRunning: armedTimer.running
@@ -1886,6 +1945,48 @@ PlasmoidItem {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 4
                 }
+                }
+            }
+
+            // Plasma renders the scrollbar as an overlay that only fades in on
+            // hover, so on its own it still doesn't announce a clipped list.
+            // This fade is always on when there is content below the fold.
+            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: 18
+                visible: opacity > 0
+                opacity: {
+                    // ScrollView's contentItem is the Flickable; reading it
+                    // directly avoids reaching for an attached property
+                    // through another object, which is not valid QML.
+                    const flick = scrollView.contentItem
+                    if (!flick || flick.contentHeight <= flick.height) return 0
+                    // Fade the hint itself out over the last few pixels so it
+                    // disappears cleanly once the list bottoms out.
+                    const remaining = flick.contentHeight - (flick.contentY + flick.height)
+                    return Math.min(1, Math.max(0, remaining / 12))
+                }
+
+                gradient: Gradient {
+                    GradientStop {
+                        position: 0.0
+                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                                       Kirigami.Theme.backgroundColor.g,
+                                       Kirigami.Theme.backgroundColor.b, 0)
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r,
+                                       Kirigami.Theme.backgroundColor.g,
+                                       Kirigami.Theme.backgroundColor.b,
+                                       0.92 * root.uiWindowOpacity)
+                    }
+                }
+
+                Behavior on opacity {
+                    NumberAnimation { duration: 120 }
                 }
             }
         }

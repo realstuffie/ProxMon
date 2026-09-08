@@ -43,6 +43,7 @@ ColumnLayout {
     property var onToggleCollapsed: null
     property var onAction: null
     property var onConsole: null
+    property string filterText: ""
     property bool consoleEnabled: true
     property bool powerActionsEnabled: true
 
@@ -101,11 +102,13 @@ ColumnLayout {
         spacing: 5
 
         GuestSection {
+            id: vmSection
             kind: "qemu"
             title: "VMs"
             iconName: "vm"
             guestsModel: root.vmsModel
             nodeName: root.nodeName
+            filterText: root.filterText
             uiRowHeight: 28
             uiRadiusS: 4
             uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
@@ -127,11 +130,13 @@ ColumnLayout {
         }
 
         GuestSection {
+            id: lxcSection
             kind: "lxc"
             title: "Containers"
             iconName: "lxc"
             guestsModel: root.lxcsModel
             nodeName: root.nodeName
+            filterText: root.filterText
             uiRowHeight: 28
             uiRadiusS: 4
             uiSurfaceRunningOpacity: root.uiSurfaceRunningOpacity
@@ -153,9 +158,12 @@ ColumnLayout {
         }
 
         PlasmaComponents.Label {
-            text: "No VMs or Containers"
-            visible: (!root.vmsModel || root.vmsModel.count === 0)
-                && (!root.lxcsModel || root.lxcsModel.count === 0)
+            readonly property bool hasGuests: (root.vmsModel && root.vmsModel.count > 0)
+                || (root.lxcsModel && root.lxcsModel.count > 0)
+
+            text: hasGuests ? "No guests match the filter" : "No VMs or Containers"
+            visible: !hasGuests
+                || (vmSection.matchCount === 0 && lxcSection.matchCount === 0)
             opacity: 0.5
             font.pixelSize: 10
             Layout.leftMargin: 4

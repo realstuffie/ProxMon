@@ -43,6 +43,7 @@ ColumnLayout {
     property var onToggleCollapsed: null
     property var onAction: null
     property var onConsole: null
+    property string filterText: ""
     property bool consoleEnabled: true
     property bool powerActionsEnabled: true
 
@@ -136,6 +137,7 @@ ColumnLayout {
             vmsModel: itemData ? itemData.vmsModel : null
             lxcsModel: itemData ? itemData.lxcsModel : null
             isCollapsed: root.isNodeCollapsed(itemData ? itemData.node : "", root.sessionKey)
+            filterText: root.filterText
             uiRadiusL: root.uiRadiusL
             uiBorderOpacity: root.uiBorderOpacity
             scrollbarReserve: root.scrollbarReserve
