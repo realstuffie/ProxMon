@@ -4,12 +4,34 @@ Design decisions that aren't obvious from reading the code alone.
 
 ## Credential security model
 
-### Runtime isolation from QML
+### Scope and intended lifetimes
+
+ProxMon uses QtKeychain for persistent API token storage and reads secrets on
+demand. It does not maintain a client-wide token cache. The intended policy is
+to release application-held API secrets and authorization headers when the
+operation that needs them ends. Console tickets may remain in owned memory for
+the console session and should be released when that session ends.
+
+These are lifetime and exposure goals, not guarantees that every plaintext
+copy is erased. The current implementation still uses shared Qt buffers;
+exclusive ownership and reliable wiping of application-owned credential
+buffers remain implementation work. The cleanup points below describe what
+the code currently attempts, not a completed secure-buffer design.
+
+ProxMon runs inside plasmashell and does not provide credential isolation from
+unrestricted processes running as the same user, privileged attackers, or
+malicious code inside plasmashell. QtKeychain delegates access control to the
+system wallet, whose unlocked entries may be accessible to other user
+processes. This model does not promise complete erasure from RAM, swap or core
+dumps, or control over copies held by the wallet, Qt or TLS libraries.
+
+### Runtime credential flow outside QML
 
 Runtime keyring reads stay entirely in C++. `ProxmoxClient` and `SecretStore`
 are internal implementation types and are not registered with the QML engine.
-QML asks `ProxmoxController` to perform an operation using endpoint identity
-only; it never receives the resolved API token secret.
+In the normal runtime flow, QML asks `ProxmoxController` to perform an operation
+using endpoint identity and operation arguments, without receiving the
+resolved API token secret.
 
 `SecretStore` attaches completion callbacks to each individual QtKeychain job.
 This preserves the relationship between an endpoint lookup and its result even
@@ -18,21 +40,28 @@ secret-bearing Qt signal that QML can observe, and no client-wide cached token
 secret. Single-host child enumeration performs a fresh scoped keyring read,
 matching the multi-host request flow.
 
-The configuration password fields remain a deliberate exception: a secret
-typed by the user temporarily exists in the KCM's QML text field until it is
-written to the keyring and the field is cleared. Removing that configuration
-handoff is tracked separately from runtime credential isolation.
+The configuration password fields remain a deliberate exception. A secret
+typed by the user passes through the KCM's QML text field and configuration
+handoff before storage in the keyring. Clearing the field and handoff removes
+their logical values but does not guarantee erasure of backing memory.
 
-### Why credentials are never Q_PROPERTYs
+### Why runtime credentials are not Q_PROPERTYs
 
-Qt's property system makes any value set through it visible to the QML/JavaScript V4 engine. The V4 heap is garbage-collected and makes no guarantees about when (or whether) memory is zeroed. A credential written to a Q_PROPERTY can persist as a JS string long after the call site considers it done. Strings in V4 are also reference-counted and may be interned, producing additional copies at unpredictable points.
+Exposing a readable credential property on a QML object lets JavaScript obtain
+the value and create additional copies. The QML/JavaScript engine does not
+guarantee that those copies are erased when the operation ends.
 
-To prevent this, the auth header and VNC ticket are never exposed as Q_PROPERTYs. They are delivered directly from C++ via:
+To avoid that exposure in the normal console flow, the transport types do not
+expose the auth header or ticket as Q_PROPERTYs. C++ delivers them through:
 
-- `setAuthHeaderSecure(QByteArray)`, called by `ProxmoxController::deliverConsoleAuth()`
-- `setTicketSecure(QByteArray)`, called by `ProxmoxController::deliverConsoleTicket()`
+- `setAuthHeaderSecure(const QByteArray &)`, called by `ProxmoxController::deliverConsoleAuth()`
+- `setTicketSecure(const QByteArray &)`, called by `ProxmoxController::deliverConsoleTicket()`
 
-Both are `Q_INVOKABLE` only so they can be invoked via `QMetaObject::invokeMethod` with `Qt::DirectConnection`. QML can call them but cannot read them back. There is no getter.
+These methods are `Q_INVOKABLE` and the controller calls them through
+`QMetaObject::invokeMethod` with `Qt::DirectConnection`. The transport types
+provide no credential getters. The `Secure` suffix describes the intended
+handoff, not a memory-erasure guarantee or a boundary against malicious code
+inside plasmashell.
 
 ### The pending registry pattern
 
@@ -43,17 +72,21 @@ QHash<QString, QByteArray> m_pendingConsoleAuth
 QMap<QString, QByteArray>  m_pendingConsoleTicket
 ```
 
-When a proxy-ready signal arrives from `ProxmoxClient`, the controller stashes both credentials under that request ID and emits `consoleReady` / `lxcConsoleReady` without the credentials in the signal arguments. QML passes the non-secret request ID back to `deliverConsoleAuth` / `deliverConsoleTicket`, which push credentials directly into C++ targets. They never appear in the signal args or in any JS variable. Request IDs prevent simultaneous consoles on one endpoint from consuming each other's handoff state.
+When a proxy-ready signal arrives from `ProxmoxClient`, the controller stashes both credentials under that request ID and emits `consoleReady` / `lxcConsoleReady` without the credentials in the signal arguments. In the normal console flow, QML passes the non-secret request ID back to `deliverConsoleAuth` / `deliverConsoleTicket`, which push credentials directly into the C++ transport targets. Request IDs prevent simultaneous consoles on one endpoint from consuming each other's handoff state; they are not an authorization mechanism.
 
 Each map entry is consumed exactly once. `deliverConsoleTicket` accepts a primary and optional secondary target so both `VncWsProxy` and `VncClient` can be fed from a single atomic consume.
 
-### Burn discipline
+### Current cleanup and its limits
 
-All burns follow `fill(0)` then `clear()`, in that order. `clear()` alone drops the reference without zeroing the backing buffer. `fill(0)` zeroes before dropping. This is consistent across all credential holders.
+Qt credential holders generally call `fill(0)` before clearing a value or
+removing it from a map. `clear()` alone releases the reference without wiping
+the allocation. With an exclusively owned `QByteArray`, `fill(0)` writes zeros
+to that buffer. With a shared buffer, it detaches and zeroes a separate
+allocation, leaving the original bytes in the other owners' buffer.
 
-Burn points:
+Current console cleanup points:
 
-| Holder                      | What          | When                                                                  |
+| Holder                      | What          | Cleanup attempted at                                                  |
 |-----------------------------|---------------|-----------------------------------------------------------------------|
 | `VncWsProxy::m_ticket`      | VNC ticket    | `onWsConnected`, HTTP upgrade complete, ticket already in WS URL     |
 | `VncWsProxy::m_authHeader`  | Auth header   | `onWsConnected`, same point                                          |
@@ -63,7 +96,30 @@ Burn points:
 | `LxcTerminal::m_authHeader` | Auth header   | WS `connected` lambda, HTTP upgrade complete                         |
 | `ProxmoxController` maps    | Both          | `deliver*`: `fill(0)` in-map, erase, then `fill(0)` on local copy    |
 
-Note on Qt CoW: `QByteArray` uses implicit sharing. `it.value().fill(0)` in the deliver methods detaches the map's copy into a new zeroed block, leaving the local variable holding the real data. The local variable's final `fill(0)` then zeroes that. This is intentional: targets receive the real bytes; map and local copies are zeroed.
+In the controller's `deliver*` methods, the local variable initially shares
+the map entry's buffer. Wiping the map value detaches it. The target setters
+then share the local variable's original buffer, so its final `fill(0)` also
+detaches. The controller drops its references but does not erase the bytes
+retained by those targets. The same ownership issue applies to setters and
+`clearCredentials()` whenever another owner still shares the buffer.
+
+Replacing `fill(0)` with `explicit_bzero(array.data(), array.size())` is not a
+fix for shared ownership: non-const `QByteArray::data()` also detaches. Reliable
+wiping requires exclusive ownership of the allocation being erased and a
+wipe operation that cannot be optimized away. It does not erase separate
+copies made earlier.
+
+The C-string stored in libvncclient slot 1 is a separate allocation. Its
+cleanup explicitly calls `explicit_bzero` before `free`, but this only covers
+that allocation, not additional copies made by libvncclient.
+
+API polling also places authorization headers into `QNetworkRequest` objects.
+Replies retain their requests, and `QWebSocket` retains its opening request,
+including its headers and ticket-bearing URL, after the handshake. Clearing
+ProxMon's own fields does not clear those retained requests. Serialization,
+string conversions and TLS processing can introduce further copies outside
+the application's wipe control. Releasing a request or socket is not a
+guarantee that its former allocations have been overwritten.
 
 ## VNC console architecture
 

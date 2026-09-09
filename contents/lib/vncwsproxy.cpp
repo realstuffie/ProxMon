@@ -150,7 +150,9 @@ void VncWsProxy::onNewConnection()
 void VncWsProxy::onWsConnected()
 {
     // HTTP upgrade complete - auth header and ticket were sent in the
-    // handshake request and are no longer needed. Zero then clear both.
+    // handshake request and are no longer needed here. Zero then clear both,
+    // which releases this holder's copy but not the one QWebSocket retains
+    // in its opening request. See docs/ARCHITECTURE.md.
     clearCredentials();
     // Flush any bytes libvncclient already wrote while WS was connecting.
     if (m_tcp && m_tcp->bytesAvailable() > 0) {

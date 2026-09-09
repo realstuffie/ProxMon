@@ -77,7 +77,7 @@
 | **Multi-host** | Monitor up to 5 Proxmox endpoints simultaneously |
 | **Power commands** | Start, stop, and restart VMs and containers |
 | **Desktop notifications** | State-change alerts with rate limiting and filters |
-| **Secure by design** | API token auth, keychain storage, custom CA support, [details below](#security) |
+| **Security controls** | API token auth, keychain storage, custom CA support, [scope and limitations below](#security) |
 | **Appearance controls** | Custom running/stopped/node colors with live preview, card tint, window opacity |
 | **Flexible panel label** | Show average CPU, running workloads, error state, or last update time |
 | **Theme integration** | Adapts to your Plasma theme with per-color fallback to theme defaults |
@@ -187,11 +187,13 @@ Right-click the widget → **Configure Proxmox Monitor**.
 
 ## Security
 
-- **Keychain storage.** API token secrets live in your system keyring (QtKeychain), never written to disk in plaintext. They're read on demand and held in memory only for the duration of a request.
-- **Isolated from the UI layer.** Credentials are never exposed to the QML/JavaScript layer. Auth tokens and VNC tickets pass directly between native C++ components and are zeroed from memory immediately after use.
-- **SSL/TLS.** Connections use HTTPS/WSS. Supply your own CA certificate for self-signed setups. "Ignore SSL" disables all TLS verification and encryption, so only enable it once **all** other options are exhausted.
+- **Keychain storage.** ProxMon stores API token secrets through QtKeychain, not in its plaintext configuration. Runtime operations read them on demand without a client-wide token cache. Storage protection and access permissions depend on the system keyring backend.
+- **Runtime UI handling.** Normal runtime operations keep resolved API secrets, authorization headers and console tickets in C++, outside QML/JavaScript values. Credential entry is an exception: a secret typed into settings passes through QML before storage. Clearing the field does not guarantee erasure of its backing memory.
+- **Memory lifetime.** API secrets and authorization headers are intended to be request-scoped; console tickets may remain in memory for the console session. Current cleanup does not guarantee erasure: Qt's copy-on-write buffers can detach during a wipe, and request, WebSocket and TLS internals can retain copies. See the [credential security model](docs/ARCHITECTURE.md#credential-security-model).
+- **Protection limits.** ProxMon does not isolate credentials from unrestricted processes running as the same user, privileged attackers, or malicious code inside plasmashell. An unlocked system wallet may allow other user processes to read its entries. Complete erasure from memory, swap or core dumps is not guaranteed.
+- **SSL/TLS.** Connections use HTTPS/WSS. Supply your own CA certificate for self-signed setups. "Ignore SSL" bypasses certificate verification, not encryption, and allows server impersonation. Keep verification enabled to protect credentials in transit.
 - **Notification privacy.** Token identifiers are redacted from desktop notifications by default.
-- **Known limitation.** The VNC console uses a local loopback socket to bridge the native VNC client and the Proxmox WebSocket endpoint. There's a brief window where another local process could connect to that socket. Worst case is a failed connection; no credentials can be extracted this way.
+- **Local console bridge.** The VNC console uses a loopback socket between the native VNC client and the Proxmox WebSocket endpoint. Another local process can race the client for that connection and disrupt console setup. This bridge is not a process-isolation boundary.
 
 ## Troubleshooting
 

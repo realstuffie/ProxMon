@@ -7,7 +7,10 @@
 #include <QUrl>
 
 // Bridges a raw-TCP libvncclient connection to the Proxmox vncwebsocket endpoint.
-// Credentials are delivered via setAuthHeaderSecure / setTicketSecure - never Q_PROPERTYs.
+// Credentials are delivered via setAuthHeaderSecure / setTicketSecure - never Q_PROPERTYs,
+// which keeps them out of the QML/JS heap. The Secure suffix describes that handoff, not
+// erasure: see the credential security model in docs/ARCHITECTURE.md for what is and is
+// not guaranteed.
 // Handles exactly one client connection per instance. See docs/ARCHITECTURE.md.
 
 class VncWsProxy : public QObject {

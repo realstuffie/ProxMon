@@ -298,7 +298,8 @@ void LxcTerminal::openSocket()
     }
 
     QObject::connect(m_ws, &QWebSocket::connected, this, [this]() {
-        // Upgrade complete - burn auth header, send user:ticket\n, burn ticket.
+        // Upgrade complete - release auth header, send user:ticket\n, release
+        // ticket. These wipes clear this holder only; see docs/ARCHITECTURE.md.
         m_authHeader.fill(0);
         m_authHeader.clear();
         m_phase = Phase::Authenticating;

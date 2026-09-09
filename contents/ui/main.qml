@@ -1491,7 +1491,7 @@ PlasmoidItem {
                 implicitWidth: 28
 
                 PlasmaComponents.ToolTip {
-                    text: "Copy debug info (no secrets)"
+                    text: "Copy debug info (secrets redacted)"
                 }
             }
 

@@ -115,10 +115,10 @@ Recommended pattern:
 - **Port**: API port (default: `8006`)
 - **API Token ID**: Format `user@realm!tokenname` (e.g. `root@pam!plasma-monitor`)
 - **API Token Secret**: The secret from token creation
-- **Update Keyring**: Current known-viable approach is a transient KCM-to-runtime handoff. The secret is held briefly in memory, the widget runtime writes it to the system keyring after Apply, and the temporary handoff is then cleared. Direct KCM writes via the runtime plugin namespace does **not** work in the KCM load path.
+- **Update Keyring**: The configuration flow passes the entered secret from the KCM to the widget runtime, which writes it to the system keyring after Apply and clears the handoff. The secret passes through QML during configuration; clearing the field or handoff does not guarantee memory erasure. Direct KCM writes via the runtime plugin namespace do **not** work in the KCM load path. See the [credential security model](ARCHITECTURE.md#credential-security-model).
 - **Forget**: Clears the secret field. Does **not** delete existing keyring entries.
 - **Refresh Interval**: Update frequency in seconds (default: `30`)
-- **Ignore SSL**: Enable for self-signed certificates
+- **Ignore SSL**: Bypasses certificate verification and permits server impersonation. Use a trusted CA certificate for self-signed setups instead. HTTPS/WSS encryption remains enabled.
 
 ### Behavior tab
 
@@ -185,7 +185,12 @@ When the widget is placed on the desktop (planar formFactor), the full represent
 
 - **VncWsProxy local port race (known limitation, intentionally not fixed):** `VncWsProxy` binds to `127.0.0.1:0` and emits `ready(port)` before libvncclient calls `connect()`. During that window another local process can grab the slot.
 
-Residual threat is DoS only. The Proxmox VNC ticket lives in this process and is never echoed to the loopback client, so an attacker grabbing the slot cannot read it. The PVE auth header is sent outbound on the WebSocket and is never echoed either. Without the ticket the attacker fails the RFB auth handshake, the WS server tears down, and the user gets an error and retries. No data or credentials leak.
+A process that wins this race can disrupt the legitimate console connection.
+The bridge sends the PVE authorization header to the remote WebSocket endpoint,
+not the loopback peer, and does not echo the ticket to that peer. The RFB
+authentication step still requires the ticket. These protocol properties do
+not provide isolation from other processes or prevent credential access
+through the wallet or process memory. See the [credential security model](ARCHITECTURE.md#credential-security-model).
 
 `SO_PEERCRED` is **not** a viable check here. It's documented for AF_UNIX only, and on AF_INET returns `ENOPROTOOPT` on Linux (0/0/0 on some older kernels).
 

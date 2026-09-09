@@ -90,8 +90,11 @@ void VncClient::connectToVnc(const QString &host, int port)
     rfb->serverHost           = strdup(host.toUtf8().constData());
     rfb->serverPort           = port;
 
-    // Ticket stored in client-data slot 1; burned here after strdup.
-    // C-side copy is zeroed by the worker thread after handshake.
+    // Ticket stored in client-data slot 1. The QByteArray wipe below only
+    // clears this holder's reference; other owners of the same buffer keep
+    // the bytes. The C-string copy IS reliably zeroed: the worker thread
+    // calls explicit_bzero on it after the handshake, on both paths.
+    // GetPassword hands libvncclient a further strdup that nothing zeroes.
     rfb->GetPassword = [](rfbClient *client) -> char* {
         char *t = static_cast<char *>(rfbClientGetClientData(client, (void*)1));
         return t ? strdup(t) : strdup("");
