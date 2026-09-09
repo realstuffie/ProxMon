@@ -11,6 +11,19 @@ target_link_libraries(tst_vnckeysym PRIVATE
 
 add_test(NAME vnckeysym COMMAND tst_vnckeysym)
 
+qt_add_executable(tst_vncbuttonmask
+    tst_vncbuttonmask.cpp
+)
+
+target_include_directories(tst_vncbuttonmask PRIVATE ..)
+
+target_link_libraries(tst_vncbuttonmask PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+add_test(NAME vncbuttonmask COMMAND tst_vncbuttonmask)
+
 qt_add_executable(tst_proxmoxdatautils
     tst_proxmoxdatautils.cpp
     ../proxmoxdatautils.cpp

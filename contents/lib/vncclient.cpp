@@ -1,4 +1,6 @@
 #include "vncclient.h"
+
+#include "vncbuttonmask.h"
 #include "vnckeysym.h"
 
 #include <rfb/rfbclient.h>
@@ -299,14 +301,7 @@ void VncClient::allKeysUp()
 void VncClient::sendPointerEvent(int x, int y, int qtButtons)
 {
     if (!m_running.load()) return;
-    // Qt:  Left=0x01, Right=0x02, Middle=0x04, Back=0x08, Forward=0x10
-    // VNC: Left=bit0, Middle=bit1, Right=bit2, Back=bit7, Forward=bit8
-    int vncMask = 0;
-    if (qtButtons & 0x01) vncMask |= (1 << 0);
-    if (qtButtons & 0x02) vncMask |= (1 << 2);
-    if (qtButtons & 0x04) vncMask |= (1 << 1);
-    if (qtButtons & 0x08) vncMask |= (1 << 7);
-    if (qtButtons & 0x10) vncMask |= (1 << 8);
+    const int vncMask = VncButtonMask::fromQtButtons(qtButtons);
     postCmd([x, y, vncMask](rfbClient *rfb) {
         SendPointerEvent(rfb, x, y, vncMask);
     });
@@ -315,9 +310,7 @@ void VncClient::sendPointerEvent(int x, int y, int qtButtons)
 void VncClient::sendWheelEvent(int x, int y, int steps, bool up, bool horizontal)
 {
     if (!m_running.load()) return;
-    // VNC scroll: up=bit3, down=bit4, left=bit5, right=bit6
-    int btn = horizontal ? (up ? (1 << 5) : (1 << 6))
-                         : (up ? (1 << 3) : (1 << 4));
+    const int btn = VncButtonMask::forWheel(up, horizontal);
     postCmd([x, y, steps, btn](rfbClient *rfb) {
         for (int i = 0; i < steps; i++) {
             SendPointerEvent(rfb, x, y, btn);
