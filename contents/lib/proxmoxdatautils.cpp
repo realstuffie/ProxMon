@@ -8,6 +8,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSslConfiguration>
+#include <QUrlQuery>
 
 namespace ProxmoxDataUtils {
 
@@ -247,6 +248,71 @@ void appendTrustedCertificates(QSslConfiguration &config,
     QList<QSslCertificate> caCertificates = config.caCertificates();
     caCertificates.append(certs);
     config.setCaCertificates(caCertificates);
+}
+
+namespace {
+
+// Proxmox node names are hostnames and kind is a fixed vocabulary, so a
+// conservative allowlist is enough. Rejecting beats encoding here: a name
+// that needs encoding is a name we did not expect.
+bool isSafePathSegment(const QString &segment) {
+    if (segment.isEmpty()) {
+        return false;
+    }
+    // "." and ".." survive a character-class check but are traversal.
+    if (segment == QLatin1String(".") || segment == QLatin1String("..")) {
+        return false;
+    }
+    for (const QChar ch : segment) {
+        const char16_t c = ch.unicode();
+        const bool allowed = (c >= u'a' && c <= u'z')
+                          || (c >= u'A' && c <= u'Z')
+                          || (c >= u'0' && c <= u'9')
+                          || c == u'.' || c == u'_' || c == u'-';
+        if (!allowed) {
+            return false;
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+QUrl buildConsoleWebSocketUrl(const QString &host,
+                              int apiPort,
+                              const QString &node,
+                              const QString &kind,
+                              int vmid,
+                              int port,
+                              const QByteArray &ticket) {
+    if (host.isEmpty() || !isSafePathSegment(node)) {
+        return {};
+    }
+    if (!kind.isEmpty() && !isSafePathSegment(kind)) {
+        return {};
+    }
+
+    QUrl url;
+    url.setScheme(QStringLiteral("wss"));
+    url.setHost(host);
+    url.setPort(apiPort);
+    url.setPath(kind.isEmpty()
+                    ? QStringLiteral("/api2/json/nodes/%1/vncwebsocket").arg(node)
+                    : QStringLiteral("/api2/json/nodes/%1/%2/%3/vncwebsocket")
+                          .arg(node, kind).arg(vmid));
+
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("port"), QString::number(port));
+    // ticket is a QByteArray; percent-encoded output is ASCII-safe so
+    // fromLatin1 is correct.
+    query.addQueryItem(QStringLiteral("vncticket"),
+                       QString::fromLatin1(ticket.toPercentEncoding()));
+    url.setQuery(query);
+
+    if (!url.isValid()) {
+        return {};
+    }
+    return url;
 }
 
 } // namespace ProxmoxDataUtils

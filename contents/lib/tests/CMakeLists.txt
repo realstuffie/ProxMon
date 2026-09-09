@@ -27,6 +27,22 @@ target_link_libraries(tst_proxmoxdatautils PRIVATE
 
 add_test(NAME proxmoxdatautils COMMAND tst_proxmoxdatautils)
 
+qt_add_executable(tst_consolewsurl
+    tst_consolewsurl.cpp
+    ../proxmoxdatautils.cpp
+    ../proxmoxdatautils.h
+)
+
+target_include_directories(tst_consolewsurl PRIVATE ..)
+
+target_link_libraries(tst_consolewsurl PRIVATE
+    Qt6::Core
+    Qt6::Network
+    Qt6::Test
+)
+
+add_test(NAME consolewsurl COMMAND tst_consolewsurl)
+
 qt_add_executable(tst_consolecredentials
     tst_consolecredentials.cpp
 )

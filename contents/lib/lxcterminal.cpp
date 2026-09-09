@@ -18,7 +18,6 @@
 #include <QSslSocket>
 #include <QTimer>
 #include <QUrl>
-#include <QUrlQuery>
 #include <QVBoxLayout>
 #include <QWebSocket>
 #include <QWidget>
@@ -265,23 +264,13 @@ void LxcTerminal::openSocket()
     m_phase = Phase::Connecting;
     m_authBuffer.clear();
 
-    QUrl url;
-    url.setScheme(QStringLiteral("wss"));
-    url.setHost(m_host);
-    url.setPort(m_apiPort);
-    if (m_vmid == 0) {
-        // Node-level shell: vmid=0 is the sentinel for host console
-        url.setPath(QStringLiteral("/api2/json/nodes/%1/vncwebsocket").arg(m_node));
-    } else {
-        url.setPath(QStringLiteral("/api2/json/nodes/%1/lxc/%2/vncwebsocket")
-                        .arg(m_node).arg(m_vmid));
-    }
-
-    QUrlQuery q;
-    q.addQueryItem(QStringLiteral("port"), QString::number(m_proxyPort));
-    q.addQueryItem(QStringLiteral("vncticket"),
-                   QString::fromLatin1(m_ticket.toPercentEncoding()));
-    url.setQuery(q);
+    // Node-level shell: vmid=0 is the sentinel for host console, signalled
+    // to the builder by an empty kind. Shared with VncWsProxy so the wss
+    // guard, the path shape and the ticket encoding stay in one place.
+    const QUrl url = ProxmoxDataUtils::buildConsoleWebSocketUrl(
+        m_host, m_apiPort, m_node,
+        m_vmid == 0 ? QString() : QStringLiteral("lxc"),
+        m_vmid, m_proxyPort, m_ticket);
 
     if (!url.isValid() || url.scheme().compare(QStringLiteral("wss"), Qt::CaseInsensitive) != 0) {
         clearCredentials();

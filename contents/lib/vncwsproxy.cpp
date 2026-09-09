@@ -4,7 +4,6 @@
 
 #include <QNetworkRequest>
 #include <QSslConfiguration>
-#include <QUrlQuery>
 #include <QDebug>
 
 VncWsProxy::VncWsProxy(QObject *parent)
@@ -64,24 +63,10 @@ QUrl VncWsProxy::buildWsUrl() const
 {
     // wss://host:apiPort/api2/json/nodes/{node}/{kind}/{vmid}/vncwebsocket
     //   ?port={vncPort}&vncticket={urlEncoded(ticket)}
-    QUrl url;
-    // Transport encryption is mandatory. ignoreSsl only controls peer
-    // certificate verification; it must never downgrade the connection.
-    url.setScheme(QStringLiteral("wss"));
-    url.setHost(m_host);
-    url.setPort(m_apiPort);
-    url.setPath(QStringLiteral("/api2/json/nodes/%1/%2/%3/vncwebsocket")
-                    .arg(m_node, m_kind).arg(m_vmid));
-
-    QUrlQuery q;
-    q.addQueryItem(QStringLiteral("port"),       QString::number(m_vncPort));
-    // Percent-encode the ticket so that base64 '+' characters aren't
-    // misread as spaces by Proxmox's form-URL decoder (same fix as LxcTerminal).
-    // m_ticket is a QByteArray; percent-encoded output is ASCII-safe so fromLatin1 is correct.
-    q.addQueryItem(QStringLiteral("vncticket"),
-                   QString::fromLatin1(m_ticket.toPercentEncoding()));
-    url.setQuery(q);
-    return url;
+    // Shared with LxcTerminal so the wss guard, the path shape and the
+    // ticket encoding cannot drift between the two console transports.
+    return ProxmoxDataUtils::buildConsoleWebSocketUrl(
+        m_host, m_apiPort, m_node, m_kind, m_vmid, m_vncPort, m_ticket);
 }
 
 void VncWsProxy::cleanupTransport()

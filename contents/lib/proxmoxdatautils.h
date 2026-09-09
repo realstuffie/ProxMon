@@ -4,6 +4,7 @@
 
 #include <QList>
 #include <QSslCertificate>
+#include <QUrl>
 
 class QSslConfiguration;
 
@@ -53,5 +54,29 @@ QList<QSslCertificate> trustedCertificatesFromConfig(const QByteArray &trustedCe
 void appendTrustedCertificates(QSslConfiguration &config,
                                const QByteArray &trustedCertPem,
                                const QString &trustedCertPath);
+
+// Build the Proxmox console WebSocket URL. Shared by the VNC bridge
+// (VncWsProxy) and the LXC/node terminal (LxcTerminal) so the two cannot
+// drift apart.
+//
+// Transport encryption is not optional: the scheme is always wss. ignoreSsl
+// governs peer verification only and never reaches this function.
+//
+// kind is the guest type ("qemu", "lxc"). Pass an empty kind for a
+// node-level shell, in which case vmid is ignored and the shorter
+// /api2/json/nodes/{node}/vncwebsocket path is used.
+//
+// node and kind are validated rather than encoded: anything outside
+// [A-Za-z0-9._-] yields an invalid QUrl instead of reshaping the path.
+// The ticket is percent-encoded so base64 '+' survives Proxmox's form-URL
+// decoder. Returns an invalid QUrl on any rejected input; callers must
+// check isValid() before opening a socket.
+QUrl buildConsoleWebSocketUrl(const QString &host,
+                              int apiPort,
+                              const QString &node,
+                              const QString &kind,
+                              int vmid,
+                              int port,
+                              const QByteArray &ticket);
 
 } // namespace ProxmoxDataUtils
