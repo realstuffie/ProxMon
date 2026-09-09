@@ -1,0 +1,19 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck install.sh uninstall.sh check-and-rebuild.sh
+
+  build:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - run: cmake -S contents/lib -B build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build build -- -j$(nproc)
+      - run: test -f build/libproxmoxclientplugin.so
