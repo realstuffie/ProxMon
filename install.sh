@@ -111,6 +111,7 @@ install_deps_best_effort() {
     fi
   }
 
+  # shellcheck disable=SC2086
   [ -n "$pm_update" ] && run_root $pm_update
 
   # shellcheck disable=SC2086
@@ -246,7 +247,7 @@ sync_contents() {
   command -v md5sum >/dev/null 2>&1 || have_md5=0
   local copied=0
   while IFS= read -r -d '' srcfile; do
-    local rel="${srcfile#$src/}"
+    local rel="${srcfile#"$src"/}"
     local dstfile="$dst/$rel"
     local copy=1
     if [ "$have_md5" -eq 1 ] && [ -f "$dstfile" ]; then
