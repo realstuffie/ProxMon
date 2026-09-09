@@ -61,6 +61,8 @@ qt_add_library(proxmoxclientplugin SHARED
     vncwsproxy.h
     lxcterminal.cpp
     lxcterminal.h
+    lxcauthframing.cpp
+    lxcauthframing.h
 )
 
 target_include_directories(proxmoxclientplugin PRIVATE

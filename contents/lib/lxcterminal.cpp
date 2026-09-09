@@ -1,5 +1,7 @@
 #include "lxcterminal.h"
 
+#include "lxcauthframing.h"
+
 #include "proxmoxdatautils.h"
 
 #include <QCloseEvent>
@@ -415,55 +417,49 @@ void LxcTerminal::deliverToTerminal(const QByteArray &data)
 
 void LxcTerminal::handleAuthLine(const QByteArray &line)
 {
-    m_authBuffer.append(line);
+    const LxcAuthFraming::Result result = LxcAuthFraming::consume(m_authBuffer, line);
 
-    // Proxmox replies with literal bytes "OK" on success. Some versions
-    // include a trailing "\n", others don't - accept both. Anything else
-    // (with at least 2 bytes seen) is an auth failure.
-    if (m_authBuffer.startsWith("OK")) {
-        stopAuthTimeout();
-        m_phase = Phase::Connected;
-        setState(QStringLiteral("connected"));
-
-        // Consume "OK" plus an optional trailing newline; everything past
-        // that is real terminal data.
-        int consume = 2;
-        if (m_authBuffer.size() > 2 && m_authBuffer.at(2) == '\n') consume = 3;
-        if (m_authBuffer.size() > consume) {
-            deliverToTerminal(m_authBuffer.mid(consume));
-        }
-        m_authBuffer.clear();
-
-        // Two-pass resize: immediate (may be 81×25 placeholder) then 120ms
-        // after layout settles. 500ms wake CR for silent-getty containers.
-        // See docs/ARCHITECTURE.md for rationale.
-        QTimer::singleShot(0,   this, [this]() { sendCurrentResize(); });
-        QTimer::singleShot(120, this, [this]() { sendCurrentResize(); });
-
-        m_postAuthBytes = 0;
-        // Skip the silent-getty wake CR for node consoles (vmid==0) - it
-        // would fire mid-login-prompt and prepend a spurious newline.
-        if (m_vmid != 0) {
-            QTimer::singleShot(500, this, [this]() {
-                const int threshold = 24;
-                if (m_phase == Phase::Connected && m_ws && m_postAuthBytes < threshold) {
-                    m_ws->sendTextMessage(QStringLiteral("0:1:\r"));
-                }
-            });
-        }
+    switch (result.outcome) {
+    case LxcAuthFraming::Outcome::NeedMore:
         return;
+
+    case LxcAuthFraming::Outcome::Rejected:
+        stopAuthTimeout();
+        m_phase = Phase::Errored;
+        setState(QStringLiteral("error"));
+        emit errorOccurred(QStringLiteral("LXC terminal auth rejected: %1")
+                               .arg(QString::fromUtf8(result.rejected)));
+        return;
+
+    case LxcAuthFraming::Outcome::Authenticated:
+        break;
     }
 
-    // Need at least 2 bytes before we can be sure this isn't "OK" yet.
-    if (m_authBuffer.size() < 2) return;
-
     stopAuthTimeout();
-    m_phase = Phase::Errored;
-    setState(QStringLiteral("error"));
-    const QString msg = m_authBuffer.isEmpty()
-        ? QStringLiteral("LXC terminal authentication failed")
-        : QStringLiteral("LXC terminal auth rejected: %1").arg(QString::fromUtf8(m_authBuffer));
-    emit errorOccurred(msg);
+    m_phase = Phase::Connected;
+    setState(QStringLiteral("connected"));
+
+    if (!result.passthrough.isEmpty()) {
+        deliverToTerminal(result.passthrough);
+    }
+
+    // Two-pass resize: immediate (may be 81x25 placeholder) then 120ms
+    // after layout settles. 500ms wake CR for silent-getty containers.
+    // See docs/ARCHITECTURE.md for rationale.
+    QTimer::singleShot(0,   this, [this]() { sendCurrentResize(); });
+    QTimer::singleShot(120, this, [this]() { sendCurrentResize(); });
+
+    m_postAuthBytes = 0;
+    // Skip the silent-getty wake CR for node consoles (vmid==0) - it
+    // would fire mid-login-prompt and prepend a spurious newline.
+    if (m_vmid != 0) {
+        QTimer::singleShot(500, this, [this]() {
+            const int threshold = 24;
+            if (m_phase == Phase::Connected && m_ws && m_postAuthBytes < threshold) {
+                m_ws->sendTextMessage(QStringLiteral("0:1:\r"));
+            }
+        });
+    }
 }
 
 // -------- QTermWidget signal handlers --------

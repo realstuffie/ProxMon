@@ -43,6 +43,21 @@ target_link_libraries(tst_consolewsurl PRIVATE
 
 add_test(NAME consolewsurl COMMAND tst_consolewsurl)
 
+qt_add_executable(tst_lxcauthframing
+    tst_lxcauthframing.cpp
+    ../lxcauthframing.cpp
+    ../lxcauthframing.h
+)
+
+target_include_directories(tst_lxcauthframing PRIVATE ..)
+
+target_link_libraries(tst_lxcauthframing PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+add_test(NAME lxcauthframing COMMAND tst_lxcauthframing)
+
 qt_add_executable(tst_consolecredentials
     tst_consolecredentials.cpp
 )
