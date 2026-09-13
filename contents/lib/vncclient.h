@@ -60,7 +60,7 @@ private:
     void setState(const QString &state);
     void postCmd(std::function<void(rfbClient*)> fn);
 
-    QThread          *m_thread  = nullptr;  // owns rfbInitClient + poll loop
+    QThread          *m_thread  = nullptr;  // owns RFB initialization and poll loop
     std::atomic<bool> m_running  { false };
     std::atomic<bool> m_frameDirty { false };
     // True while a frame event is queued to the main thread; bounds the

@@ -4,9 +4,16 @@
 #include "vnckeysym.h"
 
 #include <rfb/rfbclient.h>
+#include <iterator>
+#include <limits>
+#include <memory>
+#include <new>
 #include <string.h> // explicit_bzero
 #include <QCoreApplication>
+#include <QDataStream>
 #include <QDebug>
+#include <QIODevice>
+#include <QtEndian>
 
 // Called by libvncclient when the server advertises a new framebuffer size.
 static rfbBool resizeCallback(rfbClient *client)
@@ -14,11 +21,19 @@ static rfbBool resizeCallback(rfbClient *client)
     VncClient *self = static_cast<VncClient *>(rfbClientGetClientData(client, nullptr));
     if (!self) return FALSE;
 
-    int w = client->width;
-    int h = client->height;
+    const int w = client->width;
+    const int h = client->height;
+
+    // libvncclient and our image offsets use int arithmetic.
+    if (w <= 0 || h <= 0 || quint64(w) * h > std::numeric_limits<int>::max() / 4) {
+        qWarning() << "[VncClient] Invalid framebuffer size:" << w << h;
+        return FALSE;
+    }
+    auto *buffer = new (std::nothrow) uint8_t[size_t(w) * h * 4];
+    if (!buffer) return FALSE;
 
     delete[] client->frameBuffer;
-    client->frameBuffer = new uint8_t[w * h * 4];
+    client->frameBuffer = buffer;
     client->format.bitsPerPixel = 32;
     client->format.redShift     = 16;
     client->format.greenShift   = 8;
@@ -27,9 +42,12 @@ static rfbBool resizeCallback(rfbClient *client)
     client->format.greenMax     = 0xff;
     client->format.blueMax      = 0xff;
 
-    // Request a full frame at the new dimensions immediately - without this
-    // the server waits for the client to ask before sending any pixels.
-    SendFramebufferUpdateRequest(client, 0, 0, w, h, FALSE);
+    // No pixel request here: the NewFBSize handler sends the full-frame
+    // request after this callback returns. Keep the coalesced update region
+    // covering the whole new screen.
+    client->updateRect.x = client->updateRect.y = 0;
+    client->updateRect.w = w;
+    client->updateRect.h = h;
 
     QMetaObject::invokeMethod(self, [self, w, h]() {
         self->setFrameSize(w, h);
@@ -46,6 +64,57 @@ static void updateCallback(rfbClient *client, int x, int y, int w, int h)
     VncClient *self = static_cast<VncClient *>(rfbClientGetClientData(client, nullptr));
     if (!self || !client->frameBuffer) return;
     self->markFrameDirty(x, y, w, h);
+}
+
+static bool initializeSession(rfbClient *client)
+{
+    if (!ConnectToRFBServer(client, client->serverHost, client->serverPort)
+        || !InitialiseRFBConnection(client)) {
+        return false;
+    }
+    client->width = client->si.framebufferWidth;
+    client->height = client->si.framebufferHeight;
+    if (!client->MallocFrameBuffer(client)) return false;
+
+    // rfbInitClient/SetFormatAndEncodings unconditionally advertise
+    // ExtendedDesktopSize. In libvncclient 0.9.15 its decoder rejects QEMU's
+    // screen ID 0, ignores the resize, then disconnects on the larger frame.
+    // Negotiate DesktopSize explicitly before any framebuffer request.
+    // https://github.com/LibVNC/libvncserver/pull/620
+    rfbSetPixelFormatMsg format{};
+    format.type = rfbSetPixelFormat;
+    format.format = client->format;
+    format.format.redMax = qToBigEndian(format.format.redMax);
+    format.format.greenMax = qToBigEndian(format.format.greenMax);
+    format.format.blueMax = qToBigEndian(format.format.blueMax);
+    if (!WriteToRFBServer(client, reinterpret_cast<const char *>(&format), sz_rfbSetPixelFormatMsg))
+        return false;
+
+    const quint32 encodings[] = {
+#if defined(LIBVNCSERVER_HAVE_LIBZ) && defined(LIBVNCSERVER_HAVE_LIBJPEG)
+        rfbEncodingTight,
+#endif
+#ifdef LIBVNCSERVER_HAVE_LIBZ
+        rfbEncodingZRLE,
+#endif
+        rfbEncodingHextile,
+        rfbEncodingRaw,
+        rfbEncodingNewFBSize,
+        rfbEncodingLastRect,
+        rfbEncodingKeyboardLedState,
+#if defined(LIBVNCSERVER_HAVE_LIBZ) && defined(LIBVNCSERVER_HAVE_LIBJPEG)
+        rfbEncodingCompressLevel0 + 3,
+        rfbEncodingQualityLevel0 + 5,
+#endif
+    };
+    QByteArray message;
+    QDataStream stream(&message, QIODevice::WriteOnly);
+    stream.setByteOrder(QDataStream::BigEndian);
+    stream << quint8(rfbSetEncodings) << quint8(0) << quint16(std::size(encodings));
+    for (quint32 encoding : encodings) stream << encoding;
+    if (!WriteToRFBServer(client, message.constData(), message.size())) return false;
+
+    return SendFramebufferUpdateRequest(client, 0, 0, client->width, client->height, FALSE);
 }
 
 VncClient::VncClient(QObject *parent)
@@ -89,6 +158,8 @@ void VncClient::connectToVnc(const QString &host, int port)
 
     rfb->MallocFrameBuffer    = resizeCallback;
     rfb->GotFrameBufferUpdate = updateCallback;
+    rfb->canHandleNewFBSize   = TRUE;
+    free(rfb->serverHost);
     rfb->serverHost           = strdup(host.toUtf8().constData());
     rfb->serverPort           = port;
 
@@ -105,26 +176,29 @@ void VncClient::connectToVnc(const QString &host, int port)
     m_ticket.fill(0);
     m_ticket.clear();
 
-    rfb->appData.encodingsString = "tight zrle hextile raw";
-
-    // RFB session runs on a worker thread - rfbInitClient blocks on I/O.
+    // RFB session runs on a worker thread; initialization blocks on I/O.
     // Qt-facing work is marshalled back via QueuedConnection. See docs/ARCHITECTURE.md.
     m_dirtyRect = QRect();  // safe: no worker thread is running here
     m_frameDirty.store(false, std::memory_order_relaxed);
     m_running.store(true);
     m_thread = QThread::create([this, rfb]() {
-        // Grab the ticket before rfbInitClient - it frees rfb on failure so
-        // we can't read client data afterward.
+        // The worker owns the session on both success and failure. Unlike
+        // rfbInitClient, initializeSession leaves cleanup to its caller.
+        const auto cleanup = [](rfbClient *client) {
+            delete[] client->frameBuffer; // rfbClientCleanup does not free it
+            rfbClientCleanup(client);
+        };
+        std::unique_ptr<rfbClient, decltype(cleanup)> session(rfb, cleanup);
         char *ticketSlot = static_cast<char *>(rfbClientGetClientData(rfb, (void*)1));
 
-        bool ok = rfbInitClient(rfb, nullptr, nullptr);
+        const bool ok = initializeSession(rfb);
+        // Clear the private ticket allocation after either handshake outcome.
+        rfbClientSetClientData(rfb, (void*)1, nullptr);
+        if (ticketSlot) {
+            explicit_bzero(ticketSlot, strlen(ticketSlot) + 1);
+            free(ticketSlot);
+        }
         if (!ok) {
-            // rfbInitClient freed rfb on failure - do not touch it.
-            // ticketSlot was saved before the call so it's still valid.
-            if (ticketSlot) {
-                explicit_bzero(ticketSlot, strlen(ticketSlot) + 1);
-                free(ticketSlot);
-            }
             m_running.store(false);
             QMetaObject::invokeMethod(this, [this]() {
                 if (m_state != QStringLiteral("disconnected")) {
@@ -133,14 +207,6 @@ void VncClient::connectToVnc(const QString &host, int port)
                 }
             }, Qt::QueuedConnection);
             return;
-        }
-
-        // Handshake complete - null out the client-data slot first so
-        // GetPassword cannot race the free, then zero and release.
-        if (ticketSlot) {
-            rfbClientSetClientData(rfb, (void*)1, nullptr);
-            explicit_bzero(ticketSlot, strlen(ticketSlot) + 1);
-            free(ticketSlot);
         }
 
         QMetaObject::invokeMethod(this, [this]() {
@@ -173,7 +239,9 @@ void VncClient::connectToVnc(const QString &host, int port)
                     cmd(rfb);
             }
 
-            int result = WaitForMessage(rfb, 5'000); // µs - 5 ms keeps disconnect detection fast while reducing post-resize lag
+            // A resize and its next update can arrive in one socket read.
+            // Drain libvncclient's buffer before waiting for more network data.
+            const int result = rfb->buffered > 0 ? 1 : WaitForMessage(rfb, 5'000);
             if (!m_running.load()) break;
             if (result < 0) {
                 QMetaObject::invokeMethod(this, [this]() {
@@ -234,7 +302,6 @@ void VncClient::connectToVnc(const QString &host, int port)
             }
         }
 
-        rfbClientCleanup(rfb);
         m_running.store(false);
     });
     m_thread->start();

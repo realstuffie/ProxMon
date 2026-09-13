@@ -234,7 +234,7 @@ Window {
     onClosing: {
         reconnectTimer.stop()
         /* Stop the proxy first - this aborts the loopback TCP socket so
-           rfbInitClient (which is blocked waiting for RFB handshake bytes)
+           RFB initialization (blocked waiting for handshake bytes)
            sees a connection error and exits promptly. Without this, disconnect()
            would block in m_thread->wait() indefinitely because the event loop
            is suspended and the proxy can never deliver bytes to unblock the thread.

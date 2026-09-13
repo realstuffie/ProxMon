@@ -24,6 +24,25 @@ target_link_libraries(tst_vncbuttonmask PRIVATE
 
 add_test(NAME vncbuttonmask COMMAND tst_vncbuttonmask)
 
+qt_add_executable(tst_vncclient
+    tst_vncclient.cpp
+    ../vncclient.cpp
+    ../vncclient.h
+)
+
+target_include_directories(tst_vncclient PRIVATE .. ${LIBVNCCLIENT_INCLUDE_DIRS})
+
+target_link_libraries(tst_vncclient PRIVATE
+    Qt6::Core
+    Qt6::Gui
+    Qt6::Network
+    Qt6::Test
+    ${LIBVNCCLIENT_LIBRARIES}
+)
+
+add_test(NAME vncclient COMMAND tst_vncclient)
+set_tests_properties(vncclient PROPERTIES TIMEOUT 30)
+
 qt_add_executable(tst_proxmoxdatautils
     tst_proxmoxdatautils.cpp
     ../proxmoxdatautils.cpp
