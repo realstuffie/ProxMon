@@ -5,11 +5,10 @@ import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
 
 /**
- * Flat icon button used for every per-row action.
+ * Flat icon button shared by the toolbar and guest actions.
  *
  * Exists so hover treatment, hit area and icon sizing are defined once instead
- * of being re-declared at each call site. `danger` tints the hover state with
- * the highlight colour for actions that change guest power state.
+ * of being re-declared at each call site.
  */
 PlasmaComponents.ToolButton {
     id: control
@@ -22,16 +21,21 @@ PlasmaComponents.ToolButton {
     flat: true
     icon.width: control.iconSize
     icon.height: control.iconSize
+    icon.color: Kirigami.Theme.textColor
     implicitWidth: 22
     implicitHeight: 22
 
     background: Rectangle {
-        radius: 4
+        radius: 5
+        border.width: control.visualFocus ? 1 : 0
+        border.color: Kirigami.Theme.highlightColor
         color: {
-            if (!control.hovered) return "transparent"
-            const c = control.danger ? Kirigami.Theme.highlightColor : Kirigami.Theme.textColor
+            if (!control.hovered && !control.down && !control.checked && !control.visualFocus)
+                return "transparent"
+            const c = control.danger ? Kirigami.Theme.negativeTextColor : Kirigami.Theme.highlightColor
             return Qt.rgba(c.r, c.g, c.b,
-                           control.danger ? control.hoverDangerOpacity : control.hoverOpacity)
+                           control.down || control.checked || control.danger
+                               ? control.hoverDangerOpacity : control.hoverOpacity)
         }
 
         Behavior on color {

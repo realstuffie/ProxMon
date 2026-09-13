@@ -52,7 +52,7 @@ Rectangle {
     // Actions stay in the layout at all times but recede until the row is
     // hovered, so a list of twenty guests reads as data rather than as a wall
     // of buttons.
-    property real uiActionIdleOpacity: 0.35
+    property real uiActionIdleOpacity: 0.5
 
     // ---- callbacks (repo convention: plain function properties) ----------
     property var anonymizeVmId: null
@@ -106,11 +106,17 @@ Rectangle {
     Layout.fillWidth: true
     Layout.preferredHeight: contentColumn.implicitHeight
     radius: uiRadiusS
+    border.width: 1
+    border.color: {
+        const c = root.armed ? Kirigami.Theme.neutralTextColor : Kirigami.Theme.highlightColor
+        return Qt.rgba(c.r, c.g, c.b,
+                       root.armed ? 0.5 : (rowHover.hovered || root.statsExpanded ? 0.25 : 0))
+    }
 
     color: {
         const base = root.isRunning ? root.uiRunningColor : root.uiStoppedColor
         const alpha = (root.isRunning ? root.uiSurfaceRunningOpacity : root.uiSurfaceAltOpacity)
-            * root.uiWindowOpacity
+            * root.uiWindowOpacity * 0.45
         return Qt.rgba(base.r, base.g, base.b, alpha + (rowHover.hovered ? 0.06 : 0))
     }
 
@@ -138,30 +144,44 @@ Rectangle {
 
             RowLayout {
                 anchors.fill: parent
-                anchors.leftMargin: 4
-                anchors.rightMargin: 2
+                anchors.leftMargin: 7
+                anchors.rightMargin: 4
                 spacing: 4
 
                 // Status dot. Deliberately a circle, and the only circle in
                 // the row, so it can't be confused with the backup marker.
                 Rectangle {
-                    implicitWidth: 8
-                    implicitHeight: 8
+                    implicitWidth: 6
+                    implicitHeight: 6
                     radius: 4
                     color: root.isRunning ? root.uiRunningColor : root.uiStoppedColor
                 }
 
                 PlasmaComponents.Label {
-                    text: (root.guestModel && root.anonymizeVmId && root.anonymizeName)
-                        ? (root.anonymizeVmId(root.vmid, root.guestIndex) + ": "
-                           + root.anonymizeName(root.displayName, root.guestIndex))
-                        : (root.guestModel ? (root.vmid + ": " + root.displayName) : "")
+                    text: root.guestModel
+                        ? (root.anonymizeVmId ? root.anonymizeVmId(root.vmid, root.guestIndex) : root.vmid)
+                        : ""
+                    Layout.preferredWidth: Math.max(25, implicitWidth)
+                    font.pixelSize: 10
+                    font.family: "JetBrains Mono"
+                    opacity: root.isRunning ? 0.55 : 0.4
+                }
+
+                PlasmaComponents.Label {
+                    id: nameLabel
+                    text: root.guestModel
+                        ? (root.anonymizeName ? root.anonymizeName(root.displayName, root.guestIndex) : root.displayName)
+                        : ""
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     elide: Text.ElideRight
                     font.pixelSize: 11
                     verticalAlignment: Text.AlignVCenter
                     opacity: root.isRunning ? 1.0 : 0.65
+
+                    QQC2.ToolTip.visible: nameHover.hovered && nameLabel.truncated
+                    QQC2.ToolTip.text: nameLabel.text
+                    HoverHandler { id: nameHover }
                 }
 
                 // CPU / memory readout. Reserved at a fixed width and filled
@@ -191,7 +211,7 @@ Rectangle {
                         font.pixelSize: 10
                         font.family: "JetBrains Mono"
                         color: Kirigami.Theme.textColor
-                        opacity: root.isRunning ? 0.75 : 0.3
+                        opacity: root.isRunning ? 0.85 : 0.35
                         horizontalAlignment: Text.AlignRight
                     }
 
@@ -202,7 +222,7 @@ Rectangle {
                         anchors.verticalCenter: parent.verticalCenter
                         width: 1
                         height: 10
-                        opacity: root.isRunning ? 0.4 : 0.15
+                        opacity: root.isRunning ? 0.18 : 0.1
                         color: Kirigami.Theme.textColor
                     }
 
@@ -216,7 +236,7 @@ Rectangle {
                         font.pixelSize: 10
                         font.family: "JetBrains Mono"
                         color: Kirigami.Theme.textColor
-                        opacity: root.isRunning ? 0.75 : 0.3
+                        opacity: root.isRunning ? 0.85 : 0.35
                     }
                 }
 
@@ -284,11 +304,13 @@ Rectangle {
                         }
                         font.pixelSize: 10
                         font.family: "JetBrains Mono"
-                        opacity: 0.7
+                        opacity: backup.backupStatus === 1 ? 0.7 : 1.0
                         visible: backup.hasBackup
-                        color: root.guestModel && root.guestModel.verifyState === "failed"
-                            ? Kirigami.Theme.negativeTextColor
-                            : Kirigami.Theme.textColor
+                        color: (root.guestModel && root.guestModel.verifyState === "failed")
+                            || backup.backupStatus === 3 || backup.backupStatus === 4
+                                ? Kirigami.Theme.negativeTextColor
+                                : (backup.backupStatus === 2 ? Kirigami.Theme.neutralTextColor
+                                                           : Kirigami.Theme.textColor)
                     }
                 }
 
@@ -296,7 +318,8 @@ Rectangle {
                 // features are enabled: stats takes one slot, power actions up
                 // to two (shutdown + reboot). Buttons are right-anchored inside
                 // it so they stay flush against the console button.
-                Item {
+                FocusScope {
+                    id: actions
                     readonly property int reserveSlots: (root.statsEnabled ? 1 : 0)
                         + (root.powerActionsEnabled ? 2 : 0)
                     readonly property int reservePx: reserveSlots > 0
@@ -313,7 +336,7 @@ Rectangle {
                     Layout.maximumHeight: 28
                     visible: root.powerActionsEnabled || root.statsEnabled
 
-                    opacity: (rowHover.hovered || root.busy || root.armed)
+                    opacity: (rowHover.hovered || root.busy || root.armed || root.statsExpanded || actions.activeFocus)
                         ? 1.0 : root.uiActionIdleOpacity
                     Behavior on opacity { NumberAnimation { duration: 120 } }
 
@@ -327,6 +350,7 @@ Rectangle {
                             implicitWidth: root.uiActionButtonSize
                             implicitHeight: root.uiActionButtonSize
                             visible: root.statsEnabled
+                            checked: root.statsExpanded
 
                             PlasmaComponents.ToolTip { text: "Resource history" }
 
@@ -457,11 +481,12 @@ Rectangle {
                 }
 
                 RowActionButton {
+                    id: consoleButton
                     icon.name: "utilities-terminal"
                     implicitWidth: root.uiActionButtonSize
                     implicitHeight: root.uiActionButtonSize
                     visible: root.consoleEnabled && root.isRunning
-                    opacity: rowHover.hovered ? 1.0 : root.uiActionIdleOpacity
+                    opacity: rowHover.hovered || consoleButton.activeFocus ? 1.0 : root.uiActionIdleOpacity
                     Behavior on opacity { NumberAnimation { duration: 120 } }
 
                     PlasmaComponents.ToolTip { text: "Open console" }
@@ -496,7 +521,7 @@ Rectangle {
                 width: Math.round((parent.width - 2 * root.uiRadiusS) * root.cpuFraction)
                 visible: root.isRunning && root.cpuFraction > 0
                 color: root.loadColor
-                opacity: 0.55
+                opacity: 0.35
 
                 Behavior on width {
                     NumberAnimation { duration: 200; easing.type: Easing.OutCubic }

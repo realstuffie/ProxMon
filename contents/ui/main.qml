@@ -351,7 +351,7 @@ PlasmoidItem {
     readonly property int uiTopMargin: 8
     readonly property int uiBottomMargin: 8
     readonly property int uiSectionSpacing: 4
-    readonly property int uiNodeCardHeight: 60
+    readonly property int uiNodeCardHeight: 64
     readonly property int uiSectionHeaderHeight: 21
     readonly property int uiRowSpacing: 2
     readonly property int uiGroupSpacing: 5
@@ -388,7 +388,7 @@ PlasmoidItem {
     }
 
     // Keep platform colors from Kirigami, but standardize shape/opacity rhythm
-    readonly property int uiRadiusS: 4
+    readonly property int uiRadiusS: 5
     readonly property int uiRadiusM: 6
     readonly property int uiRadiusL: 8
     readonly property real uiBorderOpacity: 0.22
@@ -1503,14 +1503,29 @@ PlasmoidItem {
             anchors.topMargin: fullRep.topMargin
             height: fullRep.headerHeight
 
-            PlasmaComponents.Label {
-                text: root.configured
-                    ? (root.connectionMode === "multiHost"
-                       ? "Proxmox - " + root.displayedEndpoints.length + " hosts"
-                       : "Proxmox - " + root.anonymizeHost(root.proxmoxHost))
-                    : "Proxmox Monitor"
-                font.bold: true
+            ColumnLayout {
                 Layout.fillWidth: true
+                spacing: 1
+
+                PlasmaComponents.Label {
+                    text: "Proxmox"
+                    font.bold: true
+                    font.pixelSize: 13
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                }
+
+                PlasmaComponents.Label {
+                    text: root.configured
+                        ? (root.connectionMode === "multiHost"
+                           ? root.displayedEndpoints.length + " hosts"
+                           : root.anonymizeHost(root.proxmoxHost))
+                        : "Monitor"
+                    font.pixelSize: 10
+                    opacity: 0.65
+                    Layout.fillWidth: true
+                    elide: Text.ElideRight
+                }
             }
 
             PlasmaComponents.Label {
@@ -1520,7 +1535,7 @@ PlasmoidItem {
             }
 
             // Copy debug info button (dev mode only)
-            PlasmaComponents.Button {
+            RowActionButton {
                 icon.name: "edit-copy"
                 onClicked: root.copyDebugInfo()
                 visible: root.devMode
@@ -1533,7 +1548,7 @@ PlasmoidItem {
             }
 
             // Test notifications button
-            PlasmaComponents.Button {
+            RowActionButton {
                 icon.name: "notifications"
                 onClicked: root.testNotifications()
                 visible: root.devMode
@@ -1545,7 +1560,7 @@ PlasmoidItem {
                 }
             }
 
-            PlasmaComponents.Button {
+            RowActionButton {
                 icon.name: "utilities-terminal"
                 // Coerced with !! so the pre-first-data evaluation can't yield
                 // undefined ("Unable to assign [undefined] to bool" at load).
@@ -1564,7 +1579,7 @@ PlasmoidItem {
                 PlasmaComponents.ToolTip { text: "Open host shell" }
             }
 
-            PlasmaComponents.Button {
+            RowActionButton {
                 icon.name: "search"
                 visible: root.configured
                 checkable: true
@@ -1582,7 +1597,7 @@ PlasmoidItem {
             // Sorting was reachable only through Configure -> Behavior, even
             // though it is a per-glance decision. The mode is still persisted
             // in the same config key, so the settings page stays in sync.
-            PlasmaComponents.Button {
+            RowActionButton {
                 id: sortButton
                 icon.name: "view-sort"
                 visible: root.configured
@@ -1600,11 +1615,13 @@ PlasmoidItem {
                 Layout.preferredHeight: 28
                 Layout.preferredWidth: 28
 
-                PlasmaComponents.Button {
+                RowActionButton {
                     anchors.fill: parent
                     icon.name: "view-refresh"
                     onClicked: root.fetchData()
                     visible: !root.isRefreshing
+
+                    PlasmaComponents.ToolTip { text: "Refresh" }
                 }
 
                 PlasmaComponents.BusyIndicator {
@@ -1989,6 +2006,16 @@ PlasmoidItem {
                     NumberAnimation { duration: 120 }
                 }
             }
+        }
+
+        Rectangle {
+            anchors.left: footerRow.left
+            anchors.right: footerRow.right
+            anchors.bottom: footerRow.top
+            height: 1
+            visible: root.configured
+            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g,
+                           Kirigami.Theme.textColor.b, 0.08)
         }
 
         // Footer, keep it pinned to the bottom of the panel

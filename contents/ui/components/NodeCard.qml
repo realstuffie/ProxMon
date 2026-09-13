@@ -66,14 +66,14 @@ Rectangle {
     }
 
     Layout.fillWidth: true
-    Layout.preferredHeight: 60
+    Layout.preferredHeight: 64
     radius: uiRadiusL
     color: Qt.rgba(uiNodeColor.r, uiNodeColor.g, uiNodeColor.b,
                    uiNodeCardOpacity * uiWindowOpacity)
     border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r,
                           Kirigami.Theme.disabledTextColor.g,
                           Kirigami.Theme.disabledTextColor.b,
-                          cardHover.hovered ? card.uiBorderOpacity * 1.8 : card.uiBorderOpacity)
+                          cardHover.hovered ? card.uiBorderOpacity * 1.4 : card.uiBorderOpacity * 0.65)
     border.width: 1
 
     Behavior on border.color {
@@ -92,7 +92,7 @@ Rectangle {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 9
-        spacing: 5
+        spacing: 6
 
         RowLayout {
             Layout.fillWidth: true
@@ -159,6 +159,27 @@ Rectangle {
                 }
             }
 
+            RowLayout {
+                visible: !card.isCollapsed
+                spacing: 3
+                opacity: 0.6
+
+                Kirigami.Icon {
+                    source: "chronometer"
+                    implicitWidth: 12
+                    implicitHeight: 12
+                }
+
+                PlasmaComponents.Label {
+                    text: card.nodeModel
+                        ? (Math.floor(card.nodeModel.uptime / 86400) + "d "
+                           + Math.floor((card.nodeModel.uptime % 86400) / 3600) + "h")
+                        : ""
+                    font.pixelSize: 10
+                    font.family: "JetBrains Mono"
+                }
+            }
+
             // Tinted chip rather than a solid fill with hardcoded white text,
             // which only happened to be legible on dark themes.
             Rectangle {
@@ -167,9 +188,9 @@ Rectangle {
                 radius: 8
                 color: {
                     const c = card.isOnline ? card.uiRunningColor : card.uiStoppedColor
-                    return Qt.rgba(c.r, c.g, c.b, 0.20)
+                    return Qt.rgba(c.r, c.g, c.b, 0.12)
                 }
-                border.width: 1
+                border.width: 0
                 border.color: {
                     const c = card.isOnline ? card.uiRunningColor : card.uiStoppedColor
                     return Qt.rgba(c.r, c.g, c.b, 0.45)
@@ -188,77 +209,79 @@ Rectangle {
 
         RowLayout {
             Layout.fillWidth: true
-            spacing: 6
+            spacing: 16
 
-            PlasmaComponents.Label {
-                text: "CPU"
-                font.pixelSize: 9
-                opacity: 0.55
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                spacing: 5
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
+
+                    PlasmaComponents.Label {
+                        text: "CPU"
+                        font.pixelSize: 9
+                        opacity: 0.6
+                    }
+
+                    PlasmaComponents.Label {
+                        text: card.nodeModel && card.safeCpuPercent
+                            ? card.safeCpuPercent(card.nodeModel.cpu).toFixed(1) + "%" : "–"
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignLeft
+                        font.pixelSize: 10
+                        font.family: "JetBrains Mono"
+                    }
+                }
+
+                UsageMeter {
+                    Layout.fillWidth: true
+                    implicitHeight: 3
+                    value: card.cpuFraction
+                    barColor: card.loadColorFor(card.cpuFraction)
+                    trackOpacity: 0.10
+                }
             }
 
-            UsageMeter {
-                Layout.preferredWidth: 40
-                Layout.alignment: Qt.AlignVCenter
-                implicitHeight: 4
-                value: card.cpuFraction
-                barColor: card.loadColorFor(card.cpuFraction)
-            }
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                spacing: 5
 
-            PlasmaComponents.Label {
-                text: card.nodeModel && card.safeCpuPercent
-                    ? card.safeCpuPercent(card.nodeModel.cpu).toFixed(1) + "%" : "–"
-                font.pixelSize: 11
-                font.family: "JetBrains Mono"
-                opacity: 0.85
-            }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 4
 
-            Item { implicitWidth: 4 }
+                    PlasmaComponents.Label {
+                        text: "MEM"
+                        font.pixelSize: 9
+                        opacity: 0.6
+                    }
 
-            PlasmaComponents.Label {
-                text: "MEM"
-                font.pixelSize: 9
-                opacity: 0.55
-            }
+                    PlasmaComponents.Label {
+                        text: card.memTotal > 0
+                            ? (card.memUsed / card.bytesPerGiB).toFixed(1) + " / "
+                              + (card.memTotal / card.bytesPerGiB).toFixed(1) + "G"
+                            : "–"
+                        Layout.fillWidth: true
+                        horizontalAlignment: Text.AlignLeft
+                        font.pixelSize: 10
+                        font.family: "JetBrains Mono"
+                        elide: Text.ElideRight
+                    }
+                }
 
-            UsageMeter {
-                Layout.preferredWidth: 40
-                Layout.alignment: Qt.AlignVCenter
-                implicitHeight: 4
-                value: card.memFraction
-                barColor: card.memFraction >= 0.90
-                    ? Kirigami.Theme.negativeTextColor
-                    : (card.memFraction >= 0.75 ? Kirigami.Theme.neutralTextColor : card.uiMemColor)
-            }
-
-            PlasmaComponents.Label {
-                text: card.memTotal > 0
-                    ? (card.memUsed / card.bytesPerGiB).toFixed(1) + "/"
-                      + (card.memTotal / card.bytesPerGiB).toFixed(1) + "G"
-                    : "–"
-                font.pixelSize: 11
-                font.family: "JetBrains Mono"
-                opacity: 0.85
-                elide: Text.ElideRight
-            }
-
-            Item { Layout.fillWidth: true; Layout.minimumWidth: 4 }
-
-            Kirigami.Icon {
-                source: "chronometer"
-                implicitWidth: 13
-                implicitHeight: 13
-                Layout.alignment: Qt.AlignVCenter
-                opacity: 0.6
-            }
-
-            PlasmaComponents.Label {
-                text: card.nodeModel
-                    ? (Math.floor(card.nodeModel.uptime / 86400) + "d "
-                       + Math.floor((card.nodeModel.uptime % 86400) / 3600) + "h")
-                    : ""
-                font.pixelSize: 11
-                font.family: "JetBrains Mono"
-                opacity: 0.8
+                UsageMeter {
+                    Layout.fillWidth: true
+                    implicitHeight: 3
+                    value: card.memFraction
+                    barColor: card.memFraction >= 0.90
+                        ? Kirigami.Theme.negativeTextColor
+                        : (card.memFraction >= 0.75 ? Kirigami.Theme.neutralTextColor : card.uiMemColor)
+                    trackOpacity: 0.10
+                }
             }
         }
     }
