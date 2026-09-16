@@ -41,9 +41,56 @@ TestCase {
         verify(res.ok, res.error)
         var env = JSON.parse(res.jsonText)
         var keys = CP.whitelistedKeys()
-        compare(keys.length, 49) // canary: adding a config key must be a conscious decision
+        compare(keys.length, 50) // canary: adding a config key must be a conscious decision
         for (var i = 0; i < keys.length; i++)
             verify(env.config[keys[i]] !== undefined, "export is missing key: " + keys[i])
+    }
+
+    function test_customGuestOrderRoundTrip() {
+        var order = ["pve.lan:8006/104", "pve.lan:8006/100", "[fd00::1]:8006/101", "10.0.0.5:8006/9000"]
+        var res = CP.buildExportEnvelope({ customGuestOrder: order, defaultSorting: "custom" })
+        verify(res.ok, res.error)
+        var env = JSON.parse(res.jsonText)
+        compare(env.config.customGuestOrder, order) // display order preserved
+        var parsed = CP.validateImportFile(res.jsonText)
+        verify(parsed.ok, parsed.error)
+        compare(parsed.config.customGuestOrder, order)
+        compare(parsed.config.defaultSorting, "custom")
+        compare(JSON.parse(CP.buildExportEnvelope({}).jsonText).config.customGuestOrder, [])
+    }
+
+    function test_customGuestOrderExportSanitizes() {
+        var res = CP.buildExportEnvelope({ customGuestOrder: [
+            "pve.lan:8006/100", "pve.lan:8006/100",   // duplicate
+            "PVE.LAN:8006/101",                       // uppercase host is never stored
+            "pve.lan/102", "pve.lan:8006/", 42,       // malformed
+            "pve.lan:8006/103; rm -rf ~"              // injection-looking junk
+        ] })
+        verify(res.ok, res.error)
+        compare(JSON.parse(res.jsonText).config.customGuestOrder, ["pve.lan:8006/100"])
+        compare(JSON.parse(CP.buildExportEnvelope({ customGuestOrder: "pve.lan:8006/1" }).jsonText)
+                .config.customGuestOrder, [])
+        var many = []
+        for (var i = 1; i <= 2100; i++) many.push("pve.lan:8006/" + i)
+        var capped = JSON.parse(CP.buildExportEnvelope({ customGuestOrder: many }).jsonText).config.customGuestOrder
+        compare(capped.length, 2048)
+        compare(capped[0], "pve.lan:8006/53") // oldest entries dropped, like the C++ sanitizer
+    }
+
+    function test_customGuestOrderImportIsStrict() {
+        function envelopeWith(value) {
+            return JSON.stringify({ app: CP.APP_ID, schemaVersion: CP.SCHEMA_VERSION,
+                                    config: { customGuestOrder: value } })
+        }
+        verify(!CP.validateImportFile(envelopeWith("pve.lan:8006/100")).ok, "string instead of array")
+        verify(!CP.validateImportFile(envelopeWith(["pve.lan:8006/100", 7])).ok, "non-string entry")
+        verify(!CP.validateImportFile(envelopeWith(["pve.lan:8006/abc"])).ok, "malformed entry")
+        var tooMany = []
+        for (var i = 1; i <= 2049; i++) tooMany.push("pve.lan:8006/" + i)
+        verify(!CP.validateImportFile(envelopeWith(tooMany)).ok, "over the entry cap")
+        var dup = CP.validateImportFile(envelopeWith(["pve.lan:8006/1", "pve.lan:8006/1"]))
+        verify(dup.ok, dup.error)
+        compare(dup.config.customGuestOrder, ["pve.lan:8006/1"])
     }
 
     function test_pbsSourceFiltersRoundTrip() {

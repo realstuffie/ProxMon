@@ -328,7 +328,7 @@ Rectangle {
                             const sources = root.guestModel ? (root.guestModel.backupSources || "") : ""
                             return "Backups for this ID were found in more than one place"
                                 + (sources ? ":\n" + sources : ".")
-                                + "\nSet PBS Datastore and Namespace in settings to the one this host uses."
+                                + "\nPick the datastore and namespace this host uses in settings."
                         }
                         const when = root.guestModel ? (root.guestModel.lastBackupDisplay || "unknown") : "unknown"
                         const verify = root.guestModel && root.guestModel.verifyState === "failed"

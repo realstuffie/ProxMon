@@ -2,10 +2,12 @@
 
 ## Unreleased
 
+- feat(config): settings export and import now include the drag-and-drop guest order, so you can take it to another machine
+- fix(keyring): log keyring failures to the journal, including failed secret saves. Messages are sanitized, and the same failure is logged at most once every 5 minutes. After a failure the widget retries when the wallet unlocks, or after a backoff that starts at 30 seconds and grows to 10 minutes, not on every refresh. Manual refresh still retries straight away
 - feat(pbs): the ambiguous backup tooltip lists where the matching backups were found, for example "pbs: root, clients/acme"
-- fix(pbs): keep backups separate by datastore and namespace when matching guest IDs. Add source filters to single-host and multi-host settings. If multiple sources match, show an ambiguous backup marker instead of selecting another cluster's newest backup
-- fix(pbs): only fetch the selected PBS datastore and namespace, pick the namespace filter from All / Root only / Specific instead of typing * or leaving the field empty, and name backup states in QML instead of comparing raw numbers
-- fix(pbs): keep the previous backup markers until a PBS refresh finishes, so a Proxmox refresh during a slow PBS fetch no longer blanks them or shows "Never"
+- fix(pbs): track backups per datastore and namespace when matching guest IDs, and add source filters to single-host and multi-host settings. When more than one source matches, show an ambiguous marker instead of picking another cluster's newest backup
+- fix(pbs): fetch only the selected PBS datastore and namespace. The namespace filter is now a choice of All, Root only or Specific, so nobody has to type * or leave the field blank. QML refers to backup states by name, not by number
+- fix(pbs): keep the last backup markers until a PBS refresh finishes, so a Proxmox refresh during a slow PBS fetch no longer blanks them or shows "Never"
 
 ## v0.8.4
 

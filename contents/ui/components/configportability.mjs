@@ -90,6 +90,18 @@ const ENUM_KEYS = {
     "notifyMode": [["all", "whitelist", "blacklist"], "all"]
 }
 
+// String list keys -> validator for one entry, plus the entry cap.
+// customGuestOrder mirrors ProxmoxDataUtils::isValidGuestOrderKey and
+// kMaxGuestOrderEntries: "<host>:<port>/<vmid>" in display order. Entries
+// carry host names and VM IDs only, like proxmoxHost already does.
+const GUEST_ORDER_KEY_RE = /^[a-z0-9._\-:\[\]]{1,253}:[0-9]{1,5}\/[0-9]{1,9}$/
+const LIST_KEYS = {
+    "customGuestOrder": {
+        "maxEntries": 2048,
+        "isValid": function (s) { return s.length <= 300 && GUEST_ORDER_KEY_RE.test(s) }
+    }
+}
+
 // multiHostsJson is stored as a JSON string in KConfig but embedded as a real
 // array in the export file. Entry fields are whitelisted too.
 const ENTRY_STRING_KEYS = [
@@ -137,6 +149,7 @@ function whitelistedKeys() {
         .concat(Object.keys(BOOL_KEYS))
         .concat(Object.keys(INT_KEYS))
         .concat(Object.keys(ENUM_KEYS))
+        .concat(Object.keys(LIST_KEYS))
         .concat(["multiHostsJson"])
 }
 
@@ -225,6 +238,50 @@ function buildAtomicWriteCommand(path, jsonText) {
 // file cannot be read).
 function buildReadCommand(path) {
     return "cat -- " + shq(path)
+}
+
+// ---------------------------------------------------------------------------
+// String list sanitizing
+// ---------------------------------------------------------------------------
+
+// Export side: KConfig StringList (a JS array or a Qt sequence) -> clean
+// array. Drops malformed entries and duplicates (first wins) and keeps the
+// newest maxEntries, matching the C++ sanitizer. Never fails.
+function listToArray(key, value) {
+    var spec = LIST_KEYS[key]
+    if (value === null || value === undefined || typeof value === "string"
+            || typeof value.length !== "number")
+        return []
+    var out = []
+    var seen = {}
+    for (var i = 0; i < value.length; i++) {
+        var s = value[i]
+        if (typeof s !== "string" || !spec.isValid(s) || seen[s] === true) continue
+        seen[s] = true
+        out.push(s)
+    }
+    if (out.length > spec.maxEntries) out = out.slice(out.length - spec.maxEntries)
+    return out
+}
+
+// Import side: strict, like the other keys. Returns { list } or an error.
+function listFromArray(key, value) {
+    var spec = LIST_KEYS[key]
+    if (!Array.isArray(value))
+        return "Setting '" + key + "' must be an array of strings"
+    if (value.length > spec.maxEntries)
+        return "Setting '" + key + "' may contain at most " + spec.maxEntries + " entries"
+    var out = []
+    var seen = {}
+    for (var i = 0; i < value.length; i++) {
+        var s = value[i]
+        if (typeof s !== "string" || !spec.isValid(s))
+            return "Setting '" + key + "' has an invalid entry at position " + (i + 1)
+        if (seen[s] === true) continue
+        seen[s] = true
+        out.push(s)
+    }
+    return { "list": out }
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +413,10 @@ function buildExportEnvelope(values) {
         v = values[k]
         cfg[k] = (typeof v === "string" && allowed.indexOf(v) !== -1) ? v : ENUM_KEYS[k][1]
     }
+    for (k in LIST_KEYS) {
+        if (!Object.prototype.hasOwnProperty.call(LIST_KEYS, k)) continue
+        cfg[k] = listToArray(k, values[k])
+    }
     cfg["multiHostsJson"] = multiHostsToArray(values["multiHostsJson"])
 
     var envelope = {
@@ -453,6 +514,10 @@ function validateImportFile(jsonText) {
             if (typeof v !== "string" || ENUM_KEYS[key][0].indexOf(v) === -1)
                 return fail("Setting '" + key + "' has an invalid value")
             cfg[key] = v
+        } else if (Object.prototype.hasOwnProperty.call(LIST_KEYS, key)) {
+            var listRes = listFromArray(key, v)
+            if (typeof listRes === "string") return fail(listRes)
+            cfg[key] = listRes.list
         } else if (key === "multiHostsJson") {
             var res = multiHostsFromArray(v)
             if (typeof res === "string") return fail(res)

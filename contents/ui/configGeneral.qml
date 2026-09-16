@@ -291,6 +291,7 @@ KCM.SimpleKCM {
             "powerActionsEnabled": cfg_powerActionsEnabled,
             "statsEnabled": cfg_statsEnabled,
             "defaultSorting": cfg_defaultSorting,
+            "customGuestOrder": cfg_customGuestOrder,
             "compactMode": cfg_compactMode,
             "enableNotifications": cfg_enableNotifications,
             "notifyMode": cfg_notifyMode,
