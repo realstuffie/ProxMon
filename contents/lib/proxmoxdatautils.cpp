@@ -87,6 +87,19 @@ PbsBackupMatch selectPbsBackup(const PbsBackupSources &sources,
     return result;
 }
 
+int nextKeyringRetryDelayMs(int currentDelayMs) {
+    constexpr int startMs = 30 * 1000;
+    constexpr int maxMs = 10 * 60 * 1000;
+    if (currentDelayMs <= 0) return startMs;
+    return currentDelayMs >= maxMs / 2 ? maxMs : currentDelayMs * 2;
+}
+
+bool shouldLogKeyringError(const QString &message, const QString &lastMessage,
+                           qint64 msSinceLast, qint64 repeatIntervalMs) {
+    if (message != lastMessage) return true;
+    return msSinceLast < 0 || msSinceLast >= repeatIntervalMs;
+}
+
 QString describePbsSources(const QList<PBSSnapshot> &snapshots) {
     QMap<QString, QStringList> byStore; // QMap keeps datastores sorted.
     for (const PBSSnapshot &snapshot : snapshots) {

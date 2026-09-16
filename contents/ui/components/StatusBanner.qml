@@ -80,7 +80,7 @@ ColumnLayout {
                 if (!root.hasCoreConfig) return "Right-click → Configure Widget"
                 if (root.secretState === "loading" || root.refreshResolvingSecrets) return "Reading API token secret from keyring…"
                 if (root.secretState === "missing") return "Open settings and re-enter the API Token Secret."
-                if (root.secretState === "error") return "Keyring access failed. Check logs (journalctl --user -f)."
+                if (root.secretState === "error") return "Keyring access failed. ProxMon will try again when the wallet unlocks. To see why, run journalctl --user -g 'ProxMon keyring'"
                 return "Right-click → Configure Widget"
             }
             opacity: 0.7

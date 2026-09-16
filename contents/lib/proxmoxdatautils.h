@@ -40,6 +40,14 @@ struct PbsBackupMatch {
     QString sources;
 };
 
+// Keyring retry backoff: 30 s on the first failure, doubling to 10 min.
+int nextKeyringRetryDelayMs(int currentDelayMs);
+
+// Whether a keyring error should reach the journal: always when it differs
+// from the last one logged, otherwise once per repeat interval.
+bool shouldLogKeyringError(const QString &message, const QString &lastMessage,
+                           qint64 msSinceLast, qint64 repeatIntervalMs);
+
 // Human-readable list of where snapshots came from, for tooltips. Grouped by
 // datastore in sorted order, root namespace shown as "root":
 // "pbs: root, clients/acme; other: archive".

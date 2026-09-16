@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QElapsedTimer>
 #include <QHash>
 #include <QMap>
 #include <QStringList>
@@ -218,7 +219,9 @@ public:
     Q_INVOKABLE void storeSinglePBSSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void storeMultiHostPBSSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
-    Q_INVOKABLE void fetchData();
+    // userInitiated: manual refresh, banner retry or a settings change. Those
+    // re-read a failed keyring immediately; timer ticks wait for the backoff.
+    Q_INVOKABLE void fetchData(bool userInitiated = false);
     Q_INVOKABLE void cancelRefresh();
     Q_INVOKABLE bool runAction(const QString &sessionKey,
                                const QString &kind,
@@ -352,6 +355,11 @@ signals:
 
 private:
     void setSecretState(const QString &value);
+    // Keyring failure handling: always logged (sanitized, rate-limited) and
+    // retried on wallet unlock or a backoff, never on every refresh tick.
+    void logKeyringError(const QString &context, const QString &message);
+    void armSecretRetry();
+    void retrySecretResolution();
     void setRefreshResolvingSecrets(bool value);
     void setEndpoints(const QVariantList &value);
     void appendDebugLog(const QString &message);
@@ -488,6 +496,12 @@ private:
     // fetch after the computed backoff delay. Cancelled by resetRetryState()
     // (success, config change, mode change) and by cancelRefresh().
     QTimer *m_retryTimer = nullptr;
+    // Keyring retry after secretState "error". Delay doubles per failure
+    // (see ProxmoxDataUtils::nextKeyringRetryDelayMs), reset on success.
+    QTimer *m_secretRetryTimer = nullptr;
+    int m_secretRetryDelayMs = 0;
+    QString m_lastKeyringError;
+    QElapsedTimer m_lastKeyringErrorAt;
     QString m_pbsRefreshError;
     PbsRequestTally m_pbsTally;
     // Bumped by every refreshPBSNow() run; PBS keychain callbacks capture the

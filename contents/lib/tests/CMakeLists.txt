@@ -220,3 +220,14 @@ target_include_directories(tst_pbscorrelation PRIVATE ..)
 target_link_libraries(tst_pbscorrelation PRIVATE
     proxmoxclientplugin Qt6::Core Qt6::Network Qt6::Test)
 add_test(NAME pbscorrelation COMMAND tst_pbscorrelation)
+
+qt_add_executable(tst_keyringfailure tst_keyringfailure.cpp)
+target_include_directories(tst_keyringfailure PRIVATE ..)
+target_link_libraries(tst_keyringfailure PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::DBus Qt6::Network Qt6::Test)
+add_test(NAME keyringfailure COMMAND tst_keyringfailure)
+# Unreachable session bus: forces a keychain failure without touching the
+# developer's wallet. Logging rule overrides any desktop-wide filter.
+set_tests_properties(keyringfailure PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/proxmon-test-bus;QTKEYCHAIN_BACKEND=kwallet6;QT_LOGGING_RULES=proxmon.keyring.warning=true")

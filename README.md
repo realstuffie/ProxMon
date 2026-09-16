@@ -241,6 +241,7 @@ bash install.sh --install-standalone-qml-module
 
 ```bash
 journalctl --user -f | grep -i proxmox
+journalctl --user -g 'ProxMon keyring'   # keyring failures, logged without developer mode
 systemctl --user status proxmox-plasmoid-rebuild.path
 tail -f ~/.local/share/plasma/plasmoids/org.kde.plasma.proxmox/rebuild.log
 ```

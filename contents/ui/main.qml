@@ -1094,7 +1094,7 @@ PlasmoidItem {
         repeat: false
         onTriggered: {
             root.logDebug("configRefreshDebounce: triggering refresh after config change")
-            root.fetchData()
+            root.fetchData(true)
         }
     }
 
@@ -1130,9 +1130,11 @@ PlasmoidItem {
         configRefreshDebounce.restart()
     }
 
-    function fetchData() {
+    // userInitiated retries a failed keyring read immediately; the refresh
+    // timer leaves that to the controller's wallet-unlock/backoff retry.
+    function fetchData(userInitiated) {
         errorMessage = ""
-        controller.fetchData()
+        controller.fetchData(userInitiated === true)
     }
 
     // Use displayed data for counts
@@ -1635,7 +1637,7 @@ PlasmoidItem {
                 RowActionButton {
                     anchors.fill: parent
                     icon.name: "view-refresh"
-                    onClicked: root.fetchData()
+                    onClicked: root.fetchData(true)
                     visible: !root.isRefreshing
 
                     PlasmaComponents.ToolTip { text: "Refresh" }
@@ -1741,7 +1743,7 @@ PlasmoidItem {
                     if (!root.hasCoreConfig) return "Right-click → Configure Widget"
                     if (controller.secretState === "loading" || controller.refreshResolvingSecrets) return "Reading API token secret from keyring…"
                     if (controller.secretState === "missing") return "Open settings and re-enter the API Token Secret."
-                    if (controller.secretState === "error") return "Keyring access failed. Check logs (journalctl --user -f)."
+                    if (controller.secretState === "error") return "Keyring access failed. ProxMon will try again when the wallet unlocks. To see why, run journalctl --user -g 'ProxMon keyring'"
                     return "Right-click → Configure Widget"
                 }
                 opacity: 0.7
@@ -1823,7 +1825,7 @@ PlasmoidItem {
             actionPermHintShown: root.actionPermHintShown
             actionPermHint: root.actionPermHint
             pbsError: root.pbsError
-            onRetry: function() { root.fetchData() }
+            onRetry: function() { root.fetchData(true) }
         }
 
         // Scrollable Main Content

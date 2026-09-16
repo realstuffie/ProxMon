@@ -37,6 +37,10 @@ public:
     void deleteSecret();
     void listKWalletKeys();
 
+    // Emit walletOpened() once, the next time kwalletd opens a wallet. Lets
+    // callers retry a failed read when the user unlocks, instead of polling.
+    void watchWalletOpened();
+
 signals:
     void serviceChanged();
     void keyChanged();
@@ -45,6 +49,7 @@ signals:
     void deleteFinished(bool ok, const QString &error);
     void keysReady(const QStringList &keys);
     void keyListError(const QString &message);
+    void walletOpened();
 
 private slots:
     void onWalletOpened(const QString &wallet);
@@ -52,6 +57,7 @@ private slots:
 private:
     void emitFilteredKWalletKeys(const QStringList &raw);
     void armWalletOpenRetry();
+    void connectWalletOpened();
     void asyncKWalletCall(const QString &method, const QVariantList &args,
                           std::function<void(const QDBusMessage &)> handler);
     void startKWalletEntryList(int handle);
@@ -62,6 +68,8 @@ private:
     QString m_service = QStringLiteral("ProxMon");
     QString m_key = QStringLiteral("apiTokenSecret");
     QProcess *m_kwalletListProcess = nullptr;
-    bool m_walletOpenRetryArmed = false;
+    bool m_walletSignalConnected = false;
+    bool m_listRetryPending = false;
+    bool m_notifyWalletOpened = false;
     bool m_listInFlight = false;
 };

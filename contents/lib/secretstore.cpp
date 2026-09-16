@@ -111,8 +111,18 @@ void SecretStore::deleteSecret() {
 }
 
 void SecretStore::armWalletOpenRetry() {
-    if (m_walletOpenRetryArmed) return;
-    m_walletOpenRetryArmed = QDBusConnection::sessionBus().connect(
+    m_listRetryPending = true;
+    connectWalletOpened();
+}
+
+void SecretStore::watchWalletOpened() {
+    m_notifyWalletOpened = true;
+    connectWalletOpened();
+}
+
+void SecretStore::connectWalletOpened() {
+    if (m_walletSignalConnected) return;
+    m_walletSignalConnected = QDBusConnection::sessionBus().connect(
         QStringLiteral("org.kde.kwalletd6"),
         QStringLiteral("/modules/kwalletd6"),
         QStringLiteral("org.kde.KWallet"),
@@ -128,8 +138,13 @@ void SecretStore::onWalletOpened(const QString &wallet) {
         QStringLiteral("org.kde.KWallet"),
         QStringLiteral("walletOpened"),
         this, SLOT(onWalletOpened(QString)));
-    m_walletOpenRetryArmed = false;
-    listKWalletKeys();
+    m_walletSignalConnected = false;
+    const bool retryList = m_listRetryPending;
+    const bool notify = m_notifyWalletOpened;
+    m_listRetryPending = false;
+    m_notifyWalletOpened = false;
+    if (notify) emit walletOpened();
+    if (retryList) listKWalletKeys();
 }
 
 void SecretStore::emitFilteredKWalletKeys(const QStringList &raw) {

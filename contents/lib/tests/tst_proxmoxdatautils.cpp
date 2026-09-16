@@ -24,6 +24,8 @@ private slots:
     void pbsSourcesDoNotMergeAcrossNamespacesOrDatastores();
     void pbsSourceFiltersPreserveRootAndEndpointSettings();
     void pbsFetchFiltersMatchSelectionRules();
+    void keyringRetryBacksOffAndCaps();
+    void keyringErrorLoggingIsRateLimited();
 };
 
 void ProxmoxDataUtilsTest::multiHostJsonRejectsMalformedInput() {
@@ -477,6 +479,28 @@ void ProxmoxDataUtilsTest::pbsFetchFiltersMatchSelectionRules() {
     QCOMPARE(filterPbsNamespaces(namespaces, QString()), QList<QString>{QString()});
     QCOMPARE(filterPbsNamespaces(namespaces, QStringLiteral("cluster-a")), QList<QString>{QStringLiteral("cluster-a")});
     QVERIFY(filterPbsNamespaces(namespaces, QStringLiteral("cluster-b")).isEmpty());
+}
+
+void ProxmoxDataUtilsTest::keyringRetryBacksOffAndCaps() {
+    using ProxmoxDataUtils::nextKeyringRetryDelayMs;
+    QCOMPARE(nextKeyringRetryDelayMs(0), 30000);
+    QCOMPARE(nextKeyringRetryDelayMs(-5), 30000);
+    QCOMPARE(nextKeyringRetryDelayMs(30000), 60000);
+    QCOMPARE(nextKeyringRetryDelayMs(240000), 480000);
+    QCOMPARE(nextKeyringRetryDelayMs(480000), 600000);
+    QCOMPARE(nextKeyringRetryDelayMs(600000), 600000);
+    int delay = 0;
+    for (int i = 0; i < 50; ++i) delay = nextKeyringRetryDelayMs(delay);
+    QCOMPARE(delay, 600000); // No overflow however long the wallet stays locked.
+}
+
+void ProxmoxDataUtilsTest::keyringErrorLoggingIsRateLimited() {
+    using ProxmoxDataUtils::shouldLogKeyringError;
+    const QString locked = QStringLiteral("reading the API token secret failed: wallet closed");
+    QVERIFY(shouldLogKeyringError(locked, QString(), -1, 300000));         // First failure.
+    QVERIFY(!shouldLogKeyringError(locked, locked, 1000, 300000));         // Same, soon after.
+    QVERIFY(shouldLogKeyringError(locked, locked, 300000, 300000));        // Same, interval passed.
+    QVERIFY(shouldLogKeyringError(QStringLiteral("other"), locked, 10, 300000)); // New failure.
 }
 
 QTEST_APPLESS_MAIN(ProxmoxDataUtilsTest)

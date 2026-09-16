@@ -16,10 +16,15 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QLoggingCategory>
 #include <QRegularExpression>
 #include <QUuid>
 #include <QVariantList>
 #include <QtGlobal>
+
+// Enabled at warning level by default, so keyring failures reach the journal
+// without developer mode. Filter with: journalctl --user -g 'ProxMon keyring'
+Q_LOGGING_CATEGORY(lcProxMonKeyring, "proxmon.keyring")
 
 ProxmoxController::ProxmoxController(QObject *parent)
     : QObject(parent)
@@ -240,6 +245,23 @@ ProxmoxController::ProxmoxController(QObject *parent)
     });
 
     connect(m_singleSecretStore, &SecretStore::keyListError, this, &ProxmoxController::keyListError);
+
+    m_secretRetryTimer = new QTimer(this);
+    m_secretRetryTimer->setSingleShot(true);
+    connect(m_secretRetryTimer, &QTimer::timeout, this, &ProxmoxController::retrySecretResolution);
+    connect(m_singleSecretStore, &SecretStore::walletOpened, this, [this]() {
+        appendDebugLog(QStringLiteral("[ProxmoxController] wallet opened, retrying keyring reads"));
+        retrySecretResolution();
+        if (!m_pbsRefreshError.isEmpty()) refreshPBS();
+    });
+    for (SecretStore *store : {m_singleSecretStore, m_multiSecretStore}) {
+        connect(store, &SecretStore::writeFinished, this, [this](bool ok, const QString &error) {
+            if (!ok) logKeyringError(QStringLiteral("saving a token secret failed"), error);
+        });
+        connect(store, &SecretStore::deleteFinished, this, [this](bool ok, const QString &error) {
+            if (!ok) logKeyringError(QStringLiteral("removing a token secret failed"), error);
+        });
+    }
 
 }
 
@@ -813,7 +835,7 @@ void ProxmoxController::setRetryMaxMs(int value) {
     emit retryMaxMsChanged();
 }
 
-void ProxmoxController::fetchData() {
+void ProxmoxController::fetchData(bool userInitiated) {
     const bool hasCoreConfig = (m_connectionMode == QStringLiteral("multiHost"))
         ? !parseMultiHosts().isEmpty()
         : (!m_host.isEmpty() && !m_tokenId.isEmpty());
@@ -821,6 +843,15 @@ void ProxmoxController::fetchData() {
         .arg(m_connectionMode, hasCoreConfig ? QStringLiteral("true") : QStringLiteral("false"), m_secretState, QString::number(m_endpoints.size())));
     if (!hasCoreConfig) {
         return;
+    }
+
+    if (m_secretState == QStringLiteral("error") && m_secretRetryTimer && m_secretRetryTimer->isActive()) {
+        if (!userInitiated) {
+            appendDebugLog(QStringLiteral("[ProxmoxController] fetchData skipped: keyring retry pending in %1 ms")
+                .arg(m_secretRetryTimer->remainingTime()));
+            return;
+        }
+        m_secretRetryTimer->stop();
     }
 
     if (m_connectionMode == QStringLiteral("multiHost")) {
@@ -1040,6 +1071,51 @@ void ProxmoxController::setSecretState(const QString &value) {
     appendDebugLog(QStringLiteral("[ProxmoxController] secretState %1 -> %2").arg(m_secretState, value));
     m_secretState = value;
     emit secretStateChanged();
+    if (value == QStringLiteral("error")) {
+        armSecretRetry();
+    } else if (value != QStringLiteral("loading") && m_secretRetryTimer) {
+        // Resolved one way or another (ready, missing, idle): start over.
+        m_secretRetryTimer->stop();
+        m_secretRetryDelayMs = 0;
+    }
+}
+
+void ProxmoxController::logKeyringError(const QString &context, const QString &message) {
+    // Not gated on developer mode: the status banner sends users to the
+    // journal. Keychain keys embed host and token ID, so callers pass no key
+    // and the text still goes through the debug sanitizer.
+    constexpr qint64 repeatIntervalMs = 5 * 60 * 1000;
+    const QString line = sanitizeDebugString(QStringLiteral("%1: %2")
+        .arg(context, message.trimmed().isEmpty() ? QStringLiteral("no details from keychain") : message.trimmed()));
+    const qint64 sinceLast = m_lastKeyringErrorAt.isValid() ? m_lastKeyringErrorAt.elapsed() : -1;
+    appendDebugLog(QStringLiteral("[ProxmoxController] keyring %1").arg(line));
+    if (!ProxmoxDataUtils::shouldLogKeyringError(line, m_lastKeyringError, sinceLast, repeatIntervalMs)) return;
+    m_lastKeyringError = line;
+    m_lastKeyringErrorAt.start();
+    qCWarning(lcProxMonKeyring).noquote() << QStringLiteral("ProxMon keyring: %1").arg(line);
+}
+
+void ProxmoxController::armSecretRetry() {
+    if (!m_secretRetryTimer) return;
+    // Re-reading on every refresh tick would re-open a locked wallet's unlock
+    // prompt each time. Retry when the wallet opens, or after a backoff for
+    // failures an unlock does not fix.
+    m_secretRetryDelayMs = ProxmoxDataUtils::nextKeyringRetryDelayMs(m_secretRetryDelayMs);
+    m_secretRetryTimer->start(m_secretRetryDelayMs);
+    m_singleSecretStore->watchWalletOpened();
+    qCInfo(lcProxMonKeyring).noquote()
+        << QStringLiteral("ProxMon keyring: retrying in %1 s or when the wallet opens").arg(m_secretRetryDelayMs / 1000);
+}
+
+void ProxmoxController::retrySecretResolution() {
+    if (m_secretRetryTimer) m_secretRetryTimer->stop();
+    if (m_secretState != QStringLiteral("error")) return;
+    appendDebugLog(QStringLiteral("[ProxmoxController] retrying keyring read after error"));
+    if (m_connectionMode == QStringLiteral("multiHost")) {
+        startMultiSecretResolution();
+    } else {
+        resolveSecretsIfNeeded();
+    }
 }
 
 void ProxmoxController::setLoading(bool value) {
@@ -1274,9 +1350,10 @@ void ProxmoxController::startSecretRead() {
                 refreshPBS();
             }
         },
-        [this, key, generation](const QString &) {
+        [this, key, generation](const QString &message) {
             if (m_secretResolutionGeneration != generation
                 || m_activeSingleSecretKey != key) return;
+            logKeyringError(QStringLiteral("reading the API token secret failed"), message);
             m_activeSingleSecretKey.clear();
             setRefreshResolvingSecrets(false);
             setSecretState(QStringLiteral("error"));
@@ -1370,11 +1447,15 @@ void ProxmoxController::readNextMultiSecret() {
             m_activeMultiSecretRequest.clear();
             readNextMultiSecret();
         },
-        [this, sessionKey, generation](const QString &) {
+        [this, sessionKey, generation](const QString &message) {
             if (m_secretResolutionGeneration != generation
                 || m_activeMultiSecretRequest.value(QStringLiteral("sessionKey")).toString() != sessionKey) {
                 return;
             }
+            // Position, not label: labels are often host names, which the
+            // sanitizer redacts elsewhere.
+            logKeyringError(QStringLiteral("reading the token secret for endpoint %1 failed")
+                .arg(m_secretQueueIndex + 1), message);
             setMultiSecretHadError(true);
             setSecretsResolved(m_secretsResolved + 1);
             m_secretQueueIndex += 1;
@@ -1534,11 +1615,12 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
                                        node, actionKind, vmid);
             }
         },
-        [this, request, key](const QString &) {
+        [this, request, key](const QString &message) {
             if (m_connectionMode != QStringLiteral("single")
                 || key != keyFor(m_host, m_port, m_tokenId)) {
                 return;
             }
+            logKeyringError(QStringLiteral("reading the API token secret failed"), message);
             const QVariant requestSeq = request.value(QStringLiteral("seq"));
             if (requestSeq.isValid() && requestSeq.toInt() != m_refreshSeq) return;
 
@@ -1716,11 +1798,12 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
                                        epIgnore, epCertPem, epCertPath, node, actionKind, vmid);
             }
         }
-    }, [this, request](const QString &) {
+    }, [this, request](const QString &message) {
         const QString kind = request.value(QStringLiteral("kind")).toString();
         const QString sessionKey = request.value(QStringLiteral("sessionKey")).toString();
         const QVariant requestSeq = request.value(QStringLiteral("seq"));
         if (requestSeq.isValid() && requestSeq.toInt() != m_refreshSeq) return;
+        logKeyringError(QStringLiteral("reading an endpoint token secret failed"), message);
 
         if (kind == ProxmoxConst::Kind::Nodes) {
             dispatchMultiNodesWithSecret(sessionKey, endpointBySession(sessionKey), QString());
@@ -2222,6 +2305,8 @@ void ProxmoxController::refreshPBSNow() {
                                           pbsDatastore, pbsNamespace);
             }, [this, store, generation, pbsHost](const QString &message) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretError host=%1 message=%2").arg(pbsHost, message));
+                logKeyringError(QStringLiteral("reading the PBS token secret failed"), message);
+                m_singleSecretStore->watchWalletOpened();
                 store->deleteLater();
                 if (generation != m_pbsRefreshGeneration) return;
                 if (m_pbsRefreshError != message) {
@@ -2278,6 +2363,8 @@ void ProxmoxController::refreshPBSNow() {
                                       pbsDatastore, pbsNamespace);
         }, [this, store, generation, pbsHost](const QString &message) {
             appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi secretError host=%1 message=%2").arg(pbsHost, message));
+            logKeyringError(QStringLiteral("reading the PBS token secret failed"), message);
+            m_singleSecretStore->watchWalletOpened();
             store->deleteLater();
             if (generation != m_pbsRefreshGeneration) return;
             if (m_pbsRefreshError != message) {
