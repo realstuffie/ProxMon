@@ -567,7 +567,20 @@ Rectangle {
                         if (!statsPanel.statsData) return ""
                         if (statsPanel.statsData.error) return "Error: " + statsPanel.statsData.error
                         const ip = statsPanel.statsData.ip
-                        if (!ip) return "IP: N/A"
+                        if (!ip) {
+                            // A stopped guest can't report an IP; say so rather
+                            // than blaming the agent/interfaces endpoint.
+                            if (!root.isRunning) {
+                                return "IP: N/A (" + (root.kind === "qemu" ? "VM" : "container") + " not running)"
+                            }
+                            switch (statsPanel.statsData.ipStatus) {
+                            case "agentUnavailable": return "IP: N/A (QEMU guest agent not available)"
+                            case "forbidden":        return "IP: N/A (permission denied)"
+                            case "unavailable":      return "IP: N/A (container interfaces unavailable)"
+                            case "noAddress":        return "IP: N/A (no IPv4 address reported)"
+                            default:                 return "IP: N/A"
+                            }
+                        }
                         return "IP: " + (root.anonymizeIp ? root.anonymizeIp(ip) : ip)
                     }
                     font.pixelSize: 10

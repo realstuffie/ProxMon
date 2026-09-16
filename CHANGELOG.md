@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- feat(stats): a blank IP in the stats panel now says why: guest not running, QEMU guest agent not available, permission denied, container interfaces unavailable, or no IPv4 address reported; the reason is a fixed `ipStatus` value set by the client, and Proxmox error text is never forwarded to QML
+
 ## v0.8.3
 
 - feat(pbs): the PBS refresh interval is a free value from 5 minutes to 24 hours, replacing six fixed presets with a 30 minute minimum

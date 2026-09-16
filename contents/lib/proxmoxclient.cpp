@@ -930,6 +930,14 @@ void ProxmoxClient::requestStatsFor(const QString &sessionKey,
         QObject::connect(reply, &QNetworkReply::finished, this,
             [this, reply, result, anyOk, finishOne, statsKind]() {
                 m_interactiveInFlight.remove(reply);
+                // "ipStatus" is a fixed enum string for the UI to explain a
+                // missing IP. Server-supplied error text is deliberately not
+                // forwarded. Values: "ok", "agentUnavailable" (qemu agent
+                // endpoint failed - not installed/running, or VM stopped),
+                // "forbidden" (token lacks permission), "unavailable" (lxc
+                // endpoint failed), "noAddress" (reply had no usable IPv4).
+                const bool isQemu = statsKind == ProxmoxConst::Kind::Qemu;
+                QString ipStatus = QStringLiteral("noAddress");
                 if (reply->error() == QNetworkReply::NoError) {
                     const QByteArray body = reply->readAll();
                     QJsonParseError pe;
@@ -938,10 +946,20 @@ void ProxmoxClient::requestStatsFor(const QString &sessionKey,
                         const QString ip = extractIpAddress(doc.toVariant().toMap(), statsKind);
                         if (!ip.isEmpty()) {
                             (*result)[QStringLiteral("ip")] = ip;
+                            ipStatus = QStringLiteral("ok");
                             *anyOk = true;
                         }
                     }
+                } else {
+                    const int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+                    if (httpStatus == 401 || httpStatus == 403) {
+                        ipStatus = QStringLiteral("forbidden");
+                    } else {
+                        ipStatus = isQemu ? QStringLiteral("agentUnavailable")
+                                          : QStringLiteral("unavailable");
+                    }
                 }
+                (*result)[QStringLiteral("ipStatus")] = ipStatus;
                 reply->deleteLater();
                 finishOne();
             });
