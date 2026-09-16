@@ -27,6 +27,10 @@ KCM.SimpleKCM {
     property alias cfg_apiTokenId: singleHostSection.tokenIdText
     property string cfg_apiTokenSecret: ""
     property alias cfg_pbsEnabled: singleHostSection.pbsEnabled
+    property alias cfg_pbsDatastore: singleHostSection.pbsDatastore
+    property alias cfg_pbsNamespace: singleHostSection.pbsNamespace
+    property string cfg_pbsDatastoreDefault: ""
+    property string cfg_pbsNamespaceDefault: "*"
     property alias cfg_pbsHost: singleHostSection.pbsHostText
     property alias cfg_pbsPort: singleHostSection.pbsPortValue
     property alias cfg_pbsTokenId: singleHostSection.pbsTokenIdText
@@ -267,6 +271,8 @@ KCM.SimpleKCM {
             "ignoreSsl": cfg_ignoreSsl,
             "pbsEnabled": cfg_pbsEnabled,
             "pbsHost": cfg_pbsHost,
+            "pbsDatastore": cfg_pbsDatastore,
+            "pbsNamespace": cfg_pbsNamespace,
             "pbsPort": cfg_pbsPort,
             "pbsTokenId": cfg_pbsTokenId,
             "pbsIgnoreSsl": cfg_pbsIgnoreSsl,

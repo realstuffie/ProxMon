@@ -55,6 +55,53 @@ QString backupStatusKey(const QString &sessionKey,
         .arg(vmid);
 }
 
+void recordPbsSnapshot(PbsBackupSources &sources, const PBSSnapshot &snapshot) {
+    // A structured key avoids delimiter collisions in nested namespace names.
+    const QString sourceKey = QString::fromUtf8(QJsonDocument(
+        QJsonArray{snapshot.datastoreName, snapshot.backupNamespace}).toJson(QJsonDocument::Compact));
+    auto it = sources.find(sourceKey);
+    if (it == sources.end() || snapshot.backupTime > it->backupTime) {
+        sources.insert(sourceKey, snapshot);
+    }
+}
+
+PbsBackupMatch selectPbsBackup(const PbsBackupSources &sources,
+                              const QString &datastore,
+                              const QString &backupNamespace) {
+    PbsBackupMatch result;
+    bool found = false;
+    const QString store = datastore.trimmed();
+    const QString ns = backupNamespace.trimmed();
+    for (const PBSSnapshot &snapshot : sources) {
+        if (!store.isEmpty() && snapshot.datastoreName != store) continue;
+        if (ns != QLatin1String("*") && snapshot.backupNamespace != ns) continue;
+        if (found) return {PBSSnapshot{}, true};
+        result.snapshot = snapshot;
+        found = true;
+    }
+    return result;
+}
+
+QList<QString> filterPbsDatastores(const QList<QString> &datastores, const QString &datastore) {
+    const QString store = datastore.trimmed();
+    if (store.isEmpty()) return datastores;
+    QList<QString> filtered;
+    for (const QString &candidate : datastores) {
+        if (candidate == store) filtered.push_back(candidate);
+    }
+    return filtered;
+}
+
+QList<QString> filterPbsNamespaces(const QList<QString> &namespaces, const QString &backupNamespace) {
+    const QString ns = backupNamespace.trimmed();
+    if (ns == QLatin1String("*")) return namespaces;
+    QList<QString> filtered;
+    for (const QString &candidate : namespaces) {
+        if (candidate == ns) filtered.push_back(candidate);
+    }
+    return filtered;
+}
+
 QList<QString> parsePbsNamespaces(const QVariant &response) {
     QList<QString> namespaces;
     const QVariantList rows = response.toMap().value(QStringLiteral("data")).toList();
@@ -108,6 +155,8 @@ QVariantList buildEndpointQueue(const QVariantList &entries, bool defaultIgnoreS
         item.insert(QStringLiteral("trustedCertPath"), entry.value(QStringLiteral("trustedCertPath")));
         item.insert(QStringLiteral("pbsEnabled"), entry.value(QStringLiteral("pbsEnabled"), false));
         item.insert(QStringLiteral("pbsHost"), entry.value(QStringLiteral("pbsHost")).toString().trimmed());
+        item.insert(QStringLiteral("pbsDatastore"), entry.value(QStringLiteral("pbsDatastore")).toString().trimmed());
+        item.insert(QStringLiteral("pbsNamespace"), entry.value(QStringLiteral("pbsNamespace"), QStringLiteral("*")).toString().trimmed());
         item.insert(QStringLiteral("pbsPort"), pbsPort);
         item.insert(QStringLiteral("pbsTokenId"), entry.value(QStringLiteral("pbsTokenId")).toString().trimmed());
         item.insert(QStringLiteral("pbsIgnoreSsl"), entry.value(QStringLiteral("pbsIgnoreSsl"), false));

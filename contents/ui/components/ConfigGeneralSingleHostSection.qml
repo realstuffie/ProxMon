@@ -13,6 +13,8 @@ GridLayout {
     property string trustedCertPem: ""
     property string trustedCertPath: ""
     property alias pbsEnabled: pbsEnabledCheck.checked
+    property alias pbsDatastore: pbsDatastoreField.text
+    property string pbsNamespace: "*"
     property alias pbsHostText: pbsHostField.text
     property alias pbsPortValue: pbsPortField.value
     property alias pbsTokenIdText: pbsTokenIdField.text
@@ -210,6 +212,26 @@ GridLayout {
                 to: 65535
                 value: 8007
                 editable: true
+            }
+
+            QQC2.Label { text: "PBS Datastore:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter }
+            QQC2.TextField {
+                id: pbsDatastoreField
+                Layout.fillWidth: true
+                placeholderText: "All datastores"
+            }
+            QQC2.Label { text: "PBS Namespace:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter }
+            PbsNamespaceField {
+                Layout.fillWidth: true
+                value: root.pbsNamespace
+                onEdited: (next) => root.pbsNamespace = next
+            }
+            QQC2.Label {
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                wrapMode: Text.WordWrap
+                text: "If several clusters back up to this PBS, pick the datastore and namespace this cluster uses. Otherwise overlapping VM IDs show a ? marker."
+                opacity: 0.7
             }
 
             QQC2.Label { text: "PBS Token ID:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter; horizontalAlignment: Text.AlignRight }

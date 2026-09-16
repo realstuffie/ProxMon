@@ -33,6 +33,8 @@ const STRING_KEYS = {
     "trustedCertPem": "",
     "trustedCertPath": "",
     "pbsHost": "",
+    "pbsDatastore": "",
+    "pbsNamespace": "*",
     "pbsTokenId": "",
     "pbsTrustedCertPem": "",
     "pbsTrustedCertPath": "",
@@ -93,7 +95,8 @@ const ENUM_KEYS = {
 const ENTRY_STRING_KEYS = [
     "name", "host", "tokenId",
     "trustedCertPem", "trustedCertPath",
-    "pbsHost", "pbsTokenId", "pbsTrustedCertPem", "pbsTrustedCertPath"
+    "pbsHost", "pbsTokenId", "pbsTrustedCertPem", "pbsTrustedCertPath",
+    "pbsDatastore", "pbsNamespace"
 ]
 const ENTRY_BOOL_KEYS = ["enabled", "ignoreSsl", "pbsEnabled", "pbsIgnoreSsl"]
 const ENTRY_INT_KEYS = {

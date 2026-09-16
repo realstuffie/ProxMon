@@ -33,6 +33,12 @@
         <entry name="pbsHost" type="String">
             <default></default>
         </entry>
+        <entry name="pbsDatastore" type="String">
+            <default></default>
+        </entry>
+        <entry name="pbsNamespace" type="String">
+            <default>*</default>
+        </entry>
         <entry name="pbsPort" type="Int">
             <default>8007</default>
         </entry>

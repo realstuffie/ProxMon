@@ -214,3 +214,9 @@ target_link_libraries(tst_pbsrequesttally PRIVATE
 )
 
 add_test(NAME pbsrequesttally COMMAND tst_pbsrequesttally)
+
+qt_add_executable(tst_pbscorrelation tst_pbscorrelation.cpp)
+target_include_directories(tst_pbscorrelation PRIVATE ..)
+target_link_libraries(tst_pbscorrelation PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::Network Qt6::Test)
+add_test(NAME pbscorrelation COMMAND tst_pbscorrelation)

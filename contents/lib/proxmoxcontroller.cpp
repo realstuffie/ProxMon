@@ -151,10 +151,7 @@ ProxmoxController::ProxmoxController(QObject *parent)
     connect(m_api, &ProxmoxClient::pbsSnapshotsReceived, this, [this](const QString &requesterKey, const QString &pbsHost, const QString &, const QList<PBSSnapshot> &snapshots) {
         for (const PBSSnapshot &snapshot : snapshots) {
             const QString backupKey = ProxmoxDataUtils::backupStatusKey(requesterKey, pbsHost, snapshot.backupType, snapshot.vmid);
-            auto it = m_latestBackups.find(backupKey);
-            if (it == m_latestBackups.end() || snapshot.backupTime > it.value().backupTime) {
-                m_latestBackups.insert(backupKey, snapshot);
-            }
+            ProxmoxDataUtils::recordPbsSnapshot(m_pendingBackups[backupKey], snapshot);
         }
         m_pbsTally.snapshotFinished();
         checkPBSRequestsComplete();
@@ -302,6 +299,26 @@ void ProxmoxController::setPbsEnabled(bool value) {
     if (m_pbsEnabled == value) return;
     m_pbsEnabled = value;
     emit pbsEnabledChanged();
+    refreshPBS();
+}
+
+void ProxmoxController::setPbsDatastore(const QString &value) {
+    const QString clean = value.trimmed();
+    if (m_pbsDatastore == clean) return;
+    m_pbsDatastore = clean;
+    emit pbsDatastoreChanged();
+    correlateBackups();
+    // Fetching skips unselected sources, so a wider filter needs new data.
+    refreshPBS();
+}
+
+void ProxmoxController::setPbsNamespace(const QString &value) {
+    const QString clean = value.trimmed();
+    if (m_pbsNamespace == clean) return;
+    m_pbsNamespace = clean;
+    emit pbsNamespaceChanged();
+    correlateBackups();
+    // Fetching skips unselected sources, so a wider filter needs new data.
     refreshPBS();
 }
 
@@ -1328,6 +1345,8 @@ void ProxmoxController::readNextMultiSecret() {
                 endpoint.insert(QStringLiteral("ignoreSsl"), item.value(QStringLiteral("ignoreSsl")));
                 endpoint.insert(QStringLiteral("pbsEnabled"), item.value(QStringLiteral("pbsEnabled")));
                 endpoint.insert(QStringLiteral("pbsHost"), item.value(QStringLiteral("pbsHost")));
+                endpoint.insert(QStringLiteral("pbsDatastore"), item.value(QStringLiteral("pbsDatastore")));
+                endpoint.insert(QStringLiteral("pbsNamespace"), item.value(QStringLiteral("pbsNamespace"), QStringLiteral("*")));
                 endpoint.insert(QStringLiteral("pbsPort"), item.value(QStringLiteral("pbsPort")));
                 endpoint.insert(QStringLiteral("pbsTokenId"), item.value(QStringLiteral("pbsTokenId")));
                 endpoint.insert(QStringLiteral("pbsIgnoreSsl"), item.value(QStringLiteral("pbsIgnoreSsl")));
@@ -2131,6 +2150,11 @@ void ProxmoxController::checkPBSRequestsComplete() {
     }
 
     m_pbsTally.reset();
+    // Publish the finished cycle. A cycle that fetched nothing (PBS disabled,
+    // unconfigured, or no readable secret) publishes an empty set, which
+    // clears results that no longer apply.
+    m_latestBackups.swap(m_pendingBackups);
+    m_pendingBackups.clear();
     correlateBackups();
 }
 
@@ -2141,7 +2165,8 @@ void ProxmoxController::refreshPBSNow() {
     // with stale settings or clobbering this cycle's counters.
     const quint64 generation = ++m_pbsRefreshGeneration;
     appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS mode=%1").arg(m_connectionMode));
-    m_latestBackups.clear();
+    // Keep m_latestBackups on screen until this cycle completes.
+    m_pendingBackups.clear();
     m_pbsTally.reset();
     if (!m_pbsRefreshError.isEmpty()) {
         m_pbsRefreshError.clear();
@@ -2167,6 +2192,8 @@ void ProxmoxController::refreshPBSNow() {
             appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single readKey host=%1 key=%2").arg(pbsHost, key));
             const bool pbsEnabled = m_pbsEnabled;
             const bool pbsIgnoreSsl = m_pbsIgnoreSsl;
+            const QString pbsDatastore = m_pbsDatastore;
+            const QString pbsNamespace = m_pbsNamespace;
             m_pbsRefreshInterval = m_pbsRefreshInterval > 0 ? m_pbsRefreshInterval : ProxmoxConst::Defaults::PbsRefreshInterval;
             if (m_pbsTimer) {
                 m_pbsTimer->setInterval(m_pbsRefreshInterval * 1000);
@@ -2178,20 +2205,21 @@ void ProxmoxController::refreshPBSNow() {
                 .arg(m_pbsRefreshInterval));
             if (!pbsEnabled || pbsHost.isEmpty() || pbsTokenId.isEmpty()) {
                 store->deleteLater();
-                correlateBackups();
+                checkPBSRequestsComplete();
                 return;
             }
-            store->readSecret(key, [this, store, generation, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl](const QString &secret) {
+            store->readSecret(key, [this, store, generation, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl, pbsDatastore, pbsNamespace](const QString &secret) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretReady host=%1 secretEmpty=%2")
                     .arg(pbsHost, secret.isEmpty() ? QStringLiteral("true") : QStringLiteral("false")));
                 store->deleteLater();
                 if (generation != m_pbsRefreshGeneration) return;
                 if (secret.isEmpty()) {
-                    correlateBackups();
+                    checkPBSRequestsComplete();
                     return;
                 }
                 m_pbsTally.addEndpoint();
-                m_api->fetchPBSDatastores(QString(), pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath);
+                m_api->fetchPBSDatastores(QString(), pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, m_pbsTrustedCertPem.toUtf8(), m_pbsTrustedCertPath,
+                                          pbsDatastore, pbsNamespace);
             }, [this, store, generation, pbsHost](const QString &message) {
                 appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS single secretError host=%1 message=%2").arg(pbsHost, message));
                 store->deleteLater();
@@ -2205,7 +2233,7 @@ void ProxmoxController::refreshPBSNow() {
             });
             return;
         }
-        correlateBackups();
+        checkPBSRequestsComplete();
         return;
     }
 
@@ -2236,7 +2264,9 @@ void ProxmoxController::refreshPBSNow() {
             ? m_pbsTrustedCertPath
             : entry.value(QStringLiteral("pbsTrustedCertPath")).toString().trimmed();
         const QString sessionKey = entry.value(QStringLiteral("sessionKey")).toString();
-        store->readSecret(key, [this, store, generation, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl, pbsTrustedCertPem, pbsTrustedCertPath, sessionKey](const QString &secret) {
+        const QString pbsDatastore = entry.value(QStringLiteral("pbsDatastore")).toString();
+        const QString pbsNamespace = entry.value(QStringLiteral("pbsNamespace"), QStringLiteral("*")).toString();
+        store->readSecret(key, [this, store, generation, pbsHost, pbsPort, pbsTokenId, pbsIgnoreSsl, pbsTrustedCertPem, pbsTrustedCertPath, sessionKey, pbsDatastore, pbsNamespace](const QString &secret) {
             store->deleteLater();
             if (generation != m_pbsRefreshGeneration) return;
             if (secret.isEmpty()) {
@@ -2244,7 +2274,8 @@ void ProxmoxController::refreshPBSNow() {
                 checkPBSRequestsComplete();
                 return;
             }
-            m_api->fetchPBSDatastores(sessionKey, pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, pbsTrustedCertPem.toUtf8(), pbsTrustedCertPath);
+            m_api->fetchPBSDatastores(sessionKey, pbsHost, pbsPort, pbsTokenId, secret, pbsIgnoreSsl, pbsTrustedCertPem.toUtf8(), pbsTrustedCertPath,
+                                      pbsDatastore, pbsNamespace);
         }, [this, store, generation, pbsHost](const QString &message) {
             appendDebugLog(QStringLiteral("[ProxmoxController] refreshPBS multi secretError host=%1 message=%2").arg(pbsHost, message));
             store->deleteLater();
@@ -2259,7 +2290,7 @@ void ProxmoxController::refreshPBSNow() {
     }
 
     if (!anyConfigured) {
-        correlateBackups();
+        checkPBSRequestsComplete();
     }
 }
 
@@ -2354,17 +2385,24 @@ void ProxmoxController::applyBackupState(QVariantList &items, const QVariantMap 
             : endpoint.value(QStringLiteral("pbsHost")).toString().trimmed();
         const QString backupKey = ProxmoxDataUtils::backupStatusKey(sessionKey, pbsHost, expectedType, vmid);
         const auto backupIt = m_latestBackups.constFind(QStringView{backupKey});
-        const PBSSnapshot snapshot = backupIt == m_latestBackups.constEnd() ? PBSSnapshot{} : backupIt.value();
-        const bool typeMatch = snapshot.backupType.isEmpty() || snapshot.backupType == expectedType;
-        const qint64 backupTime = typeMatch ? snapshot.backupTime : 0;
-        const BackupStatus status = evaluateBackupStatus(backupTime, warningDays, staleDays);
+        const QString datastore = sessionKey.isEmpty() ? m_pbsDatastore
+            : endpoint.value(QStringLiteral("pbsDatastore")).toString();
+        const QString backupNamespace = sessionKey.isEmpty() ? m_pbsNamespace
+            : endpoint.value(QStringLiteral("pbsNamespace"), QStringLiteral("*")).toString();
+        const auto match = backupIt == m_latestBackups.constEnd()
+            ? ProxmoxDataUtils::PbsBackupMatch{}
+            : ProxmoxDataUtils::selectPbsBackup(backupIt.value(), datastore, backupNamespace);
+        const qint64 backupTime = match.snapshot.backupTime;
+        const BackupStatus status = match.ambiguous ? BackupStatus::Ambiguous
+            : evaluateBackupStatus(backupTime, warningDays, staleDays);
         const int oldStatus = item.value(QStringLiteral("backupStatus"), int(BackupStatus::Unknown)).toInt();
         const QString oldDisplay = item.value(QStringLiteral("lastBackupDisplay")).toString();
         const QString oldVerify = item.value(QStringLiteral("verifyState")).toString();
-        const QString newDisplay = lastBackupDisplay(backupTime);
-        const QString newVerify = typeMatch ? snapshot.verifyState : QString();
+        const QString newDisplay = match.ambiguous ? QStringLiteral("Ambiguous") : lastBackupDisplay(backupTime);
+        const QString newVerify = match.snapshot.verifyState;
 
-        if (oldStatus != int(status) || oldDisplay != newDisplay || oldVerify != newVerify) {
+        if (oldStatus != int(status) || oldDisplay != newDisplay || oldVerify != newVerify
+            || item.value(QStringLiteral("lastBackupTime")).toLongLong() != backupTime) {
             item.insert(QStringLiteral("backupStatus"), int(status));
             item.insert(QStringLiteral("lastBackupTime"), backupTime);
             item.insert(QStringLiteral("lastBackupDisplay"), newDisplay);

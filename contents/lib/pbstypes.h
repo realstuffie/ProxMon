@@ -16,11 +16,14 @@ struct PBSSnapshot {
     QString pbsHost;
 };
 
+// QML reads these as ints through contents/ui/components/backupstatus.mjs.
+// Append new values only, and update that file in the same change.
 enum class BackupStatus {
     Unknown,
     Current,
     Warning,
     Stale,
     Never,
-    Excluded
+    Excluded,
+    Ambiguous
 };

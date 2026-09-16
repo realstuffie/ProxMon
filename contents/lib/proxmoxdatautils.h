@@ -7,6 +7,7 @@
 #include <QStringList>
 #include <QSslCertificate>
 #include <QUrl>
+#include "pbstypes.h"
 
 class QSslConfiguration;
 
@@ -16,7 +17,7 @@ QVariantList parseMultiHostsJson(const QString &json, qsizetype maxEndpoints = 5
 QString pveSecretKey(const QString &host, int port, const QString &tokenId);
 QString pbsSecretKey(const QString &host, int port, const QString &tokenId);
 
-// Key under which a guest's most recent PBS snapshot is stored and looked up.
+// Key under which a guest's PBS sources are stored and looked up.
 // Built independently at insert and lookup time, so the exact form is a
 // contract: sessionKey|normalized-host|backupType|vmid. The host is trimmed
 // and lowercased to match ProxmoxController::normalizedHost().
@@ -26,6 +27,30 @@ QString backupStatusKey(const QString &sessionKey,
                         const QString &host,
                         const QString &backupType,
                         int vmid);
+
+// Keep the newest snapshot for each exact datastore/namespace pair. Sources
+// belong to one endpoint, PBS host, guest type and VMID (backupStatusKey).
+using PbsBackupSources = QHash<QString, PBSSnapshot>;
+void recordPbsSnapshot(PbsBackupSources &sources, const PBSSnapshot &snapshot);
+
+struct PbsBackupMatch {
+    PBSSnapshot snapshot;
+    bool ambiguous = false;
+};
+
+// Empty datastore searches all stores. Namespace "*" searches all namespaces;
+// empty namespace selects root only. Multiple matching sources are ambiguous,
+// even if one has a newer timestamp: they may belong to different clusters.
+PbsBackupMatch selectPbsBackup(const PbsBackupSources &sources,
+                              const QString &datastore,
+                              const QString &backupNamespace);
+
+// Fetch-time narrowing with the same rules as selectPbsBackup: an empty
+// datastore keeps every store, "*" keeps every namespace, "" keeps root only
+// and any other value keeps that exact namespace. Filters are trimmed and
+// compared case-sensitively, so fetching never drops a source selection needs.
+QList<QString> filterPbsDatastores(const QList<QString> &datastores, const QString &datastore);
+QList<QString> filterPbsNamespaces(const QList<QString> &namespaces, const QString &backupNamespace);
 
 // Namespace list from a PBS /admin/datastore/{store}/namespace response.
 // Rows without an "ns" key are malformed and skipped; a row whose "ns" is an

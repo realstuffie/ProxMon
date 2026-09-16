@@ -132,7 +132,11 @@ public:
                             const QString &tokenSecret,
                             bool ignoreSslErrors,
                             const QByteArray &trustedCertPem,
-                            const QString &trustedCertPath);
+                            const QString &trustedCertPath,
+                            // Skip datastores and namespaces the backup
+                            // correlation would ignore (see filterPbs*).
+                            const QString &datastoreFilter = QString(),
+                            const QString &namespaceFilter = QStringLiteral("*"));
 
 signals:
     // user is the auth user returned by termproxy; sent over the

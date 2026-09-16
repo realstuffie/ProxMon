@@ -89,6 +89,8 @@ PlasmoidItem {
         multiHostsJson: root.multiHostsJson
         multiHostSharedCert: root.multiHostSharedCert
         pbsEnabled: root.pbsEnabled
+        pbsDatastore: root.pbsDatastore
+        pbsNamespace: root.pbsNamespace
         pbsHost: root.pbsHost
         pbsPort: root.pbsPort
         pbsTokenId: root.pbsTokenId
@@ -152,6 +154,9 @@ PlasmoidItem {
     property bool pbsEnabled: Plasmoid.configuration.pbsEnabled === true
     property string pbsHost: Plasmoid.configuration.pbsHost || ""
     property int pbsPort: Math.max(1, Plasmoid.configuration.pbsPort || 8007)
+    property string pbsDatastore: Plasmoid.configuration.pbsDatastore || ""
+    property string pbsNamespace: Plasmoid.configuration.pbsNamespace !== undefined
+        ? Plasmoid.configuration.pbsNamespace : "*"
     property string pbsTokenId: Plasmoid.configuration.pbsTokenId || ""
     property string pbsTrustedCertPem: Plasmoid.configuration.pbsTrustedCertPem || ""
     property string pbsTrustedCertPath: Plasmoid.configuration.pbsTrustedCertPath || ""

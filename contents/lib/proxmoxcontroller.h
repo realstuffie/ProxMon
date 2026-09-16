@@ -25,6 +25,8 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
     Q_PROPERTY(bool multiHostSharedCert READ multiHostSharedCert WRITE setMultiHostSharedCert NOTIFY multiHostSharedCertChanged)
     Q_PROPERTY(bool pbsEnabled READ pbsEnabled WRITE setPbsEnabled NOTIFY pbsEnabledChanged)
+    Q_PROPERTY(QString pbsDatastore READ pbsDatastore WRITE setPbsDatastore NOTIFY pbsDatastoreChanged)
+    Q_PROPERTY(QString pbsNamespace READ pbsNamespace WRITE setPbsNamespace NOTIFY pbsNamespaceChanged)
     Q_PROPERTY(QString pbsHost READ pbsHost WRITE setPbsHost NOTIFY pbsHostChanged)
     Q_PROPERTY(int pbsPort READ pbsPort WRITE setPbsPort NOTIFY pbsPortChanged)
     Q_PROPERTY(QString pbsTokenId READ pbsTokenId WRITE setPbsTokenId NOTIFY pbsTokenIdChanged)
@@ -118,6 +120,10 @@ public:
     bool pbsEnabled() const { return m_pbsEnabled; }
     void setPbsEnabled(bool value);
 
+    QString pbsDatastore() const { return m_pbsDatastore; }
+    void setPbsDatastore(const QString &value);
+    QString pbsNamespace() const { return m_pbsNamespace; }
+    void setPbsNamespace(const QString &value);
     QString pbsHost() const { return m_pbsHost; }
     void setPbsHost(const QString &value);
 
@@ -243,6 +249,8 @@ signals:
     void multiHostsJsonChanged();
     void multiHostSharedCertChanged();
     void pbsEnabledChanged();
+    void pbsDatastoreChanged();
+    void pbsNamespaceChanged();
     void pbsHostChanged();
     void pbsPortChanged();
     void pbsTokenIdChanged();
@@ -437,6 +445,8 @@ private:
     bool m_multiHostSharedCert = true;
     bool m_pbsEnabled = false;
     QString m_pbsHost;
+    QString m_pbsDatastore;
+    QString m_pbsNamespace = QStringLiteral("*");
     int m_pbsPort = 8007;
     QString m_pbsTokenId;
     bool m_pbsIgnoreSsl = false;
@@ -503,7 +513,13 @@ private:
     QVariantList m_tempLxcData;
     int m_refreshSeq = 0;
     QVariantMap m_tempEndpointsData;
-    QHash<QString, PBSSnapshot> m_latestBackups;
+    // Guest identity -> exact datastore/namespace -> newest snapshot.
+    // m_latestBackups holds the last complete PBS cycle and is what the UI
+    // correlates against. The running cycle fills m_pendingBackups, which
+    // replaces it only once every request has finished, so a PVE refresh
+    // mid-cycle neither blanks markers nor sees a partial source set.
+    QHash<QString, QHash<QString, PBSSnapshot>> m_latestBackups;
+    QHash<QString, QHash<QString, PBSSnapshot>> m_pendingBackups;
     QTimer *m_pbsTimer = nullptr;
     QTimer *m_pbsDebounceTimer = nullptr;
     QHash<QString, QByteArray> m_pendingConsoleAuth;

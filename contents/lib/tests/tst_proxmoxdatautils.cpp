@@ -21,6 +21,9 @@ private slots:
     void guestOrderMoveIgnoresInvalidInput();
     void backupStatusKeyIsStableAndDiscriminating();
     void pbsNamespacesParseTreeAndAlwaysYieldRoot();
+    void pbsSourcesDoNotMergeAcrossNamespacesOrDatastores();
+    void pbsSourceFiltersPreserveRootAndEndpointSettings();
+    void pbsFetchFiltersMatchSelectionRules();
 };
 
 void ProxmoxDataUtilsTest::multiHostJsonRejectsMalformedInput() {
@@ -386,6 +389,88 @@ void ProxmoxDataUtilsTest::guestOrderMoveIgnoresInvalidInput() {
     QCOMPARE(ProxmoxDataUtils::applyGuestMove(order, section, 0, 2), clean);
     QCOMPARE(ProxmoxDataUtils::applyGuestMove(order, {QStringLiteral("a:1/100"), QStringLiteral("a:1/100")}, 0, 1), clean);
     QCOMPARE(ProxmoxDataUtils::applyGuestMove(order, {QStringLiteral("a:1/100"), QStringLiteral("x y")}, 0, 1), clean);
+}
+
+void ProxmoxDataUtilsTest::pbsSourcesDoNotMergeAcrossNamespacesOrDatastores() {
+    using namespace ProxmoxDataUtils;
+    PbsBackupSources sources;
+    auto add = [&](const QString &store, const QString &ns, qint64 time, const QString &verify) {
+        PBSSnapshot snapshot;
+        snapshot.vmid = 100;
+        snapshot.backupType = QStringLiteral("vm");
+        snapshot.datastoreName = store;
+        snapshot.backupNamespace = ns;
+        snapshot.backupTime = time;
+        snapshot.verifyState = verify;
+        recordPbsSnapshot(sources, snapshot);
+    };
+    add("shared", "cluster-a", 200, "failed");
+    add("shared", "cluster-a", 100, "ok"); // Older reply arrives last.
+    auto match = selectPbsBackup(sources, "", "*");
+    QVERIFY(!match.ambiguous);
+    QCOMPARE(match.snapshot.backupTime, 200);
+    QCOMPARE(match.snapshot.verifyState, QStringLiteral("failed"));
+
+    add("shared", "cluster-b", 900, "ok"); // Same VMID in another cluster.
+    match = selectPbsBackup(sources, "", "*");
+    QVERIFY(match.ambiguous);
+    QCOMPARE(match.snapshot.backupTime, 0); // Never report cluster B as healthy for A.
+    QVERIFY(match.snapshot.verifyState.isEmpty());
+    match = selectPbsBackup(sources, "shared", "cluster-a");
+    QVERIFY(!match.ambiguous);
+    QCOMPARE(match.snapshot.backupTime, 200);
+    QCOMPARE(match.snapshot.verifyState, QStringLiteral("failed"));
+    QCOMPARE(selectPbsBackup(sources, "shared", "cluster-b").snapshot.backupTime, 900);
+
+    add("other-store", "cluster-a", 1000, "ok");
+    QVERIFY(selectPbsBackup(sources, "", "cluster-a").ambiguous);
+    QCOMPARE(selectPbsBackup(sources, "shared", "cluster-a").snapshot.backupTime, 200);
+    QCOMPARE(selectPbsBackup(sources, "other-store", "cluster-a").snapshot.backupTime, 1000);
+    QVERIFY(selectPbsBackup(sources, "shared", "*").ambiguous);
+    match = selectPbsBackup(sources, "missing", "cluster-a");
+    QVERIFY(!match.ambiguous);
+    QCOMPARE(match.snapshot.backupTime, 0);
+
+    add("shared", "", 300, "ok"); // Root is distinct from all namespaces.
+    QCOMPARE(selectPbsBackup(sources, "shared", "").snapshot.backupTime, 300);
+    add("shared", "cluster-a/child", 1100, "ok");
+    QCOMPARE(selectPbsBackup(sources, "shared", "cluster-a").snapshot.backupTime, 200);
+    QCOMPARE(selectPbsBackup(sources, "shared", "cluster-a/child").snapshot.backupTime, 1100);
+    QCOMPARE(selectPbsBackup(sources, " shared ", " cluster-a ").snapshot.backupTime, 200);
+    QCOMPARE(selectPbsBackup(sources, "Shared", "cluster-a").snapshot.backupTime, 0);
+}
+
+void ProxmoxDataUtilsTest::pbsSourceFiltersPreserveRootAndEndpointSettings() {
+    QVariantMap a{{"host", "a.example"}, {"tokenId", "monitor@pve!a"},
+                  {"pbsDatastore", " shared "}, {"pbsNamespace", "cluster-a"}};
+    QVariantMap b{{"host", "b.example"}, {"tokenId", "monitor@pve!b"},
+                  {"pbsDatastore", "shared"}, {"pbsNamespace", ""}};
+    QVariantMap legacy{{"host", "c.example"}, {"tokenId", "monitor@pve!c"}};
+    const auto queue = ProxmoxDataUtils::buildEndpointQueue({a, b, legacy}, false);
+    QCOMPARE(queue.size(), 3);
+    QCOMPARE(queue.at(0).toMap().value("pbsDatastore").toString(), QStringLiteral("shared"));
+    QCOMPARE(queue.at(0).toMap().value("pbsNamespace").toString(), QStringLiteral("cluster-a"));
+    QCOMPARE(queue.at(1).toMap().value("pbsNamespace").toString(), QString());
+    QCOMPARE(queue.at(2).toMap().value("pbsNamespace").toString(), QStringLiteral("*"));
+    const auto displayed = ProxmoxDataUtils::mergeEndpointBuckets(queue, {});
+    QCOMPARE(displayed.at(0).toMap().value("pbsNamespace").toString(), QStringLiteral("cluster-a"));
+    QCOMPARE(displayed.at(1).toMap().value("pbsNamespace").toString(), QString());
+}
+
+void ProxmoxDataUtilsTest::pbsFetchFiltersMatchSelectionRules() {
+    using namespace ProxmoxDataUtils;
+    const QList<QString> stores{QStringLiteral("shared"), QStringLiteral("other")};
+    QCOMPARE(filterPbsDatastores(stores, QString()), stores);
+    QCOMPARE(filterPbsDatastores(stores, QStringLiteral(" shared ")), QList<QString>{QStringLiteral("shared")});
+    QVERIFY(filterPbsDatastores(stores, QStringLiteral("Shared")).isEmpty());
+    QVERIFY(filterPbsDatastores(stores, QStringLiteral("missing")).isEmpty());
+
+    const QList<QString> namespaces{QString(), QStringLiteral("cluster-a"), QStringLiteral("cluster-a/child")};
+    QCOMPARE(filterPbsNamespaces(namespaces, QStringLiteral("*")), namespaces);
+    QCOMPARE(filterPbsNamespaces(namespaces, QStringLiteral(" * ")), namespaces);
+    QCOMPARE(filterPbsNamespaces(namespaces, QString()), QList<QString>{QString()});
+    QCOMPARE(filterPbsNamespaces(namespaces, QStringLiteral("cluster-a")), QList<QString>{QStringLiteral("cluster-a")});
+    QVERIFY(filterPbsNamespaces(namespaces, QStringLiteral("cluster-b")).isEmpty());
 }
 
 QTEST_APPLESS_MAIN(ProxmoxDataUtilsTest)

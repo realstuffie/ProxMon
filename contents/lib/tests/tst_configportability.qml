@@ -41,9 +41,31 @@ TestCase {
         verify(res.ok, res.error)
         var env = JSON.parse(res.jsonText)
         var keys = CP.whitelistedKeys()
-        compare(keys.length, 47) // canary: adding a config key must be a conscious decision
+        compare(keys.length, 49) // canary: adding a config key must be a conscious decision
         for (var i = 0; i < keys.length; i++)
             verify(env.config[keys[i]] !== undefined, "export is missing key: " + keys[i])
+    }
+
+    function test_pbsSourceFiltersRoundTrip() {
+        var res = CP.buildExportEnvelope({
+            pbsDatastore: "shared", pbsNamespace: "",
+            multiHostsJson: JSON.stringify([
+                { host: "a.example", tokenId: "mon@pve!a", pbsDatastore: "shared", pbsNamespace: "cluster-a" },
+                { host: "b.example", tokenId: "mon@pve!b", pbsDatastore: "other", pbsNamespace: "" }
+            ])
+        })
+        verify(res.ok, res.error)
+        var parsed = CP.validateImportFile(res.jsonText)
+        verify(parsed.ok, parsed.error)
+        compare(parsed.config.pbsDatastore, "shared")
+        compare(parsed.config.pbsNamespace, "")
+        var entries = JSON.parse(parsed.config.multiHostsJson)
+        compare(entries[0].pbsNamespace, "cluster-a")
+        compare(entries[1].pbsDatastore, "other")
+        compare(entries[1].pbsNamespace, "")
+        var defaults = JSON.parse(CP.buildExportEnvelope({}).jsonText).config
+        compare(defaults.pbsNamespace, "*")
+        compare(defaults.pbsDatastore, "")
     }
 
     function test_exportClampsAndNormalizes() {

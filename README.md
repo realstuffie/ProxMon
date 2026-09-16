@@ -175,7 +175,9 @@ Token ID format: `user@pbs!tokenname`
 
 </details>
 
-**Sharing one PBS across multiple Proxmox endpoints:** scope each endpoint's token to its own datastore so it only sees that cluster's backups. ProxMon matches backup rows to VMs/CTs by endpoint + VM/CT ID, so a token that can read several datastores can mix backup state across endpoints.
+**Sharing one PBS across multiple Proxmox endpoints:** set **PBS Datastore** and **PBS Namespace** for each endpoint to the location used by that cluster. An empty datastore searches all visible stores. Namespace `*` searches all visible namespaces; an empty namespace selects root only. Named namespaces match exactly, without including their children.
+
+ProxMon keeps backup sources separate by datastore and namespace. If multiple sources match the same guest, its backup marker shows `?` with an explanation instead of choosing the newest backup. Select the correct source in settings to resolve it. You can also restrict each endpoint's PBS token to its cluster's backups. ProxMon cannot infer which cluster owns a backup from its VMID alone, so use explicit filters when sharing PBS across clusters.
 
 ## Configuration
 

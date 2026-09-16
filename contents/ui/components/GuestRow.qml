@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 import org.kde.plasma.components as PlasmaComponents
 import org.kde.kirigami as Kirigami
+import "backupstatus.mjs" as BackupStatus
 
 /**
  * One guest (VM or container) in the expanded panel.
@@ -311,9 +312,9 @@ Rectangle {
 
                     readonly property int backupStatus: root.guestModel
                         && root.guestModel.backupStatus !== undefined
-                        ? root.guestModel.backupStatus : 0
-                    readonly property bool hasBackup: backupStatus !== 0 && backupStatus !== 5
-                    readonly property bool isExcluded: backupStatus === 5
+                        ? root.guestModel.backupStatus : BackupStatus.Unknown
+                    readonly property bool hasBackup: backupStatus !== BackupStatus.Unknown && backupStatus !== BackupStatus.Excluded
+                    readonly property bool isExcluded: backupStatus === BackupStatus.Excluded
 
                     Layout.preferredWidth: 46
                     Layout.minimumWidth: 46
@@ -323,6 +324,8 @@ Rectangle {
                     QQC2.ToolTip.visible: backupHover.hovered && backup.hasBackup
                     QQC2.ToolTip.text: {
                         if (!backup.hasBackup) return ""
+                        if (backup.backupStatus === BackupStatus.Ambiguous)
+                            return "Multiple PBS backup sources match this guest. Select its datastore and namespace in settings."
                         const when = root.guestModel ? (root.guestModel.lastBackupDisplay || "unknown") : "unknown"
                         const verify = root.guestModel && root.guestModel.verifyState === "failed"
                             ? "  ·  verification failed" : ""
@@ -341,10 +344,11 @@ Rectangle {
                         visible: backup.hasBackup
                         color: {
                             switch (backup.backupStatus) {
-                            case 1: return Kirigami.Theme.positiveTextColor
-                            case 2: return Kirigami.Theme.neutralTextColor
-                            case 3:
-                            case 4: return Kirigami.Theme.negativeTextColor
+                            case BackupStatus.Current: return Kirigami.Theme.positiveTextColor
+                            case BackupStatus.Warning:
+                            case BackupStatus.Ambiguous: return Kirigami.Theme.neutralTextColor
+                            case BackupStatus.Stale:
+                            case BackupStatus.Never: return Kirigami.Theme.negativeTextColor
                             default: return "transparent"
                             }
                         }
@@ -361,18 +365,19 @@ Rectangle {
                         // full phrasing lives in the tooltip.
                         text: {
                             if (!backup.hasBackup || !root.guestModel) return ""
+                            if (backup.backupStatus === BackupStatus.Ambiguous) return "?"
                             const full = root.guestModel.lastBackupDisplay || ""
                             const m = full.match(/^\s*(\d+\s*[a-zA-Z]+)/)
                             return m ? m[1].replace(/\s+/g, "") : full
                         }
                         font.pixelSize: 10
                         font.family: "JetBrains Mono"
-                        opacity: backup.backupStatus === 1 ? 0.7 : 1.0
+                        opacity: backup.backupStatus === BackupStatus.Current ? 0.7 : 1.0
                         visible: backup.hasBackup
                         color: (root.guestModel && root.guestModel.verifyState === "failed")
-                            || backup.backupStatus === 3 || backup.backupStatus === 4
+                            || backup.backupStatus === BackupStatus.Stale || backup.backupStatus === BackupStatus.Never
                                 ? Kirigami.Theme.negativeTextColor
-                                : (backup.backupStatus === 2 ? Kirigami.Theme.neutralTextColor
+                                : (backup.backupStatus === BackupStatus.Warning || backup.backupStatus === BackupStatus.Ambiguous ? Kirigami.Theme.neutralTextColor
                                                            : Kirigami.Theme.textColor)
                     }
                 }

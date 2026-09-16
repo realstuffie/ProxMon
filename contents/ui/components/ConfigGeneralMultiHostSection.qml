@@ -368,6 +368,46 @@ ColumnLayout {
                     }
 
                     QQC2.Label {
+                        text: "PBS Datastore:"
+                        visible: pbsEnabledCheck.checked
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    QQC2.TextField {
+                        visible: pbsEnabledCheck.checked
+                        Layout.fillWidth: true
+                        text: card.entry.pbsDatastore !== undefined ? card.entry.pbsDatastore : ""
+                        placeholderText: "All datastores"
+                        onTextEdited: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[card.index].pbsDatastore = text
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+                    QQC2.Label {
+                        text: "PBS Namespace:"
+                        visible: pbsEnabledCheck.checked
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                    }
+                    PbsNamespaceField {
+                        visible: pbsEnabledCheck.checked
+                        Layout.fillWidth: true
+                        value: card.entry.pbsNamespace !== undefined ? card.entry.pbsNamespace : "*"
+                        onEdited: (next) => {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[card.index].pbsNamespace = next
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+                    QQC2.Label {
+                        visible: pbsEnabledCheck.checked
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        wrapMode: Text.WordWrap
+                        text: "If several clusters back up to this PBS, pick the datastore and namespace this cluster uses. Otherwise overlapping VM IDs show a ? marker."
+                        opacity: 0.7
+                    }
+
+                    QQC2.Label {
                         text: "PBS Token ID:"
                         visible: pbsEnabledCheck.checked
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter

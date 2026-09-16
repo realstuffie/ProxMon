@@ -528,7 +528,9 @@ void ProxmoxClient::fetchPBSDatastores(const QString &requesterKey,
                                       const QString &tokenSecret,
                                       bool ignoreSslErrors,
                                       const QByteArray &trustedCertPem,
-                                      const QString &trustedCertPath) {
+                                      const QString &trustedCertPath,
+                                      const QString &datastoreFilter,
+                                      const QString &namespaceFilter) {
     if (m_debugEnabled) {
         qDebug().noquote()
             << QStringLiteral("[ProxmoxClient] fetchPBSDatastores host=%1 port=%2 tokenIdEmpty=%3 secretEmpty=%4 ignoreSsl=%5")
@@ -574,7 +576,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &requesterKey,
 
     QObject::connect(r, &QNetworkReply::finished, this,
                      [this, r, requesterKey, pbsHost, port, tokenId, pbsSecret = std::move(pbsSecret),
-                      ignoreSslErrors, resolvedCertPem]() mutable {
+                      ignoreSslErrors, resolvedCertPem, datastoreFilter, namespaceFilter]() mutable {
         auto clearSecret = [&pbsSecret]() {
             pbsSecret.fill(0);
             pbsSecret.clear();
@@ -591,15 +593,18 @@ void ProxmoxClient::fetchPBSDatastores(const QString &requesterKey,
         };
         auto emitOk = [&](const QVariant &data) {
             if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSDatastores ok host=%1").arg(pbsHost);
-            QStringList datastores;
+            QList<QString> visibleDatastores;
             const QVariantList rows = data.toMap().value(QStringLiteral("data")).toList();
             for (const QVariant &rowValue : rows) {
                 const QVariantMap row = rowValue.toMap();
                 const QString store = row.value(QStringLiteral("store")).toString().trimmed();
                 if (!store.isEmpty()) {
-                    datastores.push_back(store);
+                    visibleDatastores.push_back(store);
                 }
             }
+            // Emit the filtered list: listeners count one namespace listing
+            // per datastore it contains.
+            const QList<QString> datastores = ProxmoxDataUtils::filterPbsDatastores(visibleDatastores, datastoreFilter);
             emit pbsDatastoresReceived(pbsHost, datastores);
             for (const QString &datastore : datastores) {
                 const QString encodedStore = QString::fromUtf8(QUrl::toPercentEncoding(datastore));
@@ -637,7 +642,7 @@ void ProxmoxClient::fetchPBSDatastores(const QString &requesterKey,
                 QByteArray secretForNs = pbsSecret;
                 QObject::connect(nsReply, &QNetworkReply::finished, this,
                                  [this, nsReply, requesterKey, pbsHost, port, tokenId, datastore, encodedStore,
-                                  nsSecret = std::move(secretForNs), ignoreSslErrors, resolvedCertPem]() mutable {
+                                  nsSecret = std::move(secretForNs), ignoreSslErrors, resolvedCertPem, namespaceFilter]() mutable {
                     auto clearNsSecret = [&nsSecret]() {
                         nsSecret.fill(0);
                         nsSecret.clear();
@@ -723,10 +728,14 @@ void ProxmoxClient::fetchPBSDatastores(const QString &requesterKey,
                         // A token without namespace-listing privilege, or a PBS
                         // predating the endpoint, must still yield root-namespace
                         // data rather than an empty backup panel.
-                        requestSnapshots({QString()});
+                        // With an exact namespace selected, ask for that one
+                        // directly; PBS still enforces the token's privileges.
+                        const QString wanted = namespaceFilter.trimmed();
+                        requestSnapshots({wanted == QLatin1String("*") ? QString() : wanted});
                     };
                     auto emitNsOk = [&](const QVariant &nsData) {
-                        const QList<QString> namespaces = ProxmoxDataUtils::parsePbsNamespaces(nsData);
+                        const QList<QString> namespaces = ProxmoxDataUtils::filterPbsNamespaces(
+                            ProxmoxDataUtils::parsePbsNamespaces(nsData), namespaceFilter);
                         if (m_debugEnabled) qDebug().noquote() << QStringLiteral("[ProxmoxClient] fetchPBSNamespaces ok host=%1 datastore=%2 count=%3").arg(pbsHost, datastore).arg(namespaces.size());
                         requestSnapshots(namespaces);
                     };

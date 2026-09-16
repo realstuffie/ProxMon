@@ -20,6 +20,10 @@ KCM.SimpleKCM {
     property string cfg_apiTokenSecretDefault: ""
     property bool cfg_pbsEnabled: false
     property bool cfg_pbsEnabledDefault: false
+    property string cfg_pbsDatastore: ""
+    property string cfg_pbsDatastoreDefault: ""
+    property string cfg_pbsNamespace: "*"
+    property string cfg_pbsNamespaceDefault: "*"
     property string cfg_pbsHost: ""
     property string cfg_pbsHostDefault: ""
     property int cfg_pbsPort: 8007

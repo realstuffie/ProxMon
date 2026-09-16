@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- fix(pbs): keep backups separate by datastore and namespace when matching guest IDs. Add source filters to single-host and multi-host settings. If multiple sources match, show an ambiguous backup marker instead of selecting another cluster's newest backup
+- fix(pbs): only fetch the selected PBS datastore and namespace, pick the namespace filter from All / Root only / Specific instead of typing * or leaving the field empty, and name backup states in QML instead of comparing raw numbers
+- fix(pbs): keep the previous backup markers until a PBS refresh finishes, so a Proxmox refresh during a slow PBS fetch no longer blanks them or shows "Never"
+
 ## v0.8.4
 
 - feat(ui): rework the expanded panel with shared guest rows, node usage meters, clearer guest actions, and sorting controls in the header
