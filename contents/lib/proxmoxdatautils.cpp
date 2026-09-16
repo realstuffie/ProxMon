@@ -7,6 +7,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QMap>
 #include <QRegularExpression>
 #include <QSet>
 #include <QSslConfiguration>
@@ -69,17 +70,43 @@ PbsBackupMatch selectPbsBackup(const PbsBackupSources &sources,
                               const QString &datastore,
                               const QString &backupNamespace) {
     PbsBackupMatch result;
-    bool found = false;
+    QList<PBSSnapshot> matches;
     const QString store = datastore.trimmed();
     const QString ns = backupNamespace.trimmed();
     for (const PBSSnapshot &snapshot : sources) {
         if (!store.isEmpty() && snapshot.datastoreName != store) continue;
         if (ns != QLatin1String("*") && snapshot.backupNamespace != ns) continue;
-        if (found) return {PBSSnapshot{}, true};
-        result.snapshot = snapshot;
-        found = true;
+        matches.push_back(snapshot);
+    }
+    if (matches.size() == 1) {
+        result.snapshot = matches.first();
+    } else if (matches.size() > 1) {
+        result.ambiguous = true;
+        result.sources = describePbsSources(matches);
     }
     return result;
+}
+
+QString describePbsSources(const QList<PBSSnapshot> &snapshots) {
+    QMap<QString, QStringList> byStore; // QMap keeps datastores sorted.
+    for (const PBSSnapshot &snapshot : snapshots) {
+        const QString ns = snapshot.backupNamespace.isEmpty()
+            ? QStringLiteral("root") : snapshot.backupNamespace;
+        QStringList &names = byStore[snapshot.datastoreName];
+        if (!names.contains(ns)) names.push_back(ns);
+    }
+    QStringList parts;
+    for (auto it = byStore.begin(); it != byStore.end(); ++it) {
+        QStringList names = it.value();
+        // Root first, then namespaces alphabetically.
+        std::sort(names.begin(), names.end(), [](const QString &a, const QString &b) {
+            if (a == QLatin1String("root")) return b != QLatin1String("root");
+            if (b == QLatin1String("root")) return false;
+            return a < b;
+        });
+        parts.push_back(it.key() + QStringLiteral(": ") + names.join(QStringLiteral(", ")));
+    }
+    return parts.join(QStringLiteral("; "));
 }
 
 QList<QString> filterPbsDatastores(const QList<QString> &datastores, const QString &datastore) {

@@ -324,8 +324,12 @@ Rectangle {
                     QQC2.ToolTip.visible: backupHover.hovered && backup.hasBackup
                     QQC2.ToolTip.text: {
                         if (!backup.hasBackup) return ""
-                        if (backup.backupStatus === BackupStatus.Ambiguous)
-                            return "Multiple PBS backup sources match this guest. Select its datastore and namespace in settings."
+                        if (backup.backupStatus === BackupStatus.Ambiguous) {
+                            const sources = root.guestModel ? (root.guestModel.backupSources || "") : ""
+                            return "Backups for this ID were found in more than one place"
+                                + (sources ? ":\n" + sources : ".")
+                                + "\nSet PBS Datastore and Namespace in settings to the one this host uses."
+                        }
                         const when = root.guestModel ? (root.guestModel.lastBackupDisplay || "unknown") : "unknown"
                         const verify = root.guestModel && root.guestModel.verifyState === "failed"
                             ? "  ·  verification failed" : ""

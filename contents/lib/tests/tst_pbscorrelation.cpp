@@ -47,6 +47,7 @@ void PbsCorrelationTest::duplicateVmidRequiresAnExactSource() {
     QCOMPARE(row.value("backupStatus").toInt(), int(BackupStatus::Ambiguous));
     QCOMPARE(row.value("lastBackupTime").toLongLong(), 0);
     QVERIFY(row.value("verifyState").toString().isEmpty());
+    QCOMPARE(row.value("backupSources").toString(), QStringLiteral("shared: cluster-a, cluster-b"));
 
     controller.setPbsDatastore("shared");
     controller.setPbsNamespace("cluster-a");
@@ -54,6 +55,7 @@ void PbsCorrelationTest::duplicateVmidRequiresAnExactSource() {
     QCOMPARE(row.value("lastBackupTime").toLongLong(), a.backupTime);
     QCOMPARE(row.value("verifyState").toString(), QStringLiteral("failed"));
     QVERIFY(row.value("backupStatus").toInt() != int(BackupStatus::Ambiguous));
+    QVERIFY(row.value("backupSources").toString().isEmpty());
 
     controller.setPbsNamespace("cluster-b");
     QCOMPARE(controller.displayedVmData().first().toMap().value("lastBackupTime").toLongLong(), b.backupTime);

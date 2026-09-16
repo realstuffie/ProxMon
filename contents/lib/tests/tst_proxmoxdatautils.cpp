@@ -411,9 +411,11 @@ void ProxmoxDataUtilsTest::pbsSourcesDoNotMergeAcrossNamespacesOrDatastores() {
     QCOMPARE(match.snapshot.backupTime, 200);
     QCOMPARE(match.snapshot.verifyState, QStringLiteral("failed"));
 
+    QVERIFY(match.sources.isEmpty());
     add("shared", "cluster-b", 900, "ok"); // Same VMID in another cluster.
     match = selectPbsBackup(sources, "", "*");
     QVERIFY(match.ambiguous);
+    QCOMPARE(match.sources, QStringLiteral("shared: cluster-a, cluster-b"));
     QCOMPARE(match.snapshot.backupTime, 0); // Never report cluster B as healthy for A.
     QVERIFY(match.snapshot.verifyState.isEmpty());
     match = selectPbsBackup(sources, "shared", "cluster-a");
@@ -424,6 +426,8 @@ void ProxmoxDataUtilsTest::pbsSourcesDoNotMergeAcrossNamespacesOrDatastores() {
 
     add("other-store", "cluster-a", 1000, "ok");
     QVERIFY(selectPbsBackup(sources, "", "cluster-a").ambiguous);
+    QCOMPARE(selectPbsBackup(sources, "", "cluster-a").sources,
+             QStringLiteral("other-store: cluster-a; shared: cluster-a"));
     QCOMPARE(selectPbsBackup(sources, "shared", "cluster-a").snapshot.backupTime, 200);
     QCOMPARE(selectPbsBackup(sources, "other-store", "cluster-a").snapshot.backupTime, 1000);
     QVERIFY(selectPbsBackup(sources, "shared", "*").ambiguous);
@@ -432,6 +436,8 @@ void ProxmoxDataUtilsTest::pbsSourcesDoNotMergeAcrossNamespacesOrDatastores() {
     QCOMPARE(match.snapshot.backupTime, 0);
 
     add("shared", "", 300, "ok"); // Root is distinct from all namespaces.
+    QCOMPARE(selectPbsBackup(sources, "shared", "*").sources,
+             QStringLiteral("shared: root, cluster-a, cluster-b"));
     QCOMPARE(selectPbsBackup(sources, "shared", "").snapshot.backupTime, 300);
     add("shared", "cluster-a/child", 1100, "ok");
     QCOMPARE(selectPbsBackup(sources, "shared", "cluster-a").snapshot.backupTime, 200);

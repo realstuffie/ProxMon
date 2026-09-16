@@ -36,7 +36,14 @@ void recordPbsSnapshot(PbsBackupSources &sources, const PBSSnapshot &snapshot);
 struct PbsBackupMatch {
     PBSSnapshot snapshot;
     bool ambiguous = false;
+    // Set only when ambiguous: the matching sources, see describePbsSources.
+    QString sources;
 };
+
+// Human-readable list of where snapshots came from, for tooltips. Grouped by
+// datastore in sorted order, root namespace shown as "root":
+// "pbs: root, clients/acme; other: archive".
+QString describePbsSources(const QList<PBSSnapshot> &snapshots);
 
 // Empty datastore searches all stores. Namespace "*" searches all namespaces;
 // empty namespace selects root only. Multiple matching sources are ambiguous,

@@ -2345,7 +2345,9 @@ void ProxmoxController::applyBackupState(QVariantList &items, const QVariantMap 
             const int oldStatus = item.value(QStringLiteral("backupStatus"), int(BackupStatus::Unknown)).toInt();
             const QString oldDisplay = item.value(QStringLiteral("lastBackupDisplay")).toString();
             const QString oldVerify = item.value(QStringLiteral("verifyState")).toString();
-            if (oldStatus != int(BackupStatus::Unknown) || !oldDisplay.isEmpty() || !oldVerify.isEmpty()) {
+            if (oldStatus != int(BackupStatus::Unknown) || !oldDisplay.isEmpty() || !oldVerify.isEmpty()
+                || !item.value(QStringLiteral("backupSources")).toString().isEmpty()) {
+                item.insert(QStringLiteral("backupSources"), QString());
                 item.insert(QStringLiteral("backupStatus"), int(BackupStatus::Unknown));
                 item.insert(QStringLiteral("lastBackupTime"), 0);
                 item.insert(QStringLiteral("lastBackupDisplay"), QString());
@@ -2361,7 +2363,9 @@ void ProxmoxController::applyBackupState(QVariantList &items, const QVariantMap 
             const int exOldStatus = item.value(QStringLiteral("backupStatus"), int(BackupStatus::Unknown)).toInt();
             const QString exOldDisplay = item.value(QStringLiteral("lastBackupDisplay")).toString();
             const QString exOldVerify = item.value(QStringLiteral("verifyState")).toString();
-            if (exOldStatus != int(BackupStatus::Excluded) || !exOldDisplay.isEmpty() || !exOldVerify.isEmpty()) {
+            if (exOldStatus != int(BackupStatus::Excluded) || !exOldDisplay.isEmpty() || !exOldVerify.isEmpty()
+                || !item.value(QStringLiteral("backupSources")).toString().isEmpty()) {
+                item.insert(QStringLiteral("backupSources"), QString());
                 item.insert(QStringLiteral("backupStatus"), int(BackupStatus::Excluded));
                 item.insert(QStringLiteral("lastBackupTime"), 0);
                 item.insert(QStringLiteral("lastBackupDisplay"), QString());
@@ -2402,7 +2406,9 @@ void ProxmoxController::applyBackupState(QVariantList &items, const QVariantMap 
         const QString newVerify = match.snapshot.verifyState;
 
         if (oldStatus != int(status) || oldDisplay != newDisplay || oldVerify != newVerify
-            || item.value(QStringLiteral("lastBackupTime")).toLongLong() != backupTime) {
+            || item.value(QStringLiteral("lastBackupTime")).toLongLong() != backupTime
+            || item.value(QStringLiteral("backupSources")).toString() != match.sources) {
+            item.insert(QStringLiteral("backupSources"), match.sources);
             item.insert(QStringLiteral("backupStatus"), int(status));
             item.insert(QStringLiteral("lastBackupTime"), backupTime);
             item.insert(QStringLiteral("lastBackupDisplay"), newDisplay);
