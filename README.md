@@ -32,7 +32,7 @@
 <table>
   <tr>
     <td rowspan="2" align="center" valign="middle"><div align="center">
-      <img src="screenshots/widget-expanded.png" alt="Expanded view" width="330" /><br />
+      <img src="screenshots/widget-expanded-v0.8.4.png" alt="Expanded view" width="330" /><br />
       <em>Expanded view: nodes, VMs &amp; containers</em>
     </div></td>
     <td align="center" valign="top"><div align="center">
