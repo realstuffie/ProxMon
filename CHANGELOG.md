@@ -2,8 +2,15 @@
 
 ## Unreleased
 
-- feat(sort): a "Custom (drag to reorder)" sort mode; in it, dragging a guest row anywhere outside its buttons reorders VMs and containers within their section. The order is saved per cluster in the new `customGuestOrder` config key as `host:port/vmid` entries, so a guest keeps its place after migrating between nodes. The controller validates and caps the stored list (2048 entries) before using it. Dragging near the top or bottom edge of the panel scrolls it, but only as far as the dragged row's own section. Dragging is off while a filter is active
-- feat(stats): a blank IP in the stats panel now says why: guest not running, QEMU guest agent not available, permission denied, container interfaces unavailable, or no IPv4 address reported; the reason is a fixed `ipStatus` value set by the client, and Proxmox error text is never forwarded to QML
+## v0.8.4
+
+- feat(ui): rework the expanded panel with shared guest rows, node usage meters, clearer guest actions, and sorting controls in the header
+- feat(ui): filter guests by name or ID from the panel and show a fade when more content is below the scroll area
+- feat(sort): add a "Custom (drag to reorder)" sort mode. Guest order is saved per cluster and survives node migration. Dragging near a panel edge scrolls within the guest's section. Reordering is disabled while filtering
+- feat(stats): explain missing guest IP addresses, including stopped guests, unavailable guest agents, permission errors, and interfaces with no IPv4 address
+- fix(vnc): keep consoles connected when QEMU changes screen size
+- refactor(console): share WebSocket URL construction and add tests for VNC button mapping and LXC authentication framing
+- ci: build the plugin and run its test suite in Forgejo Actions
 
 ## v0.8.3
 

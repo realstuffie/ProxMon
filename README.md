@@ -9,7 +9,7 @@
 <p>Live node, VM &amp; container stats · in-widget VNC &amp; LXC consoles · PBS backup status · multi-host.</p>
 
 <p>
-  <img src="https://img.shields.io/badge/version-0.8.3-1d99f3" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.8.4-1d99f3" alt="Version" />
   <img src="https://img.shields.io/badge/license-GPL--3.0--or--later-4caf50" alt="License" />
   <img src="https://img.shields.io/badge/KDE%20Plasma-6.0%2B-1d99f3?logo=kde&amp;logoColor=white" alt="KDE Plasma 6" />
   <img src="https://img.shields.io/badge/Proxmox%20VE-7.0%2B-e57000?logo=proxmox&amp;logoColor=white" alt="Proxmox VE 7+" />
@@ -313,7 +313,20 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 ## Changelog
 
 <details>
-<summary><strong>v0.8.1</strong> (latest)</summary>
+<summary><strong>v0.8.4</strong> (latest)</summary>
+
+- Reworked expanded panel with node usage meters and clearer guest actions
+- Guest filtering by name or ID and sorting controls in the panel header
+- Custom guest ordering with drag and drop, saved per cluster
+- Explanations for missing guest IP addresses
+- VNC consoles stay connected when QEMU changes screen size
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+
+</details>
+
+<details>
+<summary><strong>v0.8.1</strong></summary>
 
 - New: toggle to enable/disable the stats panel, independent of power actions
 - Fixed: action-button reservation width now tracks enabled features, no dead space when toggled off
