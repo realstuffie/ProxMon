@@ -79,6 +79,8 @@ KCM.SimpleKCM {
     property bool cfg_statsEnabledDefault: true
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
+    property var cfg_customGuestOrder: []
+    property var cfg_customGuestOrderDefault: []
     property string cfg_compactMode: "cpu"
     property string cfg_compactModeDefault: "cpu"
     property bool cfg_lowLatency: false

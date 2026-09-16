@@ -2,7 +2,9 @@
 
 #include <QVariant>
 
+#include <QHash>
 #include <QList>
+#include <QStringList>
 #include <QSslCertificate>
 #include <QUrl>
 
@@ -36,11 +38,45 @@ QVariantList buildEndpointQueue(const QVariantList &entries, bool defaultIgnoreS
 QVariantList responseRows(const QVariant &response, const QVariantMap &context = {});
 QVariantList mergeEndpointBuckets(const QVariantList &endpoints, const QVariantMap &buckets);
 
-// Stable-sorts VM/CT rows in place. Modes mirror the QML sortByStatus():
-// "status" (running first, then name, then vmid), "statusId" (running first,
-// then vmid), "name", "nameDesc", "id", "idDesc". Unknown modes fall back to
-// "status".
-void sortItems(QVariantList &items, const QString &mode);
+// Stable-sorts VM/CT rows in place. Modes: "status" (running first, then
+// name, then vmid), "statusId" (running first, then vmid), "name",
+// "nameDesc", "id", "idDesc", and "custom" (ascending rank from
+// guestOrderRanks(), guests without a rank after them by ascending vmid).
+// Unknown modes fall back to "status". ranks and scope are only read in
+// "custom" mode.
+void sortItems(QVariantList &items,
+               const QString &mode,
+               const QHash<QString, int> &ranks = {},
+               const QString &scope = {});
+
+// ---- Custom guest order ("custom" sort mode) ----
+// Stored in KConfig as a list of "<host>:<port>/<vmid>" keys. vmids are
+// unique across qemu and lxc within one cluster, and the node is left out so
+// a guest keeps its place after migration. The stored list is user-editable
+// config and is treated as untrusted: every read goes through
+// sanitizeGuestOrder().
+inline constexpr qsizetype kMaxGuestOrderEntries = 2048;
+
+// "<normalized host>:<port>", or an empty string if the host contains
+// characters outside [a-z0-9.-_:[]] or the port is out of range. An empty
+// scope disables custom ordering for that cluster.
+QString guestOrderScope(const QString &host, int port);
+QString guestOrderKey(const QString &scope, int vmid);
+
+// Drops malformed and duplicate keys (first occurrence wins) and keeps at
+// most kMaxGuestOrderEntries, discarding the oldest (front) entries.
+QStringList sanitizeGuestOrder(const QStringList &order);
+QHash<QString, int> guestOrderRanks(const QStringList &order);
+
+// Returns the order after moving sectionKeys[from] to position `to` within
+// one displayed section. sectionKeys is the section's current on-screen
+// order. The section's keys are removed from `order` and re-appended in
+// their new order; other sections keep their relative ranks. Invalid
+// indices or keys return sanitizeGuestOrder(order) unchanged.
+QStringList applyGuestMove(const QStringList &order,
+                           const QStringList &sectionKeys,
+                           int from,
+                           int to);
 
 // Load trusted CA certificates from PEM bytes, falling back to reading the
 // file at trustedCertPath when the PEM is empty. Shared by the HTTP client

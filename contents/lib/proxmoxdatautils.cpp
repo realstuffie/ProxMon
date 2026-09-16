@@ -7,6 +7,8 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QRegularExpression>
+#include <QSet>
 #include <QSslConfiguration>
 #include <QUrlQuery>
 
@@ -168,7 +170,28 @@ QVariantList mergeEndpointBuckets(const QVariantList &endpoints, const QVariantM
     return rows;
 }
 
-void sortItems(QVariantList &items, const QString &mode) {
+void sortItems(QVariantList &items,
+               const QString &mode,
+               const QHash<QString, int> &ranks,
+               const QString &scope) {
+    if (mode == QLatin1String("custom")) {
+        const auto rankOf = [&ranks, &scope](int vmid) {
+            if (scope.isEmpty()) return -1;
+            return ranks.value(guestOrderKey(scope, vmid), -1);
+        };
+        std::stable_sort(items.begin(), items.end(),
+                         [&rankOf](const QVariant &av, const QVariant &bv) {
+            const int avmid = av.toMap().value(QStringLiteral("vmid")).toInt();
+            const int bvmid = bv.toMap().value(QStringLiteral("vmid")).toInt();
+            const int ar = rankOf(avmid);
+            const int br = rankOf(bvmid);
+            if ((ar < 0) != (br < 0)) return ar >= 0;
+            if (ar != br) return ar < br;
+            return avmid < bvmid;
+        });
+        return;
+    }
+
     auto nameOf = [](const QVariantMap &m) {
         QString n = m.value(QStringLiteral("name")).toString();
         if (n.isEmpty()) {
@@ -221,6 +244,94 @@ void sortItems(QVariantList &items, const QString &mode) {
         if (c != 0) return c < 0;
         return avmid < bvmid;
     });
+}
+
+namespace {
+
+bool isValidGuestOrderScope(const QString &scope) {
+    // anchoredPattern: a bare '$' would also accept a trailing newline.
+    static const QRegularExpression re(QRegularExpression::anchoredPattern(
+        QStringLiteral(R"([a-z0-9._\-:\[\]]{1,253}:[0-9]{1,5})")));
+    return re.match(scope).hasMatch();
+}
+
+bool isValidGuestOrderKey(const QString &key) {
+    if (key.size() > 300) return false;
+    const qsizetype slash = key.lastIndexOf(QLatin1Char('/'));
+    if (slash <= 0 || slash == key.size() - 1) return false;
+    const QStringView vmidPart = QStringView(key).mid(slash + 1);
+    if (vmidPart.size() > 9) return false;
+    for (const QChar ch : vmidPart) {
+        if (ch < QLatin1Char('0') || ch > QLatin1Char('9')) return false;
+    }
+    return isValidGuestOrderScope(key.left(slash));
+}
+
+} // namespace
+
+QString guestOrderScope(const QString &host, int port) {
+    if (port < 1 || port > 65535) return {};
+    const QString scope = host.trimmed().toLower() + QLatin1Char(':') + QString::number(port);
+    return isValidGuestOrderScope(scope) ? scope : QString();
+}
+
+QString guestOrderKey(const QString &scope, int vmid) {
+    if (scope.isEmpty() || vmid <= 0) return {};
+    return scope + QLatin1Char('/') + QString::number(vmid);
+}
+
+QStringList sanitizeGuestOrder(const QStringList &order) {
+    QStringList out;
+    QSet<QString> seen;
+    for (const QString &key : order) {
+        if (!isValidGuestOrderKey(key) || seen.contains(key)) continue;
+        seen.insert(key);
+        out.push_back(key);
+    }
+    if (out.size() > kMaxGuestOrderEntries) {
+        out = out.mid(out.size() - kMaxGuestOrderEntries);
+    }
+    return out;
+}
+
+QHash<QString, int> guestOrderRanks(const QStringList &order) {
+    const QStringList clean = sanitizeGuestOrder(order);
+    QHash<QString, int> ranks;
+    ranks.reserve(clean.size());
+    for (qsizetype i = 0; i < clean.size(); ++i) {
+        ranks.insert(clean.at(i), int(i));
+    }
+    return ranks;
+}
+
+QStringList applyGuestMove(const QStringList &order,
+                           const QStringList &sectionKeys,
+                           int from,
+                           int to) {
+    const QStringList clean = sanitizeGuestOrder(order);
+    if (from < 0 || to < 0 || from >= sectionKeys.size() || to >= sectionKeys.size()
+        || sectionKeys.size() > kMaxGuestOrderEntries) {
+        return clean;
+    }
+    QSet<QString> sectionSet;
+    for (const QString &key : sectionKeys) {
+        if (!isValidGuestOrderKey(key) || sectionSet.contains(key)) return clean;
+        sectionSet.insert(key);
+    }
+
+    QStringList moved = sectionKeys;
+    moved.move(from, to);
+
+    QStringList result;
+    result.reserve(clean.size() + moved.size());
+    for (const QString &key : clean) {
+        if (!sectionSet.contains(key)) result.push_back(key);
+    }
+    result.append(moved);
+    if (result.size() > kMaxGuestOrderEntries) {
+        result = result.mid(result.size() - kMaxGuestOrderEntries);
+    }
+    return result;
 }
 
 QList<QSslCertificate> trustedCertificatesFromConfig(const QByteArray &trustedCertPem,

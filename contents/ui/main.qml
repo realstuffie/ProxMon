@@ -104,6 +104,7 @@ PlasmoidItem {
         ignoreSsl: root.ignoreSsl
         lowLatency: root.lowLatency
         defaultSorting: root.defaultSorting
+        customGuestOrder: Plasmoid.configuration.customGuestOrder || []
         // Gate single-host model maintenance to when the popup is open.
         viewActive: root.expanded
         autoRetry: root.autoRetry
@@ -165,6 +166,17 @@ PlasmoidItem {
     property string pbsExcludeTag: Plasmoid.configuration.pbsExcludeTag || ""
     property string pbsExcludeVmids: Plasmoid.configuration.pbsExcludeVmids || ""
     property string defaultSorting: Plasmoid.configuration.defaultSorting || "status"
+    // Drag handles show only in custom mode, and not while filtering: a drop
+    // position among partly hidden rows would be ambiguous.
+    readonly property bool guestReorderEnabled: root.defaultSorting === "custom" && root.filterText === ""
+
+    function reorderGuest(sessionKey, nodeName, kind, from, to) {
+        if (from === to) return
+        // The controller computes and sanitizes the new order; config is the
+        // single store and flows back into controller.customGuestOrder.
+        Plasmoid.configuration.customGuestOrder =
+            controller.movedGuestOrder(sessionKey || "", nodeName, kind, from, to)
+    }
 
     // Guest filter. Deliberately session-only and not persisted: a filter left
     // over from last time would silently hide guests on the next expand.
@@ -1674,6 +1686,14 @@ PlasmoidItem {
                 icon.name: root.defaultSorting === "idDesc" ? "checkmark" : ""
                 onTriggered: Plasmoid.configuration.defaultSorting = "idDesc"
             }
+
+            QQC2.MenuSeparator {}
+
+            QQC2.MenuItem {
+                text: "Custom (drag to reorder)"
+                icon.name: root.defaultSorting === "custom" ? "checkmark" : ""
+                onTriggered: Plasmoid.configuration.defaultSorting = "custom"
+            }
         }
 
         // Not configured / credential loading message
@@ -1883,6 +1903,10 @@ PlasmoidItem {
                         onStatsToggled: function(kind, nodeName, vmid) {
                             root.requestStats(kind, nodeName, vmid)
                         }
+                        reorderEnabled: root.guestReorderEnabled
+                        onReorder: function(kind, nodeName, from, to) {
+                            root.reorderGuest("", nodeName, kind, from, to)
+                        }
                         getStatsData: root.getStatsData
                         isStatsLoading: root.isStatsLoading
                         statsEnabled: Plasmoid.configuration.statsEnabled !== false
@@ -1941,6 +1965,10 @@ PlasmoidItem {
                         }
                         onAction: function(sessionKey, kind, nodeName, vmid, displayName, action) {
                             root.confirmAndRunActionForSession(sessionKey, kind, nodeName, vmid, displayName, action)
+                        }
+                        reorderEnabled: root.guestReorderEnabled
+                        onReorder: function(sessionKey, kind, nodeName, from, to) {
+                            root.reorderGuest(sessionKey, nodeName, kind, from, to)
                         }
                         consoleEnabled: Plasmoid.configuration.consoleEnabled !== false
                         powerActionsEnabled: Plasmoid.configuration.powerActionsEnabled !== false

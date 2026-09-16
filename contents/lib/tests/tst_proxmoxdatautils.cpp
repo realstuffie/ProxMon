@@ -14,6 +14,11 @@ private slots:
     void responseRowsHandleMissingData();
     void endpointBucketsMergeAndSort();
     void sortStatusIdGroupsRunningThenId();
+    void sortCustomUsesRanksThenVmid();
+    void guestOrderSanitizeRejectsMalformedKeys();
+    void guestOrderScopeRejectsUnsafeHosts();
+    void guestOrderMoveReordersOneSection();
+    void guestOrderMoveIgnoresInvalidInput();
     void backupStatusKeyIsStableAndDiscriminating();
     void pbsNamespacesParseTreeAndAlwaysYieldRoot();
 };
@@ -289,6 +294,98 @@ void ProxmoxDataUtilsTest::pbsNamespacesParseTreeAndAlwaysYieldRoot() {
     QCOMPARE(ns(QStringLiteral(R"({"data":"nonsense"})")), QList<QString>{QString()});
     QCOMPARE(ns(QStringLiteral(R"({})")), QList<QString>{QString()});
     QCOMPARE(ProxmoxDataUtils::parsePbsNamespaces(QVariant()), QList<QString>{QString()});
+}
+
+void ProxmoxDataUtilsTest::sortCustomUsesRanksThenVmid() {
+    auto guest = [](int vmid) {
+        return QVariant(QVariantMap{{QStringLiteral("vmid"), vmid},
+                                    {QStringLiteral("status"), QStringLiteral("running")}});
+    };
+    const QString scope = QStringLiteral("pve.example:8006");
+    const QHash<QString, int> ranks = ProxmoxDataUtils::guestOrderRanks({
+        QStringLiteral("pve.example:8006/300"),
+        QStringLiteral("other.example:8006/100"), // other cluster, must not apply
+        QStringLiteral("pve.example:8006/200"),
+    });
+
+    QVariantList items{guest(100), guest(200), guest(400), guest(300), guest(150)};
+    ProxmoxDataUtils::sortItems(items, QStringLiteral("custom"), ranks, scope);
+
+    // Ranked guests first in rank order, then unranked by ascending vmid.
+    const QList<int> expected{300, 200, 100, 150, 400};
+    for (int i = 0; i < expected.size(); ++i) {
+        QCOMPARE(items.at(i).toMap().value(QStringLiteral("vmid")).toInt(), expected.at(i));
+    }
+
+    // An empty scope disables ranking entirely.
+    ProxmoxDataUtils::sortItems(items, QStringLiteral("custom"), ranks, QString());
+    QCOMPARE(items.at(0).toMap().value(QStringLiteral("vmid")).toInt(), 100);
+}
+
+void ProxmoxDataUtilsTest::guestOrderSanitizeRejectsMalformedKeys() {
+    const QStringList cleaned = ProxmoxDataUtils::sanitizeGuestOrder({
+        QStringLiteral("pve.example:8006/100"),
+        QStringLiteral("pve.example:8006/100"),     // duplicate
+        QStringLiteral("PVE.example:8006/101"),     // not normalized
+        QStringLiteral("pve.example:8006/10a"),     // non-numeric vmid
+        QStringLiteral("pve.example/100"),          // no port
+        QStringLiteral("pve.example:8006/"),        // no vmid
+        QStringLiteral("pve.example:8006/1234567890"), // vmid too long
+        QStringLiteral("pve example:8006/102"),     // space
+        QStringLiteral("pve.example:8006\n/103"),   // newline
+        QStringLiteral("[fd00::1]:8006/104"),
+    });
+    QCOMPARE(cleaned, QStringList({QStringLiteral("pve.example:8006/100"),
+                                   QStringLiteral("[fd00::1]:8006/104")}));
+
+    QStringList huge;
+    for (qsizetype i = 1; i <= ProxmoxDataUtils::kMaxGuestOrderEntries + 10; ++i) {
+        huge.push_back(QStringLiteral("h:1/%1").arg(i));
+    }
+    const QStringList capped = ProxmoxDataUtils::sanitizeGuestOrder(huge);
+    QCOMPARE(capped.size(), ProxmoxDataUtils::kMaxGuestOrderEntries);
+    QCOMPARE(capped.first(), QStringLiteral("h:1/11")); // oldest entries dropped
+}
+
+void ProxmoxDataUtilsTest::guestOrderScopeRejectsUnsafeHosts() {
+    QCOMPARE(ProxmoxDataUtils::guestOrderScope(QStringLiteral(" PVE.Example "), 8006),
+             QStringLiteral("pve.example:8006"));
+    QVERIFY(ProxmoxDataUtils::guestOrderScope(QStringLiteral("pve/evil"), 8006).isEmpty());
+    QVERIFY(ProxmoxDataUtils::guestOrderScope(QStringLiteral("pve.example"), 0).isEmpty());
+    QVERIFY(ProxmoxDataUtils::guestOrderScope(QString(), 8006).isEmpty());
+    QVERIFY(ProxmoxDataUtils::guestOrderKey(QStringLiteral("pve.example:8006"), 0).isEmpty());
+}
+
+void ProxmoxDataUtilsTest::guestOrderMoveReordersOneSection() {
+    const QStringList order{
+        QStringLiteral("a:1/900"), // another section, keeps its place
+        QStringLiteral("a:1/102"),
+        QStringLiteral("a:1/101"),
+    };
+    const QStringList section{QStringLiteral("a:1/102"), QStringLiteral("a:1/101"), QStringLiteral("a:1/103")};
+
+    // Move the last row (103) to the top.
+    const QStringList moved = ProxmoxDataUtils::applyGuestMove(order, section, 2, 0);
+    QCOMPARE(moved, QStringList({QStringLiteral("a:1/900"),
+                                 QStringLiteral("a:1/103"),
+                                 QStringLiteral("a:1/102"),
+                                 QStringLiteral("a:1/101")}));
+
+    // Applying the result as ranks reproduces the dragged order.
+    const QHash<QString, int> ranks = ProxmoxDataUtils::guestOrderRanks(moved);
+    QVERIFY(ranks.value(QStringLiteral("a:1/103")) < ranks.value(QStringLiteral("a:1/102")));
+    QVERIFY(ranks.value(QStringLiteral("a:1/102")) < ranks.value(QStringLiteral("a:1/101")));
+}
+
+void ProxmoxDataUtilsTest::guestOrderMoveIgnoresInvalidInput() {
+    const QStringList order{QStringLiteral("a:1/100"), QStringLiteral("bogus")};
+    const QStringList clean{QStringLiteral("a:1/100")};
+    const QStringList section{QStringLiteral("a:1/100"), QStringLiteral("a:1/101")};
+
+    QCOMPARE(ProxmoxDataUtils::applyGuestMove(order, section, -1, 0), clean);
+    QCOMPARE(ProxmoxDataUtils::applyGuestMove(order, section, 0, 2), clean);
+    QCOMPARE(ProxmoxDataUtils::applyGuestMove(order, {QStringLiteral("a:1/100"), QStringLiteral("a:1/100")}, 0, 1), clean);
+    QCOMPARE(ProxmoxDataUtils::applyGuestMove(order, {QStringLiteral("a:1/100"), QStringLiteral("x y")}, 0, 1), clean);
 }
 
 QTEST_APPLESS_MAIN(ProxmoxDataUtilsTest)

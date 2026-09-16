@@ -80,6 +80,8 @@ KCM.SimpleKCM {
     }
     property alias cfg_defaultSorting: sortingValue.value
     property string cfg_defaultSortingDefault: "status"
+    property var cfg_customGuestOrder: []
+    property var cfg_customGuestOrderDefault: []
 
     // Compact label mode: "cpu" (default), "running", "error", "lastUpdate"
     QtObject {
@@ -191,6 +193,7 @@ KCM.SimpleKCM {
                     ListElement { text: "Name (Z-A)"; value: "nameDesc" }
                     ListElement { text: "ID (Ascending)"; value: "id" }
                     ListElement { text: "ID (Descending)"; value: "idDesc" }
+                    ListElement { text: "Custom (drag to reorder)"; value: "custom" }
                 }
                 textRole: "text"
 

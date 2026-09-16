@@ -399,6 +399,47 @@ void ProxmoxController::setDefaultSorting(const QString &value) {
     publishMultiHostModels();
 }
 
+void ProxmoxController::setCustomGuestOrder(const QStringList &value) {
+    const QStringList clean = ProxmoxDataUtils::sanitizeGuestOrder(value);
+    if (m_customGuestOrder == clean) return;
+    m_customGuestOrder = clean;
+    m_customGuestRanks = ProxmoxDataUtils::guestOrderRanks(clean);
+    emit customGuestOrderChanged();
+    if (m_defaultSorting == QLatin1String("custom")) {
+        publishSingleHostModels();
+        publishMultiHostModels();
+    }
+}
+
+QStringList ProxmoxController::movedGuestOrder(const QString &sessionKey,
+                                               const QString &node,
+                                               const QString &kind,
+                                               int from,
+                                               int to) const {
+    const bool isQemu = kind == ProxmoxConst::Kind::Qemu;
+    if (!isQemu && kind != ProxmoxConst::Kind::Lxc) return m_customGuestOrder;
+
+    VariantListModel *model = nullptr;
+    QString scope;
+    if (m_connectionMode == QStringLiteral("multiHost")) {
+        const QString nodeKey = sessionKey + QLatin1Char('|') + node;
+        model = isQemu ? m_vmModelsBySessionNode.value(nodeKey) : m_lxcModelsBySessionNode.value(nodeKey);
+        scope = m_guestOrderScopeBySession.value(sessionKey);
+    } else {
+        model = isQemu ? m_vmModelsByNode.value(node) : m_lxcModelsByNode.value(node);
+        scope = ProxmoxDataUtils::guestOrderScope(normalizedHost(m_host), m_port);
+    }
+    if (!model || scope.isEmpty()) return m_customGuestOrder;
+
+    QStringList sectionKeys;
+    sectionKeys.reserve(model->count());
+    for (int i = 0; i < model->count(); ++i) {
+        sectionKeys.push_back(ProxmoxDataUtils::guestOrderKey(
+            scope, model->get(i).value(QStringLiteral("vmid")).toInt()));
+    }
+    return ProxmoxDataUtils::applyGuestMove(m_customGuestOrder, sectionKeys, from, to);
+}
+
 void ProxmoxController::setViewActive(bool value) {
     if (m_viewActive == value) return;
     m_viewActive = value;
@@ -420,6 +461,7 @@ void ProxmoxController::publishSingleHostModels() {
     if (!m_viewActive || m_connectionMode != QStringLiteral("single")) return;
 
     const QVariantList nodes = m_displayedProxmoxData.toMap().value(QStringLiteral("data")).toList();
+    const QString orderScope = ProxmoxDataUtils::guestOrderScope(normalizedHost(m_host), m_port);
 
     // Group children by node, sorted once in C++ (QML no longer sorts).
     QHash<QString, QVariantList> vmsByNode;
@@ -452,11 +494,11 @@ void ProxmoxController::publishSingleHostModels() {
         }
 
         QVariantList vms = vmsByNode.value(nodeName);
-        ProxmoxDataUtils::sortItems(vms, m_defaultSorting);
+        ProxmoxDataUtils::sortItems(vms, m_defaultSorting, m_customGuestRanks, orderScope);
         vmModel->applyItems(vms);
 
         QVariantList lxcs = lxcsByNode.value(nodeName);
-        ProxmoxDataUtils::sortItems(lxcs, m_defaultSorting);
+        ProxmoxDataUtils::sortItems(lxcs, m_defaultSorting, m_customGuestRanks, orderScope);
         lxcModel->applyItems(lxcs);
 
         // INVARIANT: submodel pointers must stay stable across refreshes and
@@ -529,6 +571,10 @@ void ProxmoxController::publishMultiHostModels() {
         const QString sessionKey = endpoint.value(QStringLiteral("sessionKey")).toString();
         if (sessionKey.isEmpty()) continue;
         liveSessions.insert(sessionKey);
+        const QString orderScope = ProxmoxDataUtils::guestOrderScope(
+            normalizedHost(endpoint.value(QStringLiteral("host")).toString()),
+            endpoint.value(QStringLiteral("port")).toInt());
+        m_guestOrderScopeBySession.insert(sessionKey, orderScope);
 
         VariantListModel *nodesModel = m_nodesModelsBySession.value(sessionKey);
         if (!nodesModel) {
@@ -568,11 +614,11 @@ void ProxmoxController::publishMultiHostModels() {
             }
 
             QVariantList vms = vmsByNode.value(nodeName);
-            ProxmoxDataUtils::sortItems(vms, m_defaultSorting);
+            ProxmoxDataUtils::sortItems(vms, m_defaultSorting, m_customGuestRanks, orderScope);
             vmModel->applyItems(vms);
 
             QVariantList lxcs = lxcsByNode.value(nodeName);
-            ProxmoxDataUtils::sortItems(lxcs, m_defaultSorting);
+            ProxmoxDataUtils::sortItems(lxcs, m_defaultSorting, m_customGuestRanks, orderScope);
             lxcModel->applyItems(lxcs);
 
             nodeRow.insert(QStringLiteral("sessionKey"), sessionKey);
@@ -597,6 +643,13 @@ void ProxmoxController::publishMultiHostModels() {
     // Remove vanished rows first (delegates release the submodels), then
     // drop the submodels themselves.
     m_endpointsModel->applyItems(endpointRows);
+    for (auto it = m_guestOrderScopeBySession.begin(); it != m_guestOrderScopeBySession.end();) {
+        if (!liveSessions.contains(it.key())) {
+            it = m_guestOrderScopeBySession.erase(it);
+        } else {
+            ++it;
+        }
+    }
     for (auto it = m_nodesModelsBySession.begin(); it != m_nodesModelsBySession.end();) {
         if (!liveSessions.contains(it.key())) {
             it.value()->deleteLater();

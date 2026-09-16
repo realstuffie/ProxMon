@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QHash>
 #include <QMap>
+#include <QStringList>
 #include <QTimer>
 #include <QVariant>
 
@@ -74,6 +75,10 @@ class ProxmoxController : public QObject {
     // deeper).
     Q_PROPERTY(VariantListModel *endpointsModel READ endpointsModel CONSTANT)
     Q_PROPERTY(QString defaultSorting READ defaultSorting WRITE setDefaultSorting NOTIFY defaultSortingChanged)
+    // Guest order for the "custom" sort mode, as stored in KConfig. The setter
+    // sanitizes (see ProxmoxDataUtils::sanitizeGuestOrder), so reading it back
+    // may return fewer entries than were written.
+    Q_PROPERTY(QStringList customGuestOrder READ customGuestOrder WRITE setCustomGuestOrder NOTIFY customGuestOrderChanged)
     // True while the popup is expanded. Gates single-host model maintenance so
     // no sort/diff work happens while nothing is watching (mirrors the old lazy
     // behaviour, where sorting ran only inside visible delegate bindings).
@@ -185,6 +190,19 @@ public:
     VariantListModel *endpointsModel() const { return m_endpointsModel; }
     QString defaultSorting() const { return m_defaultSorting; }
     void setDefaultSorting(const QString &value);
+    QStringList customGuestOrder() const { return m_customGuestOrder; }
+    void setCustomGuestOrder(const QStringList &value);
+
+    // Drag-and-drop reorder. Returns the full custom order with the guest at
+    // `from` moved to `to` within one displayed section (sessionKey empty in
+    // single-host mode, kind "qemu" or "lxc"). Indices refer to the section
+    // model's current rows. Does not store anything: the caller writes the
+    // result to config, which flows back through setCustomGuestOrder().
+    Q_INVOKABLE QStringList movedGuestOrder(const QString &sessionKey,
+                                            const QString &node,
+                                            const QString &kind,
+                                            int from,
+                                            int to) const;
     bool viewActive() const { return m_viewActive; }
     void setViewActive(bool value);
 
@@ -266,6 +284,7 @@ signals:
     void runningVMsChanged();
     void runningLXCChanged();
     void defaultSortingChanged();
+    void customGuestOrderChanged();
     void viewActiveChanged();
     void restoreSingleConfigRequested(const QString &host, int port, const QString &tokenId);
     void restoreMultiHostConfigRequested(const QString &multiHostsJson);
@@ -496,6 +515,11 @@ private:
     // Delegate-facing models (single-host). m_nodesModel rows carry pointers
     // to the per-node vm/lxc submodels below (roles "vmsModel"/"lxcsModel").
     QString m_defaultSorting = QStringLiteral("status");
+    QStringList m_customGuestOrder;
+    QHash<QString, int> m_customGuestRanks;
+    // sessionKey -> guest order scope ("host:port"), filled by the multi-host
+    // publish so movedGuestOrder() keys guests the same way the sort did.
+    QHash<QString, QString> m_guestOrderScopeBySession;
     bool m_viewActive = false;
     VariantListModel *m_nodesModel = nullptr;
     QHash<QString, VariantListModel *> m_vmModelsByNode;

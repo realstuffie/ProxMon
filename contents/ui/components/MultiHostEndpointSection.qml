@@ -46,6 +46,8 @@ ColumnLayout {
     property string filterText: ""
     property bool consoleEnabled: true
     property bool powerActionsEnabled: true
+    property bool reorderEnabled: false
+    property var onReorder: null
 
     Layout.fillWidth: true
     Layout.alignment: Qt.AlignTop
@@ -162,6 +164,8 @@ ColumnLayout {
             onConsole: root.onConsole
             consoleEnabled: root.consoleEnabled
             powerActionsEnabled: root.powerActionsEnabled
+            reorderEnabled: root.reorderEnabled
+            onReorder: root.onReorder
         }
     }
 }

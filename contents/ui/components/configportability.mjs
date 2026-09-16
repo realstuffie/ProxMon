@@ -83,7 +83,7 @@ const INT_KEYS = {
 const ENUM_KEYS = {
     "connectionMode": [["single", "multiHost"], "single"],
     "terminalSize": [["small", "medium", "large"], "medium"],
-    "defaultSorting": [["status", "statusId", "name", "nameDesc", "id", "idDesc"], "status"],
+    "defaultSorting": [["status", "statusId", "name", "nameDesc", "id", "idDesc", "custom"], "status"],
     "compactMode": [["cpu", "running", "error", "lastUpdate"], "cpu"],
     "notifyMode": [["all", "whitelist", "blacklist"], "all"]
 }

@@ -101,6 +101,11 @@
         <entry name="defaultSorting" type="String">
             <default>status</default>
         </entry>
+        <!-- "custom" sort mode: guest keys "<host>:<port>/<vmid>" in display
+             order. Written by drag-and-drop in the panel; sanitized in C++. -->
+        <entry name="customGuestOrder" type="StringList">
+            <default></default>
+        </entry>
         <entry name="compactMode" type="String">
             <default>cpu</default>
         </entry>

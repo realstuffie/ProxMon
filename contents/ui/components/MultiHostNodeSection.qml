@@ -63,6 +63,15 @@ ColumnLayout {
             root.onAction(root.sessionKey, kind, nodeName, vmid, displayName, action)
     }
 
+    property bool reorderEnabled: false
+    // (sessionKey, kind, nodeName, from, to)
+    property var onReorder: null
+
+    function forwardReorder(kind, from, to) {
+        if (typeof root.onReorder === "function")
+            root.onReorder(root.sessionKey, kind, root.nodeName, from, to)
+    }
+
     function forwardConsole(kind, nodeName, vmid, displayName) {
         if (typeof root.onConsole === "function")
             root.onConsole(root.sessionKey, kind, nodeName, vmid, displayName)
@@ -120,6 +129,8 @@ ColumnLayout {
             armedActionKey: root.scopedArmedActionKey
             armedTimerRunning: root.armedTimerRunning
             busyFor: root.busyFor
+            reorderEnabled: root.reorderEnabled
+            onReorder: root.forwardReorder
             anonymizeVmId: root.anonymizeVmId
             anonymizeName: root.anonymizeVmName
             onAction: root.forwardAction
@@ -148,6 +159,8 @@ ColumnLayout {
             armedActionKey: root.scopedArmedActionKey
             armedTimerRunning: root.armedTimerRunning
             busyFor: root.busyFor
+            reorderEnabled: root.reorderEnabled
+            onReorder: root.forwardReorder
             anonymizeVmId: root.anonymizeVmId
             anonymizeName: root.anonymizeLxcName
             onAction: root.forwardAction

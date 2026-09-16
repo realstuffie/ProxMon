@@ -35,6 +35,12 @@ Rectangle {
     property string armedActionKey: ""
     property bool armedTimerRunning: false
     property bool statsExpanded: false
+    // Drag-and-drop reorder. GuestSection owns the drag state; the row only
+    // reports pointer movement and draws what the section tells it to.
+    property bool reorderEnabled: false
+    property bool dragging: false
+    // 0 none, 1 drop marker above this row, 2 below it.
+    property int dropMarker: 0
 
     // ---- theming --------------------------------------------------------
     property int uiRowHeight: 30
@@ -63,6 +69,9 @@ Rectangle {
     property var onStatsToggled: null
     property var getStatsData: null
     property var isStatsLoading: null
+    property var onDragStarted: null   // (guestIndex)
+    property var onDragMoved: null     // (sceneY)
+    property var onDragFinished: null  // (commit)
 
     // ---- feature toggles -------------------------------------------------
     property bool statsEnabled: false
@@ -124,6 +133,21 @@ Rectangle {
         ColorAnimation { duration: 100 }
     }
 
+    opacity: root.dragging ? 0.45 : 1.0
+
+    // Drop position marker. Drawn outside the row's bounds, in the layout
+    // spacing, so it never changes row geometry.
+    Rectangle {
+        visible: root.dropMarker !== 0
+        z: 10
+        x: 0
+        width: parent.width
+        height: 2
+        radius: 1
+        y: root.dropMarker === 1 ? -2 : parent.height
+        color: Kirigami.Theme.highlightColor
+    }
+
     HoverHandler {
         id: rowHover
     }
@@ -141,6 +165,45 @@ Rectangle {
             id: rowSlot
             Layout.fillWidth: true
             Layout.preferredHeight: root.uiRowHeight
+
+            // Drag-to-reorder from anywhere on the main row (custom sort mode).
+            // Buttons are child items that accept the press themselves, so a
+            // press that starts on one never reaches this handler and clicks
+            // behave as before. The drag only activates past the platform drag
+            // threshold, so a plain click on the row is not a drag either.
+            DragHandler {
+                id: rowDrag
+                target: null
+                xAxis.enabled: false
+                enabled: root.reorderEnabled
+                // Keep the grab once dragging: without this the panel's
+                // Flickable can steal a vertical drag and scroll instead.
+                grabPermissions: PointerHandler.CanTakeOverFromAnything
+                cursorShape: Qt.ClosedHandCursor
+
+                property bool wasCanceled: false
+
+                function finish() {
+                    if (typeof root.onDragFinished === "function")
+                        root.onDragFinished(!rowDrag.wasCanceled)
+                }
+
+                onActiveChanged: {
+                    if (active) {
+                        wasCanceled = false
+                        if (typeof root.onDragStarted === "function") root.onDragStarted(root.guestIndex)
+                    } else {
+                        // Qt deactivates before emitting canceled(), so decide
+                        // commit vs cancel after both have run.
+                        Qt.callLater(rowDrag.finish)
+                    }
+                }
+                onCentroidChanged: {
+                    if (active && typeof root.onDragMoved === "function")
+                        root.onDragMoved(centroid.scenePosition.y)
+                }
+                onCanceled: wasCanceled = true
+            }
 
             RowLayout {
                 anchors.fill: parent
