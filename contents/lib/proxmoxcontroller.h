@@ -25,6 +25,13 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(QString trustedCertPath READ trustedCertPath WRITE setTrustedCertPath NOTIFY trustedCertPathChanged)
     Q_PROPERTY(QString multiHostsJson READ multiHostsJson WRITE setMultiHostsJson NOTIFY multiHostsJsonChanged)
     Q_PROPERTY(bool multiHostSharedCert READ multiHostSharedCert WRITE setMultiHostSharedCert NOTIFY multiHostSharedCertChanged)
+    // Per-node storage usage on the node card. On by default; a token without
+    // Datastore.Audit should turn it off to stop the failed request.
+    Q_PROPERTY(bool storageEnabled READ storageEnabled WRITE setStorageEnabled NOTIFY storageEnabledChanged)
+    Q_PROPERTY(QString storageLastError READ storageLastError NOTIFY storageLastErrorChanged)
+    // Comma-separated storage names shown on the node card. Empty means the
+    // fullest store holding guest disks.
+    Q_PROPERTY(QString storageFilter READ storageFilter WRITE setStorageFilter NOTIFY storageFilterChanged)
     Q_PROPERTY(bool pbsEnabled READ pbsEnabled WRITE setPbsEnabled NOTIFY pbsEnabledChanged)
     Q_PROPERTY(QString pbsDatastore READ pbsDatastore WRITE setPbsDatastore NOTIFY pbsDatastoreChanged)
     Q_PROPERTY(QString pbsNamespace READ pbsNamespace WRITE setPbsNamespace NOTIFY pbsNamespaceChanged)
@@ -117,6 +124,13 @@ public:
 
     bool multiHostSharedCert() const { return m_multiHostSharedCert; }
     void setMultiHostSharedCert(bool v) { if (m_multiHostSharedCert == v) return; m_multiHostSharedCert = v; emit multiHostSharedCertChanged(); }
+
+    bool storageEnabled() const { return m_storageEnabled; }
+    void setStorageEnabled(bool value);
+    QString storageLastError() const { return m_storageError; }
+
+    QString storageFilter() const { return m_storageFilter; }
+    void setStorageFilter(const QString &value);
 
     bool pbsEnabled() const { return m_pbsEnabled; }
     void setPbsEnabled(bool value);
@@ -251,6 +265,9 @@ signals:
     void trustedCertPathChanged();
     void multiHostsJsonChanged();
     void multiHostSharedCertChanged();
+    void storageEnabledChanged();
+    void storageLastErrorChanged();
+    void storageFilterChanged();
     void pbsEnabledChanged();
     void pbsDatastoreChanged();
     void pbsNamespaceChanged();
@@ -363,6 +380,13 @@ private:
     void setRefreshResolvingSecrets(bool value);
     void setEndpoints(const QVariantList &value);
     void appendDebugLog(const QString &message);
+    void storeNodeStorage(const QString &sessionKey, const QString &node, const QVariant &data);
+    // Requests issued per node this refresh: guests always, storage when on.
+    int requestsPerNode(const QString &sessionKey) const;
+    void setStorageError(const QString &value);
+    void resetStorageTally();
+    void reportStorageTally();
+    void applyNodeStorage(QVariantMap &row, const QString &sessionKey, const QString &node) const;
     void setSecretsResolved(int value);
     void setSecretsTotal(int value);
     void setMultiSecretHadError(bool value);
@@ -451,6 +475,19 @@ private:
     QString m_trustedCertPath;
     QString m_multiHostsJson = QStringLiteral("[]");
     bool m_multiHostSharedCert = true;
+    bool m_storageEnabled = true;
+    QString m_storageFilter;
+    QString m_storageError;
+    // Per-refresh storage tally. PVE answers a token without Datastore.Audit
+    // with an empty list rather than 403, so "every node returned nothing" is
+    // the only signal that the permission is missing.
+    int m_storageReplies = 0;
+    int m_storageRepliesWithRows = 0;
+    int m_storageMatches = 0;
+    // sessionKey|node -> summarizeNodeStorage() result for that node. The
+    // single-host session key is empty. Missing means no usable storage data,
+    // so the node card simply omits the bar.
+    QHash<QString, QVariantMap> m_nodeStorage;
     bool m_pbsEnabled = false;
     QString m_pbsHost;
     QString m_pbsDatastore;

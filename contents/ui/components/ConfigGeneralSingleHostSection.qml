@@ -12,6 +12,8 @@ GridLayout {
     property var controller: null
     property string trustedCertPem: ""
     property string trustedCertPath: ""
+    property alias storageEnabled: storageEnabledCheck.checked
+    property alias storageFilter: storageFilterField.text
     property alias pbsEnabled: pbsEnabledCheck.checked
     property alias pbsDatastore: pbsDatastoreField.text
     property string pbsNamespace: "*"
@@ -58,6 +60,40 @@ GridLayout {
         to: 65535
         value: 8006
         editable: true
+    }
+
+    QQC2.Label {
+        text: "Storage Usage:"
+        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        horizontalAlignment: Text.AlignRight
+    }
+    QQC2.CheckBox {
+        id: storageEnabledCheck
+        checked: true
+        text: checked ? "Enabled" : "Disabled"
+    }
+
+    QQC2.Label {
+        visible: storageEnabledCheck.checked
+        text: "Storage Monitored:"
+        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+        horizontalAlignment: Text.AlignRight
+    }
+    ColumnLayout {
+        visible: storageEnabledCheck.checked
+        Layout.fillWidth: true
+        spacing: 2
+        QQC2.TextField {
+            id: storageFilterField
+            Layout.fillWidth: true
+            placeholderText: "local-zfs, ceph-pool"
+        }
+        QQC2.Label {
+            text: "Storage names for the node card, separated by commas. Each one gets its own bar. Leave empty to track the fullest store that holds guest disks."
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+            opacity: 0.7
+        }
     }
 
     QQC2.Label {

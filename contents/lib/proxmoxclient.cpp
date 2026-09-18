@@ -128,6 +128,21 @@ void ProxmoxClient::requestLxcFor(const QString &sessionKey,
                QStringLiteral("/nodes/%1/lxc").arg(node), seq, ProxmoxConst::Kind::Lxc, node);
 }
 
+void ProxmoxClient::requestStorageFor(const QString &sessionKey,
+                                      const QString &host,
+                                      int port,
+                                      const QString &tokenId,
+                                      const QString &tokenSecret,
+                                      bool ignoreSslErrors,
+                                      const QByteArray &trustedCertPem,
+                                      const QString &trustedCertPath,
+                                      const QString &node,
+                                      int seq) {
+    requestFor(sessionKey, host, port, tokenId, tokenSecret, ignoreSslErrors,
+               trustedCertPem, trustedCertPath,
+               QStringLiteral("/nodes/%1/storage").arg(node), seq, ProxmoxConst::Kind::Storage, node);
+}
+
 void ProxmoxClient::requestActionFor(const QString &sessionKey,
                                      const QString &host,
                                      int port,

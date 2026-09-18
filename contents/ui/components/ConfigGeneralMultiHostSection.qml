@@ -315,6 +315,40 @@ ColumnLayout {
                     }
 
                     QQC2.Label {
+                        text: "Storage Usage:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
+                    }
+                    QQC2.CheckBox {
+                        id: storageEnabledCheck
+                        checked: card.entry.storageEnabled !== false
+                        text: checked ? "Enabled" : "Disabled"
+                        onToggled: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[card.index].storageEnabled = checked
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
+                        visible: storageEnabledCheck.checked
+                        text: "Storage Monitored:"
+                        Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
+                        horizontalAlignment: Text.AlignRight
+                    }
+                    QQC2.TextField {
+                        visible: storageEnabledCheck.checked
+                        Layout.fillWidth: true
+                        text: card.entry.storageFilter || ""
+                        placeholderText: "all stores holding guest disks"
+                        onTextEdited: {
+                            var arr = root.ensureMultiHostsLen(5)
+                            arr[card.index].storageFilter = text
+                            root.saveMultiHosts(arr)
+                        }
+                    }
+
+                    QQC2.Label {
                         text: "PBS Enabled:"
                         Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                         horizontalAlignment: Text.AlignRight

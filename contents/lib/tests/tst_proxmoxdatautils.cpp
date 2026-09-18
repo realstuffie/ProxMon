@@ -26,6 +26,9 @@ private slots:
     void pbsFetchFiltersMatchSelectionRules();
     void keyringRetryBacksOffAndCaps();
     void keyringErrorLoggingIsRateLimited();
+    void storageFilterParsesNames();
+    void nodeStorageSummaryPicksFullestUsableStore();
+    void storageTallyExplainsEmptyReplies();
 };
 
 void ProxmoxDataUtilsTest::multiHostJsonRejectsMalformedInput() {
@@ -501,6 +504,74 @@ void ProxmoxDataUtilsTest::keyringErrorLoggingIsRateLimited() {
     QVERIFY(!shouldLogKeyringError(locked, locked, 1000, 300000));         // Same, soon after.
     QVERIFY(shouldLogKeyringError(locked, locked, 300000, 300000));        // Same, interval passed.
     QVERIFY(shouldLogKeyringError(QStringLiteral("other"), locked, 10, 300000)); // New failure.
+}
+
+void ProxmoxDataUtilsTest::storageFilterParsesNames() {
+    using ProxmoxDataUtils::parseStorageFilter;
+    QCOMPARE(parseStorageFilter(QStringLiteral(" local-zfs , ceph ,local-zfs,, ")),
+             (QList<QString>{QStringLiteral("local-zfs"), QStringLiteral("ceph")}));
+    QVERIFY(parseStorageFilter(QStringLiteral("  ,  ")).isEmpty());
+    QVERIFY(parseStorageFilter(QString()).isEmpty());
+}
+
+void ProxmoxDataUtilsTest::nodeStorageSummaryPicksFullestUsableStore() {
+    using ProxmoxDataUtils::summarizeNodeStorage;
+    auto store = [](const QString &name, const QString &content, qint64 used, qint64 total,
+                    int enabled = 1, int active = 1) {
+        return QVariant(QVariantMap{{"storage", name}, {"content", content},
+                                    {"used", used}, {"total", total},
+                                    {"enabled", enabled}, {"active", active}});
+    };
+    const QVariant response = QVariantMap{{"data", QVariantList{
+        store("local", "vztmpl,iso,backup", 90, 100),          // no guest disks
+        store("local-zfs", "images,rootfs", 50, 100),
+        store("ceph", "images", 80, 100),
+        store("archive", "images", 99, 100, /*enabled*/ 0),    // disabled
+        store("offline-nfs", "images", 99, 100, 1, /*active*/ 0),
+        store("empty", "images", 0, 0),                        // no size reported
+    }}};
+
+    const QVariantMap all = summarizeNodeStorage(response, {});
+    QCOMPARE(all.value("storageName").toString(), QStringLiteral("ceph"));
+    QVERIFY(qFuzzyCompare(all.value("storageFraction").toDouble(), 0.8));
+    QCOMPARE(all.value("storageUsed").toLongLong(), 80);
+    QCOMPARE(all.value("storageCount").toInt(), 2); // local, archive, offline-nfs and empty are out
+    QCOMPARE(all.value("storageDetail").toString(), QStringLiteral("ceph 80%, local-zfs 50%"));
+    QCOMPARE(all.value("storageBars").toList().size(), 1); // no filter: one bar, the fullest
+
+    // An explicit selection overrides the content filter, including a
+    // backup-only store the default view hides.
+    const QVariantMap picked = summarizeNodeStorage(response, {QStringLiteral("local"), QStringLiteral("local-zfs")});
+    QCOMPARE(picked.value("storageName").toString(), QStringLiteral("local"));
+    QCOMPARE(picked.value("storageDetail").toString(), QStringLiteral("local 90%, local-zfs 50%"));
+    const QVariantList bars = picked.value("storageBars").toList(); // named stores get a bar each
+    QCOMPARE(bars.size(), 2);
+    QCOMPARE(bars.at(0).toMap().value("name").toString(), QStringLiteral("local"));
+    QCOMPARE(bars.at(1).toMap().value("name").toString(), QStringLiteral("local-zfs"));
+    QVERIFY(qFuzzyCompare(bars.at(1).toMap().value("fraction").toDouble(), 0.5));
+
+    // A disabled store stays hidden even when named, and an unknown name
+    // yields no bar rather than a wrong one.
+    QVERIFY(summarizeNodeStorage(response, {QStringLiteral("archive")}).isEmpty());
+    QVERIFY(summarizeNodeStorage(response, {QStringLiteral("nope")}).isEmpty());
+    QVERIFY(summarizeNodeStorage(QVariant(), {}).isEmpty());
+    QVERIFY(summarizeNodeStorage(QVariantMap{{"data", QVariantList{}}}, {}).isEmpty());
+
+    // Flags absent means usable: PVE omits them on some storage types.
+    const QVariant bare = QVariantMap{{"data", QVariantList{
+        QVariantMap{{"storage", "bare"}, {"content", "rootfs"}, {"used", 10}, {"total", 40}},
+    }}};
+    QCOMPARE(summarizeNodeStorage(bare, {}).value("storageName").toString(), QStringLiteral("bare"));
+    QVERIFY(qFuzzyCompare(summarizeNodeStorage(bare, {}).value("storageFraction").toDouble(), 0.25));
+}
+
+void ProxmoxDataUtilsTest::storageTallyExplainsEmptyReplies() {
+    using ProxmoxDataUtils::storageTallyMessage;
+    QVERIFY(storageTallyMessage(0, 0, 0).isEmpty());          // storage off, nothing to say
+    QVERIFY(storageTallyMessage(2, 2, 1).isEmpty());          // at least one bar is showing
+    QVERIFY(storageTallyMessage(2, 0, 0).contains(QStringLiteral("Datastore.Audit")));
+    QVERIFY(storageTallyMessage(2, 2, 0).contains(QStringLiteral("Storage Monitored")));
+    QVERIFY(!storageTallyMessage(2, 2, 0).contains(QStringLiteral("Datastore.Audit")));
 }
 
 QTEST_APPLESS_MAIN(ProxmoxDataUtilsTest)

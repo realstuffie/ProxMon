@@ -161,6 +161,104 @@ QList<QString> parsePbsNamespaces(const QVariant &response) {
     return namespaces;
 }
 
+QString storageTallyMessage(int replies, int repliesWithRows, int matches) {
+    if (replies <= 0) return {};
+    if (repliesWithRows <= 0) {
+        return QStringLiteral(
+            "No storage returned. Proxmox sends an empty list when a token lacks "
+            "Datastore.Audit. Grant it on /storage, or turn off Storage Usage in settings.");
+    }
+    if (matches <= 0) {
+        return QStringLiteral(
+            "No storage matched the names in Storage Monitored. Check them, or clear the "
+            "field to track the fullest store that holds guest disks.");
+    }
+    return {};
+}
+
+QList<QString> parseStorageFilter(const QString &value) {
+    QList<QString> names;
+    const QStringList parts = value.split(QLatin1Char(','), Qt::SkipEmptyParts);
+    for (const QString &part : parts) {
+        const QString name = part.trimmed();
+        if (!name.isEmpty() && !names.contains(name)) names.push_back(name);
+    }
+    return names;
+}
+
+QVariantMap summarizeNodeStorage(const QVariant &response, const QList<QString> &selected) {
+    struct Entry { QString name; double fraction; qint64 used; qint64 total; };
+    QList<Entry> entries;
+    const QVariantList rows = response.toMap().value(QStringLiteral("data")).toList();
+    for (const QVariant &rowValue : rows) {
+        const QVariantMap row = rowValue.toMap();
+        const QString name = row.value(QStringLiteral("storage")).toString().trimmed();
+        if (name.isEmpty()) continue;
+        // Absent flags mean usable: only an explicit 0 disables a store.
+        if (row.value(QStringLiteral("enabled"), 1).toInt() == 0) continue;
+        if (row.value(QStringLiteral("active"), 1).toInt() == 0) continue;
+        if (selected.isEmpty()) {
+            const QString content = row.value(QStringLiteral("content")).toString();
+            const QStringList kinds = content.split(QLatin1Char(','), Qt::SkipEmptyParts);
+            bool holdsGuests = false;
+            for (const QString &kind : kinds) {
+                const QString trimmed = kind.trimmed();
+                if (trimmed == QLatin1String("images") || trimmed == QLatin1String("rootfs")) {
+                    holdsGuests = true;
+                    break;
+                }
+            }
+            if (!holdsGuests) continue;
+        } else if (!selected.contains(name)) {
+            continue;
+        }
+        const qint64 total = row.value(QStringLiteral("total")).toLongLong();
+        const qint64 used = row.value(QStringLiteral("used")).toLongLong();
+        if (total <= 0 || used < 0) continue;
+        entries.push_back({name, double(used) / double(total), used, total});
+    }
+    if (entries.isEmpty()) return {};
+
+    // Fullest first, then by name so equal usage keeps a stable order.
+    std::sort(entries.begin(), entries.end(), [](const Entry &a, const Entry &b) {
+        if (a.fraction != b.fraction) return a.fraction > b.fraction;
+        return a.name < b.name;
+    });
+    QStringList detail;
+    constexpr qsizetype maxDetailEntries = 8;
+    for (qsizetype i = 0; i < entries.size() && i < maxDetailEntries; ++i) {
+        detail.push_back(QStringLiteral("%1 %2%")
+            .arg(entries.at(i).name)
+            .arg(qRound(entries.at(i).fraction * 100)));
+    }
+    if (entries.size() > maxDetailEntries) {
+        detail.push_back(QStringLiteral("and %1 more").arg(entries.size() - maxDetailEntries));
+    }
+    QVariantList bars;
+    constexpr qsizetype maxBars = 6;
+    const qsizetype barCount = selected.isEmpty() ? 1 : std::min<qsizetype>(entries.size(), maxBars);
+    for (qsizetype i = 0; i < barCount; ++i) {
+        const Entry &entry = entries.at(i);
+        bars.push_back(QVariantMap{
+            {QStringLiteral("name"), entry.name},
+            {QStringLiteral("fraction"), entry.fraction},
+            {QStringLiteral("used"), QVariant::fromValue(entry.used)},
+            {QStringLiteral("total"), QVariant::fromValue(entry.total)},
+        });
+    }
+
+    const Entry &fullest = entries.first();
+    return QVariantMap{
+        {QStringLiteral("storageBars"), bars},
+        {QStringLiteral("storageName"), fullest.name},
+        {QStringLiteral("storageUsed"), QVariant::fromValue(fullest.used)},
+        {QStringLiteral("storageTotal"), QVariant::fromValue(fullest.total)},
+        {QStringLiteral("storageFraction"), fullest.fraction},
+        {QStringLiteral("storageDetail"), detail.join(QStringLiteral(", "))},
+        {QStringLiteral("storageCount"), int(entries.size())},
+    };
+}
+
 QVariantList buildEndpointQueue(const QVariantList &entries, bool defaultIgnoreSsl) {
     QVariantList queue;
     for (const QVariant &entryValue : entries) {
@@ -193,6 +291,8 @@ QVariantList buildEndpointQueue(const QVariantList &entries, bool defaultIgnoreS
         item.insert(QStringLiteral("ignoreSsl"), entry.value(QStringLiteral("ignoreSsl"), defaultIgnoreSsl));
         item.insert(QStringLiteral("trustedCertPem"), entry.value(QStringLiteral("trustedCertPem")));
         item.insert(QStringLiteral("trustedCertPath"), entry.value(QStringLiteral("trustedCertPath")));
+        item.insert(QStringLiteral("storageEnabled"), entry.value(QStringLiteral("storageEnabled"), true));
+        item.insert(QStringLiteral("storageFilter"), entry.value(QStringLiteral("storageFilter")).toString().trimmed());
         item.insert(QStringLiteral("pbsEnabled"), entry.value(QStringLiteral("pbsEnabled"), false));
         item.insert(QStringLiteral("pbsHost"), entry.value(QStringLiteral("pbsHost")).toString().trimmed());
         item.insert(QStringLiteral("pbsDatastore"), entry.value(QStringLiteral("pbsDatastore")).toString().trimmed());
