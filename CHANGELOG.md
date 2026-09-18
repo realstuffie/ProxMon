@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.8.5
+
 - feat(ui): node cards show a disk bar next to CPU and memory. By default it tracks the fullest store that holds guest disks. Name stores per endpoint and each one gets its own bar. Storage Usage is on by default and can be turned off. A token that cannot read storage gets a message saying which permission is missing
 - feat(config): settings export and import now include the drag-and-drop guest order, so you can take it to another machine
 - fix(keyring): log keyring failures to the journal, including failed secret saves. Messages are sanitized, and the same failure is logged at most once every 5 minutes. After a failure the widget retries when the wallet unlocks, or after a backoff that starts at 30 seconds and grows to 10 minutes, not on every refresh. Manual refresh still retries straight away
