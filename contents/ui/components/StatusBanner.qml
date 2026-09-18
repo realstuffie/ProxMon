@@ -18,6 +18,7 @@ ColumnLayout {
     property bool actionPermHintShown: false
     property string actionPermHint: ""
     property string pbsError: ""
+    property string storageError: ""
     property var onRetry: null
 
     function friendlyErrorHint(msg) {
@@ -177,6 +178,34 @@ ColumnLayout {
             icon.name: "view-refresh"
             Layout.alignment: Qt.AlignHCenter
             onClicked: if (typeof root.onRetry === "function") root.onRetry()
+        }
+    }
+
+    ColumnLayout {
+        Layout.fillWidth: true
+        Layout.margins: 10
+        visible: root.storageError !== "" && root.configured
+        spacing: 8
+        RowLayout {
+            spacing: 8
+            Layout.alignment: Qt.AlignHCenter
+            Kirigami.Icon {
+                source: "dialog-warning"
+                implicitWidth: 22
+                implicitHeight: 22
+            }
+            PlasmaComponents.Label {
+                text: "Storage Usage Unavailable"
+                font.bold: true
+                color: Kirigami.Theme.neutralTextColor
+            }
+        }
+        PlasmaComponents.Label {
+            text: root.storageError
+            color: Kirigami.Theme.neutralTextColor
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+            horizontalAlignment: Text.AlignHCenter
         }
     }
 

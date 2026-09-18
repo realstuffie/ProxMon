@@ -67,6 +67,23 @@ PbsBackupMatch selectPbsBackup(const PbsBackupSources &sources,
 QList<QString> filterPbsDatastores(const QList<QString> &datastores, const QString &datastore);
 QList<QString> filterPbsNamespaces(const QList<QString> &namespaces, const QString &backupNamespace);
 
+// Comma-separated storage names from settings -> trimmed, de-duplicated list.
+QList<QString> parseStorageFilter(const QString &value);
+
+// Condenses one /nodes/{node}/storage response into the fields the node card
+// shows. Keeps enabled and active stores; with no filter, only those holding
+// guest disks (content images or rootfs), otherwise exactly the named ones.
+// Naming stores is a request to watch each one, so "storageBars" then holds a
+// row per store, fullest first; with no filter it holds the fullest only, to
+// keep the card one line tall. The top-level fields describe that fullest
+// store, and the whole map is empty when nothing qualifies.
+QVariantMap summarizeNodeStorage(const QVariant &response, const QList<QString> &selected);
+
+// Warning for a finished refresh's storage replies, empty when all is well.
+// PVE answers a token without Datastore.Audit with an empty list instead of
+// 403, so replies that all came back empty are the only sign of that.
+QString storageTallyMessage(int replies, int repliesWithRows, int matches);
+
 // Namespace list from a PBS /admin/datastore/{store}/namespace response.
 // Rows without an "ns" key are malformed and skipped; a row whose "ns" is an
 // empty string is the root namespace and is kept. Always returns at least one

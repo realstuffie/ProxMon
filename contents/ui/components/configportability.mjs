@@ -32,6 +32,7 @@ const STRING_KEYS = {
     "apiTokenId": "",
     "trustedCertPem": "",
     "trustedCertPath": "",
+    "storageFilter": "",
     "pbsHost": "",
     "pbsDatastore": "",
     "pbsNamespace": "*",
@@ -49,6 +50,7 @@ const STRING_KEYS = {
 // Boolean keys -> default value.
 const BOOL_KEYS = {
     "ignoreSsl": false,
+    "storageEnabled": true,
     "pbsEnabled": false,
     "pbsIgnoreSsl": false,
     "multiHostSharedCert": true,
@@ -108,9 +110,9 @@ const ENTRY_STRING_KEYS = [
     "name", "host", "tokenId",
     "trustedCertPem", "trustedCertPath",
     "pbsHost", "pbsTokenId", "pbsTrustedCertPem", "pbsTrustedCertPath",
-    "pbsDatastore", "pbsNamespace"
+    "pbsDatastore", "pbsNamespace", "storageFilter"
 ]
-const ENTRY_BOOL_KEYS = ["enabled", "ignoreSsl", "pbsEnabled", "pbsIgnoreSsl"]
+const ENTRY_BOOL_KEYS = ["enabled", "ignoreSsl", "pbsEnabled", "pbsIgnoreSsl", "storageEnabled"]
 const ENTRY_INT_KEYS = {
     "port": [1, 65535],
     "pbsPort": [1, 65535],

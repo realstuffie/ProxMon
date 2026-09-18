@@ -317,6 +317,86 @@ void ProxmoxController::setMultiHostsJson(const QString &value) {
     refreshPBS();
 }
 
+namespace {
+QString storageErrorText(const QString &node, const QString &message) {
+    const QString detail = message.trimmed().isEmpty()
+        ? QStringLiteral("request failed") : message.trimmed();
+    return QStringLiteral("Storage usage unavailable%1: %2. Reading it needs Datastore.Audit. "
+                          "Turn off Storage Usage in settings to stop asking for it.")
+        .arg(node.isEmpty() ? QString() : QStringLiteral(" for %1").arg(node), detail);
+}
+} // namespace
+
+void ProxmoxController::setStorageEnabled(bool value) {
+    if (m_storageEnabled == value) return;
+    m_storageEnabled = value;
+    if (!m_storageEnabled) {
+        m_nodeStorage.clear();
+        setStorageError(QString());
+    }
+    emit storageEnabledChanged();
+}
+
+void ProxmoxController::setStorageError(const QString &value) {
+    if (m_storageError == value) return;
+    m_storageError = value;
+    emit storageLastErrorChanged();
+}
+
+int ProxmoxController::requestsPerNode(const QString &sessionKey) const {
+    const bool wantsStorage = sessionKey.isEmpty()
+        ? m_storageEnabled
+        : endpointBySession(sessionKey).value(QStringLiteral("storageEnabled"), true).toBool();
+    return wantsStorage ? 3 : 2;
+}
+
+void ProxmoxController::setStorageFilter(const QString &value) {
+    const QString clean = value.trimmed();
+    if (m_storageFilter == clean) return;
+    m_storageFilter = clean;
+    emit storageFilterChanged();
+}
+
+void ProxmoxController::resetStorageTally() {
+    m_storageReplies = 0;
+    m_storageRepliesWithRows = 0;
+    m_storageMatches = 0;
+}
+
+void ProxmoxController::reportStorageTally() {
+    // A failed request already set a message; it is the more specific one.
+    if (m_storageReplies == 0 || !m_storageError.isEmpty()) return;
+    setStorageError(ProxmoxDataUtils::storageTallyMessage(
+        m_storageReplies, m_storageRepliesWithRows, m_storageMatches));
+}
+
+void ProxmoxController::storeNodeStorage(const QString &sessionKey, const QString &node, const QVariant &data) {
+    if (node.isEmpty()) return;
+    m_storageReplies += 1;
+    if (!data.toMap().value(QStringLiteral("data")).toList().isEmpty()) {
+        m_storageRepliesWithRows += 1;
+    }
+    const QString filter = sessionKey.isEmpty()
+        ? m_storageFilter
+        : endpointBySession(sessionKey).value(QStringLiteral("storageFilter")).toString();
+    const QVariantMap summary = ProxmoxDataUtils::summarizeNodeStorage(
+        data, ProxmoxDataUtils::parseStorageFilter(filter));
+    const QString key = sessionKey + QLatin1Char('|') + node;
+    if (summary.isEmpty()) {
+        m_nodeStorage.remove(key);
+    } else {
+        m_storageMatches += 1;
+        m_nodeStorage.insert(key, summary);
+    }
+}
+
+void ProxmoxController::applyNodeStorage(QVariantMap &row, const QString &sessionKey, const QString &node) const {
+    const QVariantMap summary = m_nodeStorage.value(sessionKey + QLatin1Char('|') + node);
+    for (auto it = summary.constBegin(); it != summary.constEnd(); ++it) {
+        row.insert(it.key(), it.value());
+    }
+}
+
 void ProxmoxController::setPbsEnabled(bool value) {
     if (m_pbsEnabled == value) return;
     m_pbsEnabled = value;
@@ -548,6 +628,7 @@ void ProxmoxController::publishSingleHostModels() {
         // tst_variantlistmodel objectPointerValues_compareByIdentity.
         row.insert(QStringLiteral("vmsModel"), QVariant::fromValue<QObject *>(vmModel));
         row.insert(QStringLiteral("lxcsModel"), QVariant::fromValue<QObject *>(lxcModel));
+        applyNodeStorage(row, QString(), nodeName);
         nodeRows.push_back(row);
     }
 
@@ -663,6 +744,7 @@ void ProxmoxController::publishMultiHostModels() {
             nodeRow.insert(QStringLiteral("sessionKey"), sessionKey);
             nodeRow.insert(QStringLiteral("vmsModel"), QVariant::fromValue<QObject *>(vmModel));
             nodeRow.insert(QStringLiteral("lxcsModel"), QVariant::fromValue<QObject *>(lxcModel));
+            applyNodeStorage(nodeRow, sessionKey, nodeName);
             nodeRows.push_back(nodeRow);
         }
         nodesModel->applyItems(nodeRows);
@@ -885,6 +967,8 @@ void ProxmoxController::fetchData(bool userInitiated) {
     m_pendingNodeRequests = 0;
     m_tempVmData.clear();
     m_tempLxcData.clear();
+    resetStorageTally();
+    setStorageError(QString());
     setErrorMessage(QString());
     setPartialFailure(false);
     resetMultiTempData();
@@ -1420,6 +1504,8 @@ void ProxmoxController::readNextMultiSecret() {
                 endpoint.insert(QStringLiteral("port"), item.value(QStringLiteral("port")));
                 endpoint.insert(QStringLiteral("tokenId"), item.value(QStringLiteral("tokenId")));
                 endpoint.insert(QStringLiteral("ignoreSsl"), item.value(QStringLiteral("ignoreSsl")));
+                endpoint.insert(QStringLiteral("storageEnabled"), item.value(QStringLiteral("storageEnabled"), true));
+                endpoint.insert(QStringLiteral("storageFilter"), item.value(QStringLiteral("storageFilter")));
                 endpoint.insert(QStringLiteral("pbsEnabled"), item.value(QStringLiteral("pbsEnabled")));
                 endpoint.insert(QStringLiteral("pbsHost"), item.value(QStringLiteral("pbsHost")));
                 endpoint.insert(QStringLiteral("pbsDatastore"), item.value(QStringLiteral("pbsDatastore")));
@@ -1531,7 +1617,7 @@ void ProxmoxController::dispatchSingleNodeChildrenWithSecret(const QVariantList 
     if (secret.isEmpty()) {
         setErrorMessage(QStringLiteral("credentials unavailable"));
         setPartialFailure(true);
-        m_pendingNodeRequests -= nodeNames.size() * 2;
+        m_pendingNodeRequests -= nodeNames.size() * requestsPerNode(QString());
         if (m_pendingNodeRequests < 0) m_pendingNodeRequests = 0;
         checkRequestsComplete();
         return;
@@ -1545,6 +1631,11 @@ void ProxmoxController::dispatchSingleNodeChildrenWithSecret(const QVariantList 
         m_api->requestLxcFor(QString(), m_host, m_port, m_tokenId, secret,
                              m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
                              nodeName, m_refreshSeq);
+        if (m_storageEnabled) {
+            m_api->requestStorageFor(QString(), m_host, m_port, m_tokenId, secret,
+                                     m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
+                                     nodeName, m_refreshSeq);
+        }
     }
 }
 
@@ -1885,7 +1976,7 @@ void ProxmoxController::dispatchMultiNodeChildrenWithSecret(const QString &sessi
         bucket.insert(QStringLiteral("error"), QStringLiteral("endpoint credentials unavailable"));
         bucket.insert(QStringLiteral("offline"), false);
         m_tempEndpointsData.insert(sessionKey, bucket);
-        m_pendingNodeRequests -= nodeNames.size() * 2;
+        m_pendingNodeRequests -= nodeNames.size() * requestsPerNode(sessionKey);
         if (m_pendingNodeRequests < 0) m_pendingNodeRequests = 0;
         checkMultiRequestsComplete();
         return;
@@ -1913,6 +2004,17 @@ void ProxmoxController::dispatchMultiNodeChildrenWithSecret(const QString &sessi
                              endpoint.value(QStringLiteral("trustedCertPath")).toString(),
                              nodeName,
                              m_refreshSeq);
+        if (endpoint.value(QStringLiteral("storageEnabled"), true).toBool())
+        m_api->requestStorageFor(sessionKey,
+                                 endpoint.value(QStringLiteral("host")).toString(),
+                                 endpoint.value(QStringLiteral("port"), ProxmoxConst::Defaults::PvePort).toInt(),
+                                 endpoint.value(QStringLiteral("tokenId")).toString(),
+                                 secret,
+                                 endpoint.value(QStringLiteral("ignoreSsl")).toBool(),
+                                 endpoint.value(QStringLiteral("trustedCertPem")).toString().toUtf8(),
+                                 endpoint.value(QStringLiteral("trustedCertPath")).toString(),
+                                 nodeName,
+                                 m_refreshSeq);
     }
 }
 
@@ -2007,7 +2109,7 @@ void ProxmoxController::handleSingleReply(int seq, const QString &kind, const QS
             });
             m_tempVmData.clear();
             m_tempLxcData.clear();
-            m_pendingNodeRequests = m_nodeList.size() * 2;
+            m_pendingNodeRequests = m_nodeList.size() * requestsPerNode(QString());
             readSingleSecretFor({
                 {QStringLiteral("kind"), ProxmoxConst::Kind::Children},
                 {QStringLiteral("nodeNames"), m_nodeList},
@@ -2040,6 +2142,13 @@ void ProxmoxController::handleSingleReply(int seq, const QString &kind, const QS
         });
         m_pendingNodeRequests -= 1;
         checkRequestsComplete();
+        return;
+    }
+
+    if (kind == ProxmoxConst::Kind::Storage) {
+        storeNodeStorage(QString(), node, data);
+        m_pendingNodeRequests -= 1;
+        checkRequestsComplete();
     }
 }
 
@@ -2057,6 +2166,17 @@ void ProxmoxController::handleSingleError(int seq, const QString &kind, const QS
         return;
     }
 
+    if (kind == ProxmoxConst::Kind::Storage) {
+        // Auxiliary data, and the first thing a read-only token may lack.
+        // Drop the node's bar and carry on without a partial-failure badge.
+        m_nodeStorage.remove(QLatin1Char('|') + node);
+        setStorageError(storageErrorText(node, message));
+        m_pendingNodeRequests -= 1;
+        if (m_pendingNodeRequests < 0) m_pendingNodeRequests = 0;
+        checkRequestsComplete();
+        return;
+    }
+
     setPartialFailure(true);
     m_pendingNodeRequests -= 1;
     if (m_pendingNodeRequests < 0) m_pendingNodeRequests = 0;
@@ -2065,6 +2185,7 @@ void ProxmoxController::handleSingleError(int seq, const QString &kind, const QS
 
 void ProxmoxController::checkRequestsComplete() {
     if (m_pendingNodeRequests > 0) return;
+    reportStorageTally();
     appendDebugLog(QStringLiteral("[ProxmoxController] checkRequestsComplete nodes=%1 vms=%2 lxcs=%3")
         .arg(QString::number(m_nodeList.size()), QString::number(m_tempVmData.size()), QString::number(m_tempLxcData.size())));
     setDisplayedProxmoxData(m_proxmoxData);
@@ -2108,7 +2229,7 @@ void ProxmoxController::handleMultiReply(int seq, const QString &sessionKey, con
             checkMultiRequestsComplete();
             return;
         }
-        m_pendingNodeRequests += nodeNames.size() * 2;
+        m_pendingNodeRequests += nodeNames.size() * requestsPerNode(sessionKey);
         readMultiSecretFor({
             {QStringLiteral("kind"), ProxmoxConst::Kind::Children},
             {QStringLiteral("sessionKey"), sessionKey},
@@ -2136,11 +2257,27 @@ void ProxmoxController::handleMultiReply(int seq, const QString &sessionKey, con
         m_tempEndpointsData.insert(sessionKey, bucket);
         m_pendingNodeRequests -= 1;
         checkMultiRequestsComplete();
+        return;
+    }
+
+    if (kind == ProxmoxConst::Kind::Storage) {
+        storeNodeStorage(sessionKey, node, data);
+        m_pendingNodeRequests -= 1;
+        checkMultiRequestsComplete();
     }
 }
 
 void ProxmoxController::handleMultiError(int seq, const QString &sessionKey, const QString &kind, const QString &node, const QString &message) {
     if (seq != m_refreshSeq || m_connectionMode != QStringLiteral("multiHost")) return;
+    if (kind == ProxmoxConst::Kind::Storage) {
+        // See handleSingleError: storage is optional, so it stays quiet.
+        m_nodeStorage.remove(sessionKey + QLatin1Char('|') + node);
+        setStorageError(storageErrorText(node, message));
+        m_pendingNodeRequests -= 1;
+        if (m_pendingNodeRequests < 0) m_pendingNodeRequests = 0;
+        checkMultiRequestsComplete();
+        return;
+    }
     setErrorMessage(message.isEmpty() ? QStringLiteral("Connection failed") : message);
     setPartialFailure(true);
     appendDebugLog(QStringLiteral("[ProxmoxController] multi error session=%1 kind=%2 message=%3")
@@ -2175,6 +2312,7 @@ void ProxmoxController::handleMultiError(int seq, const QString &sessionKey, con
 
 void ProxmoxController::checkMultiRequestsComplete() {
     if (m_pendingNodeRequests > 0) return;
+    reportStorageTally();
     setDisplayedEndpoints(bucketsToArray(m_tempEndpointsData));
     appendDebugLog(QStringLiteral("[ProxmoxController] checkMultiRequestsComplete endpoints=%1").arg(QString::number(m_displayedEndpoints.size())));
 

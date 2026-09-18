@@ -33,6 +33,7 @@ Rectangle {
     property color uiStoppedColor: Kirigami.Theme.disabledTextColor
     property color uiCpuColor: "#5cb3fa"
     property color uiMemColor: "#f5a742"
+    property color uiDiskColor: "#9d8cf5"
 
     property var safeCpuPercent: null
     property var anonymizeNodeName: null
@@ -57,7 +58,25 @@ Rectangle {
         return isFinite(v) && v > 0 ? v : 0
     }
     readonly property real memFraction: card.memTotal > 0
-        ? Math.min(1, card.memUsed / card.memTotal) : 0
+    ? Math.min(1, card.memUsed / card.memTotal) : 0
+
+    // Storage fields are absent when the node has no usable store, or when
+    // the token cannot read /nodes/<node>/storage. The column hides itself
+    // rather than drawing an empty bar.
+    readonly property string storageName: card.nodeModel && card.nodeModel.storageName
+    ? card.nodeModel.storageName : ""
+    readonly property real storageFraction: {
+        if (!card.nodeModel) return 0
+        const v = Number(card.nodeModel.storageFraction)
+        return isFinite(v) && v > 0 ? Math.min(1, v) : 0
+    }
+    readonly property bool hasStorage: card.storageName !== ""
+    // One row per monitored store when stores are named in settings,
+    // otherwise a single row for the fullest one.
+    readonly property var storageBars: card.nodeModel && card.nodeModel.storageBars
+    ? card.nodeModel.storageBars : []
+    readonly property string storageDetail: card.nodeModel && card.nodeModel.storageDetail
+    ? card.nodeModel.storageDetail : ""
 
     function loadColorFor(fraction) {
         if (fraction >= 0.90) return Kirigami.Theme.negativeTextColor
@@ -66,14 +85,15 @@ Rectangle {
     }
 
     Layout.fillWidth: true
-    Layout.preferredHeight: 64
+    // Content drives the height so extra storage rows reflow the card.
+    Layout.preferredHeight: Math.max(64, cardContent.implicitHeight + cardContent.anchors.margins * 2)
     radius: uiRadiusL
     color: Qt.rgba(uiNodeColor.r, uiNodeColor.g, uiNodeColor.b,
-                   uiNodeCardOpacity * uiWindowOpacity)
+    uiNodeCardOpacity * uiWindowOpacity)
     border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r,
-                          Kirigami.Theme.disabledTextColor.g,
-                          Kirigami.Theme.disabledTextColor.b,
-                          cardHover.hovered ? card.uiBorderOpacity * 1.4 : card.uiBorderOpacity * 0.65)
+    Kirigami.Theme.disabledTextColor.g,
+    Kirigami.Theme.disabledTextColor.b,
+    cardHover.hovered ? card.uiBorderOpacity * 1.4 : card.uiBorderOpacity * 0.65)
     border.width: 1
 
     Behavior on border.color {
@@ -90,6 +110,7 @@ Rectangle {
     }
 
     ColumnLayout {
+        id: cardContent
         anchors.fill: parent
         anchors.margins: 9
         spacing: 6
@@ -113,8 +134,8 @@ Rectangle {
 
             PlasmaComponents.Label {
                 text: card.anonymizeNodeName
-                    ? card.anonymizeNodeName(card.nodeName, card.nodeIndex)
-                    : card.nodeName
+                ? card.anonymizeNodeName(card.nodeName, card.nodeIndex)
+                : card.nodeName
                 font.bold: true
                 Layout.fillWidth: true
                 elide: Text.ElideRight
@@ -135,7 +156,7 @@ Rectangle {
 
                 PlasmaComponents.Label {
                     text: (card.vmsModel ? card.vmsModel.runningCount : 0)
-                        + "/" + (card.vmsModel ? card.vmsModel.count : 0)
+                    + "/" + (card.vmsModel ? card.vmsModel.count : 0)
                     font.pixelSize: 10
                     font.family: "JetBrains Mono"
                     opacity: 0.7
@@ -152,7 +173,7 @@ Rectangle {
 
                 PlasmaComponents.Label {
                     text: (card.lxcsModel ? card.lxcsModel.runningCount : 0)
-                        + "/" + (card.lxcsModel ? card.lxcsModel.count : 0)
+                    + "/" + (card.lxcsModel ? card.lxcsModel.count : 0)
                     font.pixelSize: 10
                     font.family: "JetBrains Mono"
                     opacity: 0.7
@@ -172,9 +193,9 @@ Rectangle {
 
                 PlasmaComponents.Label {
                     text: card.nodeModel
-                        ? (Math.floor(card.nodeModel.uptime / 86400) + "d "
-                           + Math.floor((card.nodeModel.uptime % 86400) / 3600) + "h")
-                        : ""
+                    ? (Math.floor(card.nodeModel.uptime / 86400) + "d "
+                    + Math.floor((card.nodeModel.uptime % 86400) / 3600) + "h")
+                    : ""
                     font.pixelSize: 10
                     font.family: "JetBrains Mono"
                 }
@@ -207,6 +228,8 @@ Rectangle {
             }
         }
 
+        // Two columns: CPU over memory on the left, the storage bars on the
+        // right, so a node with several stores grows downwards, not sideways.
         RowLayout {
             Layout.fillWidth: true
             spacing: 16
@@ -214,74 +237,143 @@ Rectangle {
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
+                Layout.alignment: Qt.AlignTop
                 spacing: 5
 
-                RowLayout {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    spacing: 4
+                    spacing: 5
 
-                    PlasmaComponents.Label {
-                        text: "CPU"
-                        font.pixelSize: 9
-                        opacity: 0.6
-                    }
-
-                    PlasmaComponents.Label {
-                        text: card.nodeModel && card.safeCpuPercent
-                            ? card.safeCpuPercent(card.nodeModel.cpu).toFixed(1) + "%" : "–"
+                    RowLayout {
                         Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignLeft
-                        font.pixelSize: 10
-                        font.family: "JetBrains Mono"
+                        spacing: 4
+
+                        PlasmaComponents.Label {
+                            text: "CPU"
+                            font.pixelSize: 9
+                            opacity: 0.6
+                        }
+
+                        PlasmaComponents.Label {
+                            text: card.nodeModel && card.safeCpuPercent
+                            ? card.safeCpuPercent(card.nodeModel.cpu).toFixed(1) + "%" : "–"
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignLeft
+                            font.pixelSize: 10
+                            font.family: "JetBrains Mono"
+                        }
+                    }
+
+                    UsageMeter {
+                        Layout.fillWidth: true
+                        implicitHeight: 3
+                        value: card.cpuFraction
+                        barColor: card.loadColorFor(card.cpuFraction)
+                        trackOpacity: 0.10
                     }
                 }
 
-                UsageMeter {
+                ColumnLayout {
+                    id: memColumn
                     Layout.fillWidth: true
-                    implicitHeight: 3
-                    value: card.cpuFraction
-                    barColor: card.loadColorFor(card.cpuFraction)
-                    trackOpacity: 0.10
+                    Layout.preferredWidth: 1
+                    spacing: 5
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+
+                        PlasmaComponents.Label {
+                            text: "MEM"
+                            font.pixelSize: 9
+                            opacity: 0.6
+                        }
+
+                        PlasmaComponents.Label {
+                            text: card.memTotal > 0
+                            ? (card.memUsed / card.bytesPerGiB).toFixed(1) + " / "
+                            + (card.memTotal / card.bytesPerGiB).toFixed(1) + "G"
+                            : "–"
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignLeft
+                            font.pixelSize: 10
+                            font.family: "JetBrains Mono"
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    UsageMeter {
+                        Layout.fillWidth: true
+                        implicitHeight: 3
+                        value: card.memFraction
+                        barColor: card.memFraction >= 0.90
+                        ? Kirigami.Theme.negativeTextColor
+                        : (card.memFraction >= 0.75 ? Kirigami.Theme.neutralTextColor : card.uiMemColor)
+                        trackOpacity: 0.10
+                    }
                 }
+
             }
 
             ColumnLayout {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
+                Layout.alignment: Qt.AlignTop
                 spacing: 5
+                visible: card.hasStorage
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 4
+                Repeater {
+                    model: card.storageBars
 
-                    PlasmaComponents.Label {
-                        text: "MEM"
-                        font.pixelSize: 9
-                        opacity: 0.6
-                    }
+                    ColumnLayout {
+                        id: storageRow
+                        required property int index
+                        required property var modelData
+                        readonly property real fraction: {
+                            const v = Number(storageRow.modelData.fraction)
+                            return isFinite(v) && v > 0 ? Math.min(1, v) : 0
+                        }
 
-                    PlasmaComponents.Label {
-                        text: card.memTotal > 0
-                            ? (card.memUsed / card.bytesPerGiB).toFixed(1) + " / "
-                              + (card.memTotal / card.bytesPerGiB).toFixed(1) + "G"
-                            : "–"
                         Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignLeft
-                        font.pixelSize: 10
-                        font.family: "JetBrains Mono"
-                        elide: Text.ElideRight
+                        spacing: 5
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+
+                            PlasmaComponents.Label {
+                                // The label belongs to the column, not the row.
+                                text: storageRow.index === 0 ? "DISK" : ""
+                                font.pixelSize: 9
+                                opacity: 0.6
+                            }
+
+                            PlasmaComponents.Label {
+                                text: storageRow.modelData.name + " "
+                                + Math.round(storageRow.fraction * 100) + "%"
+                                Layout.fillWidth: true
+                                horizontalAlignment: Text.AlignLeft
+                                font.pixelSize: 10
+                                font.family: "JetBrains Mono"
+                                elide: Text.ElideRight
+                            }
+                        }
+
+                        UsageMeter {
+                            Layout.fillWidth: true
+                            implicitHeight: 3
+                            value: storageRow.fraction
+                            barColor: storageRow.fraction >= 0.90
+                            ? Kirigami.Theme.negativeTextColor
+                            : (storageRow.fraction >= 0.75 ? Kirigami.Theme.neutralTextColor : card.uiDiskColor)
+                            trackOpacity: 0.10
+                        }
                     }
                 }
 
-                UsageMeter {
-                    Layout.fillWidth: true
-                    implicitHeight: 3
-                    value: card.memFraction
-                    barColor: card.memFraction >= 0.90
-                        ? Kirigami.Theme.negativeTextColor
-                        : (card.memFraction >= 0.75 ? Kirigami.Theme.neutralTextColor : card.uiMemColor)
-                    trackOpacity: 0.10
-                }
+                HoverHandler { id: storageHover }
+                PlasmaComponents.ToolTip.visible: storageHover.hovered && card.storageDetail !== ""
+                PlasmaComponents.ToolTip.text: card.storageDetail
             }
         }
     }

@@ -43,6 +43,19 @@ public:
                                     const QString &trustedCertPath,
                                     const QString &node,
                                     int seq);
+    // Per-node storage usage. Auxiliary data: a token without Datastore.Audit
+    // fails this request only, and the panel keeps working without it.
+    void requestStorageFor(const QString &sessionKey,
+                           const QString &host,
+                           int port,
+                           const QString &tokenId,
+                           const QString &tokenSecret,
+                           bool ignoreSslErrors,
+                           const QByteArray &trustedCertPem,
+                           const QString &trustedCertPath,
+                           const QString &node,
+                           int seq);
+
     void requestLxcFor(const QString &sessionKey,
                                    const QString &host,
                                    int port,

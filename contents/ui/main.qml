@@ -88,6 +88,8 @@ PlasmoidItem {
         trustedCertPath: root.trustedCertPath
         multiHostsJson: root.multiHostsJson
         multiHostSharedCert: root.multiHostSharedCert
+        storageEnabled: root.storageEnabled
+        storageFilter: root.storageFilter
         pbsEnabled: root.pbsEnabled
         pbsDatastore: root.pbsDatastore
         pbsNamespace: root.pbsNamespace
@@ -151,6 +153,9 @@ PlasmoidItem {
     property int refreshInterval: (Plasmoid.configuration.refreshInterval || 30) * 1000
     property bool ignoreSsl: Plasmoid.configuration.ignoreSsl === true
     property bool lowLatency: Plasmoid.configuration.lowLatency === true
+    property bool storageEnabled: Plasmoid.configuration.storageEnabled !== false
+    property string storageFilter: Plasmoid.configuration.storageFilter || ""
+    property string storageError: ""
     property bool pbsEnabled: Plasmoid.configuration.pbsEnabled === true
     property string pbsHost: Plasmoid.configuration.pbsHost || ""
     property int pbsPort: Math.max(1, Plasmoid.configuration.pbsPort || 8007)
@@ -1178,6 +1183,9 @@ PlasmoidItem {
         function onPbsLastErrorChanged() {
             root.pbsError = controller.pbsLastError
         }
+        function onStorageLastErrorChanged() {
+            root.storageError = controller.storageLastError
+        }
         function onActionReply(sessionKey, actionKind, node, vmid, action, data) {
             root.setActionBusy(node, actionKind, vmid, false, sessionKey)
         }
@@ -1825,6 +1833,7 @@ PlasmoidItem {
             actionPermHintShown: root.actionPermHintShown
             actionPermHint: root.actionPermHint
             pbsError: root.pbsError
+            storageError: root.storageError
             onRetry: function() { root.fetchData(true) }
         }
 

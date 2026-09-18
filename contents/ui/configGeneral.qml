@@ -26,6 +26,10 @@ KCM.SimpleKCM {
     property alias cfg_proxmoxPort: singleHostSection.portValue
     property alias cfg_apiTokenId: singleHostSection.tokenIdText
     property string cfg_apiTokenSecret: ""
+    property alias cfg_storageEnabled: singleHostSection.storageEnabled
+    property bool cfg_storageEnabledDefault: true
+    property alias cfg_storageFilter: singleHostSection.storageFilter
+    property string cfg_storageFilterDefault: ""
     property alias cfg_pbsEnabled: singleHostSection.pbsEnabled
     property alias cfg_pbsDatastore: singleHostSection.pbsDatastore
     property alias cfg_pbsNamespace: singleHostSection.pbsNamespace
@@ -269,6 +273,8 @@ KCM.SimpleKCM {
             "trustedCertPath": cfg_trustedCertPath,
             "refreshInterval": cfg_refreshInterval,
             "ignoreSsl": cfg_ignoreSsl,
+            "storageEnabled": cfg_storageEnabled,
+            "storageFilter": cfg_storageFilter,
             "pbsEnabled": cfg_pbsEnabled,
             "pbsHost": cfg_pbsHost,
             "pbsDatastore": cfg_pbsDatastore,
