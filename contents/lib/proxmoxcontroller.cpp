@@ -2004,7 +2004,7 @@ void ProxmoxController::dispatchMultiNodeChildrenWithSecret(const QString &sessi
                              endpoint.value(QStringLiteral("trustedCertPath")).toString(),
                              nodeName,
                              m_refreshSeq);
-        if (endpoint.value(QStringLiteral("storageEnabled"), true).toBool())
+        if (!endpoint.value(QStringLiteral("storageEnabled"), true).toBool()) continue;
         m_api->requestStorageFor(sessionKey,
                                  endpoint.value(QStringLiteral("host")).toString(),
                                  endpoint.value(QStringLiteral("port"), ProxmoxConst::Defaults::PvePort).toInt(),

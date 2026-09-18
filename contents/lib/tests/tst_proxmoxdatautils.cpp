@@ -533,7 +533,7 @@ void ProxmoxDataUtilsTest::nodeStorageSummaryPicksFullestUsableStore() {
 
     const QVariantMap all = summarizeNodeStorage(response, {});
     QCOMPARE(all.value("storageName").toString(), QStringLiteral("ceph"));
-    QCOMPARE(all.value("storageFraction").toDouble(), 0.8);
+    QVERIFY(qFuzzyCompare(all.value("storageFraction").toDouble(), 0.8));
     QCOMPARE(all.value("storageUsed").toLongLong(), 80);
     QCOMPARE(all.value("storageCount").toInt(), 2); // local, archive, offline-nfs and empty are out
     QCOMPARE(all.value("storageDetail").toString(), QStringLiteral("ceph 80%, local-zfs 50%"));
@@ -548,7 +548,7 @@ void ProxmoxDataUtilsTest::nodeStorageSummaryPicksFullestUsableStore() {
     QCOMPARE(bars.size(), 2);
     QCOMPARE(bars.at(0).toMap().value("name").toString(), QStringLiteral("local"));
     QCOMPARE(bars.at(1).toMap().value("name").toString(), QStringLiteral("local-zfs"));
-    QCOMPARE(bars.at(1).toMap().value("fraction").toDouble(), 0.5);
+    QVERIFY(qFuzzyCompare(bars.at(1).toMap().value("fraction").toDouble(), 0.5));
 
     // A disabled store stays hidden even when named, and an unknown name
     // yields no bar rather than a wrong one.
@@ -562,7 +562,7 @@ void ProxmoxDataUtilsTest::nodeStorageSummaryPicksFullestUsableStore() {
         QVariantMap{{"storage", "bare"}, {"content", "rootfs"}, {"used", 10}, {"total", 40}},
     }}};
     QCOMPARE(summarizeNodeStorage(bare, {}).value("storageName").toString(), QStringLiteral("bare"));
-    QCOMPARE(summarizeNodeStorage(bare, {}).value("storageFraction").toDouble(), 0.25);
+    QVERIFY(qFuzzyCompare(summarizeNodeStorage(bare, {}).value("storageFraction").toDouble(), 0.25));
 }
 
 void ProxmoxDataUtilsTest::storageTallyExplainsEmptyReplies() {
