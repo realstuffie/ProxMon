@@ -74,6 +74,7 @@
 | **VNC console** | GPU-accelerated in-widget VNC sessions with full keyboard, mouse, and scroll input |
 | **LXC terminal** | Native terminal emulator for containers with automatic resize |
 | **PBS backup status** | Inline backup results per VM/CT with configurable warning and stale thresholds |
+| **Storage usage** | Per-node disk bars, the fullest store by default or the ones you name |
 | **Multi-host** | Monitor up to 5 Proxmox endpoints simultaneously |
 | **Power commands** | Start, stop, and restart VMs and containers |
 | **Desktop notifications** | State-change alerts with rate limiting and filters |
@@ -138,6 +139,14 @@ bash install.sh --no-deps
 |--------------|--------|----------------------------------|
 | `VM.Console` | `/vms` | VNC console for VMs, TTY for LXCs |
 
+**Storage usage**
+
+| Permission        | Path        | Purpose                                  |
+|-------------------|-------------|------------------------------------------|
+| `Datastore.Audit` | `/storage`  | Read each node's storage usage (optional) |
+
+> **Note:** `Datastore.Audit` is part of `PVEAuditor`, so a token with that role already has it. Proxmox returns an empty list instead of an error when the permission is missing, so ProxMon says which permission to grant. Turn off **Storage Usage** in settings if you would rather not grant it.
+
 **Stats panel (guest IP)**
 
 | Permission          | Path   | Purpose                                         |
@@ -184,6 +193,7 @@ ProxMon keeps backup sources separate by datastore and namespace. If multiple so
 Right-click the widget → **Configure Proxmox Monitor**.
 
 - **Connection.** Host, Port, Token ID (`user@realm!tokenname`), Token Secret, SSL verification, trusted cert PEM or file path, refresh interval. Click **Update Keyring** after changing the secret.
+- **Storage usage.** **Storage Usage** turns the node card's disk bars on or off, per endpoint. **Storage Monitored** takes storage names separated by commas, and each name gets its own bar. Leave it empty and ProxMon tracks the fullest store holding guest disks, meaning content `images` or `rootfs`. Bars turn amber at 75% and red at 90%. The tooltip lists every monitored store.
 - **Behavior.** Sorting, compact panel label mode (Avg CPU, running workloads, error state, last update), notifications, rate limiting, privacy (redact token fragments in notifications).
 - **Appearance.** Custom running/stopped/node colors, per-color hex or RGB input, card tint opacity, window opacity, live preview with one-click theme defaults.
 
