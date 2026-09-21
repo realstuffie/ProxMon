@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- feat(ui): node cards put the CPU and memory meters side by side when no storage is configured, instead of stacking them
+
 ## v0.8.5
 
 - feat(ui): node cards show a disk bar next to CPU and memory. By default it tracks the fullest store that holds guest disks. Name stores per endpoint and each one gets its own bar. Storage Usage is on by default and can be turned off. A token that cannot read storage gets a message saying which permission is missing

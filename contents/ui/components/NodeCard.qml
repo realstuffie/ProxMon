@@ -228,20 +228,25 @@ Rectangle {
             }
         }
 
-        // Two columns: CPU over memory on the left, the storage bars on the
-        // right, so a node with several stores grows downwards, not sideways.
+        // CPU and memory on the left, storage bars on the right. The meters
+        // stack so a node with several stores grows downwards, not sideways.
+        // With no storage the right column is hidden and the two meters sit
+        // side by side instead, one row shorter.
         RowLayout {
             Layout.fillWidth: true
             spacing: 16
 
-            ColumnLayout {
+            GridLayout {
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
                 Layout.alignment: Qt.AlignTop
-                spacing: 5
+                columns: card.hasStorage ? 1 : 2
+                rowSpacing: 5
+                columnSpacing: 16
 
                 ColumnLayout {
                     Layout.fillWidth: true
+                    Layout.preferredWidth: 1
                     spacing: 5
 
                     RowLayout {
