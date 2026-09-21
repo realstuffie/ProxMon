@@ -9,7 +9,11 @@ jobs:
       - run: shellcheck install.sh uninstall.sh check-and-rebuild.sh
 
   build:
-    runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-26.04, fedora-44]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
         with:
