@@ -9,6 +9,7 @@ import org.kde.plasma.plasma5support as Plasma5Support
 import org.kde.plasma.core as PlasmaCore
 import "components"
 import "components/configportability.mjs" as ConfigPortability
+import "components/refreshdebounce.mjs" as RefreshDebounce
 // qmllint disable unused-imports
 import "../lib/proxmox" as ProxMon
 // qmllint enable unused-imports
@@ -324,6 +325,23 @@ PlasmoidItem {
         return hasCoreConfig && controller.refreshResolvingSecrets
     }
     property bool defaultsLoaded: false
+    // Refresh scheduling state.
+    //
+    // Creating the component evaluates every config binding, and each one
+    // reports its property as changed. Those are not edits, they are the values
+    // arriving for the first time, and acting on them cancels in-flight
+    // requests once per key. They all fire before Component.onCompleted, which
+    // is where configSettled flips, so ignoring changes until then drops that
+    // pass and nothing else. The first refresh does not come from them:
+    // Component.onCompleted resolves the secret and the refresh timer runs on
+    // start. The count is kept only to report the size of the pass in the log.
+    property bool configSettled: false
+    property int ignoredStartupConfigChanges: 0
+
+    // Wall-clock of the last arming of configRefreshDebounce, and of the last
+    // refresh the widget actually started. Compared in configRefreshDebounce.
+    property double configRefreshArmedAt: 0
+    property double lastRefreshStartedAt: 0
     property bool devMode: false
     readonly property bool debugLogToJournal: false
     property int footerClickCount: 0
@@ -1098,12 +1116,27 @@ PlasmoidItem {
         interval: 600
         repeat: false
         onTriggered: {
+            // Reasoning lives in refreshdebounce.mjs, next to the rule itself.
+            if (RefreshDebounce.shouldSkipConfigRefresh(root.lastRefreshStartedAt,
+                                                        root.configRefreshArmedAt)) {
+                root.logDebug("configRefreshDebounce: refresh already running with this config, skipping")
+                return
+            }
             root.logDebug("configRefreshDebounce: triggering refresh after config change")
             root.fetchData(true)
         }
     }
 
+    function armConfigRefreshDebounce() {
+        configRefreshArmedAt = Date.now()
+        configRefreshDebounce.restart()
+    }
+
     function triggerRefreshFromConfigChange(reason) {
+        if (!configSettled) {
+            ignoredStartupConfigChanges += 1
+            return
+        }
         logDebug("config change: " + (reason || "unknown"))
         // Cancel in-flight requests and retry timers so we restart cleanly.
         controller.cancelRefresh()
@@ -1125,20 +1158,21 @@ PlasmoidItem {
         // On mode/config swaps we may temporarily be unconfigured until the target config lands, so keep
         // the pending refresh armed and let secret/config handlers trigger the eventual fetch.
         if (!configured && !controllerPendingResolvedRefresh) return
-        configRefreshDebounce.restart()
+        armConfigRefreshDebounce()
     }
 
     function refreshAfterSecretReady() {
         if (!controllerPendingResolvedRefresh) return
         controllerPendingResolvedRefresh = false
         if (!configured || loading || isRefreshing) return
-        configRefreshDebounce.restart()
+        armConfigRefreshDebounce()
     }
 
     // userInitiated retries a failed keyring read immediately; the refresh
     // timer leaves that to the controller's wallet-unlock/backoff retry.
     function fetchData(userInitiated) {
         errorMessage = ""
+        lastRefreshStartedAt = Date.now()
         controller.fetchData(userInitiated === true)
     }
 
@@ -1421,6 +1455,15 @@ PlasmoidItem {
     onCompactModeChanged: triggerRefreshFromConfigChange("compactMode")
 
     Component.onCompleted: {
+        // Set before anything else here, so that the only changes suppressed
+        // are the binding pass's, which has already run. Writes made below, and
+        // the ones loadDefaults makes when it answers, count as real edits.
+        if (ignoredStartupConfigChanges > 0) {
+            logDebug("Component.onCompleted: ignored " + ignoredStartupConfigChanges
+                     + " config-change events from the initial binding pass")
+        }
+        configSettled = true
+
         migratePbsTokenSecretBuffer()
 
         logDebug("Component.onCompleted: Plasmoid initialized")

@@ -17,13 +17,15 @@ jobs:
       - run: cmake -S contents/lib -B build -DCMAKE_BUILD_TYPE=Release -DPROXMON_BUILD_TESTS=ON
       - run: cmake --build build -- -j$(nproc)
       - run: test -f build/libproxmoxclientplugin.so
-      # configportability is registered only if CMake located qmltestrunner.
-      # Without this check a missing runner drops the test silently.
-      - name: Verify the QML test is registered
+      # The QML tests are registered only if CMake located qmltestrunner.
+      # Without this check a missing runner drops them silently.
+      - name: Verify the QML tests are registered
         run: |
           ctest --test-dir build -N
-          ctest --test-dir build -N | grep -q configportability || {
-            echo "configportability is not registered: qmltestrunner missing from the CI image"
-            exit 1
-          }
+          for qml_test in configportability refreshdebounce; do
+            ctest --test-dir build -N | grep -q "$qml_test" || {
+              echo "$qml_test is not registered: qmltestrunner missing from the CI image"
+              exit 1
+            }
+          done
       - run: ctest --test-dir build --output-on-failure

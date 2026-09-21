@@ -198,8 +198,13 @@ if(QMLTESTRUNNER_EXECUTABLE)
         COMMAND ${QMLTESTRUNNER_EXECUTABLE} -input ${CMAKE_CURRENT_SOURCE_DIR}/tst_configportability.qml)
     set_tests_properties(configportability PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_test(NAME refreshdebounce
+        COMMAND ${QMLTESTRUNNER_EXECUTABLE} -input ${CMAKE_CURRENT_SOURCE_DIR}/tst_refreshdebounce.qml)
+    set_tests_properties(refreshdebounce PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
 else()
-    message(STATUS "qmltestrunner not found — skipping the configportability QML test")
+    message(STATUS "qmltestrunner not found — skipping the configportability and refreshdebounce QML tests")
 endif()
 
 qt_add_executable(tst_pbsrequesttally

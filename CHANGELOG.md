@@ -4,6 +4,9 @@
 
 - feat(ui): node cards put the CPU and memory meters side by side when no storage is configured, instead of stacking them
 - fix(pbs): stop a PBS refresh clearing the shared connection cache when it cancels its own requests. It was closing whichever node request was still in flight, leaving that request to hang until it timed out. On the first refresh after a plasmashell start that was usually the container list, so the panel showed a fraction of the real guests until the next refresh
+- fix(refresh): ignore the config-change events that creating the widget reports for every setting. They are the values arriving for the first time, not edits, and each one cancelled in-flight requests and queued a refresh nothing had asked for
+- fix(refresh): skip a queued config-change refresh when a refresh carrying that same config is already running, so a settings edit landing just before a refresh tick no longer cancels and redials it
+- fix(ui): clear the refreshing and loading flags when a refresh is cancelled. A cancel with no refresh behind it left the widget on its spinner until the next interval
 
 ## v0.8.5
 

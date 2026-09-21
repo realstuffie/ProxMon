@@ -995,6 +995,13 @@ void ProxmoxController::fetchData(bool userInitiated) {
 void ProxmoxController::cancelRefresh() {
     m_api->cancelRefreshRequests();
     m_pendingNodeRequests = 0;
+    // Nothing is in flight any more, so the flags have to say so. Leaving them
+    // set strands the widget on its spinner when no refresh follows the cancel,
+    // and silently disables every "skip while a refresh is running" guard that
+    // reads them. fetchData() sets them again in the same call, a few lines
+    // after it cancels, so a refresh that continues never sees the gap.
+    setIsRefreshing(false);
+    setLoading(false);
     // Explicit refreshes (manual, config change, retry timer fire) supersede
     // any pending auto-retry; a failed attempt re-arms via scheduleRetry().
     if (m_retryTimer) {
@@ -1783,8 +1790,6 @@ bool ProxmoxController::dispatchSingleActionWithSecret(const QString &kind,
     }
 
     cancelRefresh();
-    setIsRefreshing(false);
-    setLoading(false);
 
     m_api->requestActionFor(QString(),
                             m_host,
@@ -2032,8 +2037,6 @@ bool ProxmoxController::dispatchMultiActionWithSecret(const QString &sessionKey,
 
     cancelRefresh();
     resetMultiTempData();
-    setIsRefreshing(false);
-    setLoading(false);
 
     m_api->requestActionFor(sessionKey,
                             endpoint.value(QStringLiteral("host")).toString(),
