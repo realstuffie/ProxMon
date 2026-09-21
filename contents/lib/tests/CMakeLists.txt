@@ -231,3 +231,12 @@ add_test(NAME keyringfailure COMMAND tst_keyringfailure)
 set_tests_properties(keyringfailure PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/proxmon-test-bus;QTKEYCHAIN_BACKEND=kwallet6;QT_LOGGING_RULES=proxmon.keyring.warning=true")
+
+qt_add_executable(tst_cancelisolation tst_cancelisolation.cpp)
+target_include_directories(tst_cancelisolation PRIVATE ..)
+target_link_libraries(tst_cancelisolation PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::Network Qt6::Test)
+add_test(NAME cancelisolation COMMAND tst_cancelisolation)
+# Generates its own TLS certificate with openssl, so the fixture cannot expire.
+# The timeout covers that plus the deliberate 1.2s stall on the held reply.
+set_tests_properties(cancelisolation PROPERTIES TIMEOUT 60)

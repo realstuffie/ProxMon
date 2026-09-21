@@ -57,6 +57,16 @@ void ProxmoxClient::cancelAll() {
     }
 }
 
+// Both cancels abort only the replies they track. Neither may touch the
+// manager's connection pool. m_nam is shared by the PVE and PBS paths, so
+// clearConnectionCache() drops the pooled sockets of both.
+//
+// cancelPBS() used to call it. That closed whichever PVE request was still in
+// flight, and the request then hung until its transfer timeout and failed as
+// an HTTP 0. Only the first refresh after a plasmashell start could hit it,
+// because the PBS cycle and the node refresh run on intervals of 1800s and 30s
+// that coincide once, at startup. The request it took was the slowest one,
+// normally the container list.
 void ProxmoxClient::cancelRefreshRequests() {
     const auto replies = m_refreshInFlight.values();
     m_refreshInFlight.clear();
@@ -67,7 +77,6 @@ void ProxmoxClient::cancelRefreshRequests() {
 
 void ProxmoxClient::cancelPBS() {
     const auto pbsReplies = m_pbsInFlight.values();
-    m_nam.clearConnectionCache();
     m_pbsInFlight.clear();
     for (QNetworkReply *r : pbsReplies) {
         if (r) r->abort();

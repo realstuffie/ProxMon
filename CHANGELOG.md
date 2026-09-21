@@ -3,6 +3,7 @@
 ## Unreleased
 
 - feat(ui): node cards put the CPU and memory meters side by side when no storage is configured, instead of stacking them
+- fix(pbs): stop a PBS refresh clearing the shared connection cache when it cancels its own requests. It was closing whichever node request was still in flight, leaving that request to hang until it timed out. On the first refresh after a plasmashell start that was usually the container list, so the panel showed a fraction of the real guests until the next refresh
 
 ## v0.8.5
 
