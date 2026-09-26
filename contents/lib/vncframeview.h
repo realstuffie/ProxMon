@@ -2,6 +2,7 @@
 
 #include <QQuickItem>
 #include <QImage>
+#include <QBitArray>
 
 class VncClient;
 
@@ -35,8 +36,19 @@ protected:
     void releaseResources() override;
 
 private:
+    // The view draws the canvas as a grid of tiles, each with its own
+    // texture, and an update re-uploads only the tiles it touched. This only
+    // affects GPU uploads. The requests sent to the VNC server stay the same.
+    static constexpr int TileSize = 256;
+    QRect tileRect(int index) const;
+
     VncClient *m_client = nullptr;  // connections auto-break if it's destroyed
     QImage m_frame;  // written in updateFrame (main thread),
                      // read in updatePaintNode (render thread sync - main blocked)
-    bool   m_dirty = false;
+    // Same threading as m_frame. One bit per tile, row-major.
+    QBitArray m_tileDirty;
+    int  m_tileCols = 0;
+    // Set when the frame size changes or the scene graph is new. Either one
+    // means updatePaintNode has to recreate the tile nodes.
+    bool m_rebuildTiles = true;
 };

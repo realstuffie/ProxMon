@@ -1653,9 +1653,9 @@ PlasmoidItem {
                 icon.name: "search"
                 visible: root.configured
                 checkable: true
-                // Clicks must not take focus from the filter field its
-                // focus-out handler would close the search on press, and
-                // release would then toggle it straight back open.
+                // Clicks must not take focus from the filter field. If they
+                // did, its focus-out handler would close the search on press,
+                // and the release would toggle it straight back open.
                 focusPolicy: Qt.TabFocus
                 checked: root.searchActive
                 implicitHeight: 28

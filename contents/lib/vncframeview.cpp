@@ -3,6 +3,7 @@
 
 #include <QPainter>
 #include <QSGImageNode>
+#include <QSGNode>
 #include <QQuickWindow>
 
 VncFrameView::VncFrameView(QQuickItem *parent)
@@ -48,31 +49,78 @@ static QRectF fitRect(qreal viewW, qreal viewH, qreal imgW, qreal imgH)
                   imgH * scale);
 }
 
+QRect VncFrameView::tileRect(int index) const
+{
+    const int col = index % m_tileCols;
+    const int row = index / m_tileCols;
+    return QRect(col * TileSize, row * TileSize, TileSize, TileSize)
+        .intersected(m_frame.rect());
+}
+
 // Called on the render thread during the sync phase (main thread blocked).
+//
+// The node tree is one transform node with one image node per tile. Tile
+// rects are in framebuffer pixels and the transform maps them into the
+// letterboxed view rect. Resizing the item only changes the matrix, and
+// neighbouring tiles share exact edges, so no seams appear between them.
 QSGNode *VncFrameView::updatePaintNode(QSGNode *oldNode, UpdatePaintNodeData *)
 {
     if (m_frame.isNull()) {
         delete oldNode;
+        m_rebuildTiles = true;
         return nullptr;
     }
 
-    // createImageNode() returns the backend-native node (OpenGL/Vulkan/Metal).
-    // setOwnsTexture(true): setTexture() automatically frees the previous
-    // texture - do not delete it manually.
-    auto *node = static_cast<QSGImageNode *>(oldNode);
-    if (!node) {
-        node = window()->createImageNode();
-        node->setFiltering(QSGTexture::Linear);
-        node->setOwnsTexture(true);
+    auto *root = static_cast<QSGTransformNode *>(oldNode);
+    if (!root) {
+        root = new QSGTransformNode;
+        m_rebuildTiles = true;  // new scene graph, so no tile has a texture yet
     }
 
-    if (m_dirty) {
-        node->setTexture(window()->createTextureFromImage(m_frame));
-        m_dirty = false;
+    if (m_rebuildTiles) {
+        while (QSGNode *child = root->firstChild()) {
+            root->removeChildNode(child);
+            delete child;
+        }
+        // createImageNode() returns the backend-native node for OpenGL,
+        // Vulkan or Metal. With setOwnsTexture(true), setTexture() frees the
+        // previous texture, so never delete one by hand. Each tile gets its
+        // texture before it joins the tree, because the software renderer
+        // crashes on a tile without one.
+        for (int i = 0; i < m_tileDirty.size(); ++i) {
+            QSGImageNode *tile = window()->createImageNode();
+            tile->setFiltering(QSGTexture::Linear);
+            tile->setOwnsTexture(true);
+            tile->setRect(tileRect(i));
+            tile->setTexture(window()->createTextureFromImage(m_frame.copy(tileRect(i))));
+            root->appendChildNode(tile);
+        }
+        m_tileDirty.fill(false);  // every tile was just uploaded
+        m_rebuildTiles = false;
     }
 
-    node->setRect(fitRect(width(), height(), m_frame.width(), m_frame.height()));
-    return node;
+    // Upload only the tiles an update touched. Each texture gets its own
+    // copy of the tile, so no texture holds a reference to m_frame. The next
+    // paint into m_frame then skips the full-frame copy a shared image forces.
+    int index = 0;
+    for (QSGNode *child = root->firstChild(); child;
+         child = child->nextSibling(), ++index) {
+        if (!m_tileDirty.testBit(index)) continue;
+        auto *tile = static_cast<QSGImageNode *>(child);
+        tile->setTexture(window()->createTextureFromImage(m_frame.copy(tileRect(index))));
+    }
+    m_tileDirty.fill(false);
+
+    const QRectF fit = fitRect(width(), height(), m_frame.width(), m_frame.height());
+    QMatrix4x4 matrix;
+    if (!fit.isEmpty()) {
+        matrix.translate(fit.x(), fit.y());
+        matrix.scale(fit.width() / m_frame.width(), fit.height() / m_frame.height());
+    } else {
+        matrix.scale(0);  // the item has no area, so draw nothing
+    }
+    root->setMatrix(matrix);
+    return root;
 }
 
 void VncFrameView::geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry)
@@ -93,25 +141,36 @@ void VncFrameView::prepareFrame(int w, int h)
     if (m_frame.size() == QSize(w, h)) return;  // reconnect at same size keeps canvas
     m_frame = QImage(w, h, QImage::Format_ARGB32_Premultiplied);
     m_frame.fill(Qt::black);
-    m_dirty = true;
+    m_tileCols = (w + TileSize - 1) / TileSize;
+    const int tileRows = (h + TileSize - 1) / TileSize;
+    m_tileDirty = QBitArray(m_tileCols * tileRows, true);
+    m_rebuildTiles = true;
     update();
 }
 
 void VncFrameView::updateFrame(const QImage &image, int x, int y, int w, int h)
 {
-    Q_UNUSED(w) Q_UNUSED(h)
     // No canvas yet: drop the rect. prepareFrame always precedes frames of a
     // given size (server init/resize emits frameSizeChanged first), so this
     // only skips data a later full update repaints anyway.
     if (m_frame.isNull() || image.isNull()) return;
 
-    // The texture created in updatePaintNode still references m_frame, so the
-    // first paint after each texture upload detaches (one full-frame memcpy).
-    // This remains on Qt Quick's stable public QImage/QSGTexture path.
+    const QRect changed = QRect(x, y, w, h).intersected(m_frame.rect());
+    if (changed.isEmpty()) return;
+
     QPainter painter(&m_frame);
     painter.setCompositionMode(QPainter::CompositionMode_Source);
     painter.drawImage(x, y, image);
     painter.end();
-    m_dirty = true;
+
+    // Mark every tile the changed rect overlaps.
+    const int firstCol = changed.left() / TileSize;
+    const int lastCol  = changed.right() / TileSize;
+    const int firstRow = changed.top() / TileSize;
+    const int lastRow  = changed.bottom() / TileSize;
+    for (int row = firstRow; row <= lastRow; ++row) {
+        for (int col = firstCol; col <= lastCol; ++col)
+            m_tileDirty.setBit(row * m_tileCols + col);
+    }
     update();
 }

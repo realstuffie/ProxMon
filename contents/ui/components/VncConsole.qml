@@ -172,7 +172,9 @@ Window {
                     if (!vncClient || vncClient.state !== "connected") return
                     var p = mapToFrame(mouse.x, mouse.y)
                     if (!p) return
-                    vncClient.sendPointerEvent(p.x, p.y, 0)
+                    // On release, mouse.buttons already leaves out the button
+                    // that was let go, so other held buttons stay down.
+                    vncClient.sendPointerEvent(p.x, p.y, mouse.buttons)
                 }
 
                 onWheel: function(wheel) {
