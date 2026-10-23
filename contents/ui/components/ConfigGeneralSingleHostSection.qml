@@ -85,7 +85,7 @@ GridLayout {
         spacing: 2
         QQC2.TextField {
             id: storageFilterField
-            Layout.fillWidth: true
+            implicitWidth: Math.max(200, contentWidth + leftPadding + rightPadding + 20)
             placeholderText: "local-zfs, ceph-pool"
         }
         QQC2.Label {
@@ -253,7 +253,7 @@ GridLayout {
             QQC2.Label { text: "PBS Datastore:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter }
             QQC2.TextField {
                 id: pbsDatastoreField
-                Layout.fillWidth: true
+                implicitWidth: Math.max(200, contentWidth + leftPadding + rightPadding + 20)
                 placeholderText: "All datastores"
             }
             QQC2.Label { text: "PBS Namespace:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter }
