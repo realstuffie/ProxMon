@@ -10,6 +10,9 @@ RowLayout {
     id: root
 
     property string value: "*"
+    // Size the name box to its content instead of filling the row, for pages
+    // whose other fields are content-sized.
+    property bool compact: false
     signal edited(string value)
 
     readonly property int modeAll: 0
@@ -55,7 +58,8 @@ RowLayout {
     QQC2.TextField {
         id: nameField
         visible: root.effectiveMode === root.modeNamed
-        Layout.fillWidth: true
+        Layout.fillWidth: !root.compact
+        implicitWidth: Math.max(200, contentWidth + leftPadding + rightPadding + 20)
         placeholderText: "cluster-a"
         text: root.modeFor(root.value) === root.modeNamed ? root.value : ""
         onTextEdited: {

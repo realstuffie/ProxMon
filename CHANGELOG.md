@@ -2,15 +2,21 @@
 
 ## Unreleased
 
-- fix(retry): stop auto-retry after 6 attempts. An unreachable host used to be retried forever. A manual refresh or a successful refresh starts the count again, and the status line says when retrying has stopped. Failures reported while a retry is already pending, and retries that fire while a refresh is running, no longer count as extra attempts or restart the refresh
-- fix(client): tag DNS failures and timeouts as "Host unreachable", including the timeout code that Qt reports differently between versions. Before, one of the two codes was dropped as a silent cancel and the panel showed no error
-- fix(client): classify a host as unreachable only by the "Host unreachable" tag, not by searching the error text for "timeout". A proxy answering "Gateway Timeout" (HTTP 504) no longer marks a multi-host endpoint offline and empties its nodes
-- feat(retry): multi-host mode now auto-retries with the same backoff and cap as single-host when any endpoint or request fails. A fully clean refresh resets it
+## v0.8.6
+
+- fix(retry): stop auto-retry after 6 attempts. It used to retry an unreachable host forever. A manual refresh or a successful refresh starts the count again, and the status line says when retrying has stopped. A failure reported while a retry is already pending no longer counts as another attempt, and a retry that fires during a running refresh no longer restarts it
+- fix(client): tag DNS failures and timeouts as "Host unreachable". Qt reports a timeout with a different code depending on its version, and one of the two was dropped as a silent cancel, so the panel showed no error
+- fix(client): mark a host unreachable only by the "Host unreachable" tag, not by searching the error text for "timeout". A proxy answering "Gateway Timeout" (HTTP 504) no longer marks a multi-host endpoint offline and empties its nodes
+- feat(retry): multi-host mode auto-retries with the same backoff and cap as single-host when any endpoint or request fails. A fully clean refresh resets it
 - feat(ui): node cards put the CPU and memory meters side by side when no storage is configured, instead of stacking them
 - fix(pbs): stop a PBS refresh clearing the shared connection cache when it cancels its own requests. It was closing whichever node request was still in flight, leaving that request to hang until it timed out. On the first refresh after a plasmashell start that was usually the container list, so the panel showed a fraction of the real guests until the next refresh
 - fix(refresh): ignore the config-change events that creating the widget reports for every setting. They are the values arriving for the first time, not edits, and each one cancelled in-flight requests and queued a refresh nothing had asked for
 - fix(refresh): skip a queued config-change refresh when a refresh carrying that same config is already running, so a settings edit landing just before a refresh tick no longer cancels and redials it
 - fix(ui): clear the refreshing and loading flags when a refresh is cancelled. A cancel with no refresh behind it left the widget on its spinner until the next interval
+- perf(vnc): upload only the changed tiles of the console frame to the GPU instead of the whole frame
+- fix(ui): stop the filter button reopening the search box when it closes
+- fix(ui): size the single-host Storage Monitored, PBS Datastore and PBS Namespace boxes to their content instead of stretching them across the page
+- ci: build on Fedora 44 and Manjaro as well as Ubuntu
 
 ## v0.8.5
 

@@ -9,7 +9,7 @@
 <p>Live node, VM &amp; container stats · in-widget VNC &amp; LXC consoles · PBS backup status · multi-host.</p>
 
 <p>
-  <img src="https://img.shields.io/badge/version-0.8.5-1d99f3" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.8.6-1d99f3" alt="Version" />
   <img src="https://img.shields.io/badge/license-GPL--3.0--or--later-4caf50" alt="License" />
   <img src="https://img.shields.io/badge/KDE%20Plasma-6.0%2B-1d99f3?logo=kde&amp;logoColor=white" alt="KDE Plasma 6" />
   <img src="https://img.shields.io/badge/Proxmox%20VE-7.0%2B-e57000?logo=proxmox&amp;logoColor=white" alt="Proxmox VE 7+" />
@@ -326,7 +326,19 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 ## Changelog
 
 <details>
-<summary><strong>v0.8.5</strong> (latest)</summary>
+<summary><strong>v0.8.6</strong> (latest)</summary>
+
+- Auto-retry gives up after 6 attempts and now also runs in multi-host mode
+- Only DNS failures and timeouts mark a host unreachable, so a proxy's "Gateway Timeout" no longer marks an endpoint offline
+- Fixes for the first refresh after startup, the stuck spinner after a cancel and the filter button
+- VNC console uploads only the changed parts of the screen
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+
+</details>
+
+<details>
+<summary><strong>v0.8.5</strong></summary>
 
 - Node cards show per-node storage usage, with a bar per store you name
 - PBS backups are matched per datastore and namespace, so clusters sharing one PBS no longer collide on VMID

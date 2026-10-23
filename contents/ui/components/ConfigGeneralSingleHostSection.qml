@@ -259,6 +259,7 @@ GridLayout {
             QQC2.Label { text: "PBS Namespace:"; Layout.alignment: Qt.AlignRight | Qt.AlignVCenter }
             PbsNamespaceField {
                 Layout.fillWidth: true
+                compact: true
                 value: root.pbsNamespace
                 onEdited: (next) => root.pbsNamespace = next
             }
