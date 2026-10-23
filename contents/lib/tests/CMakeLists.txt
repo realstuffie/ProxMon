@@ -245,3 +245,17 @@ add_test(NAME cancelisolation COMMAND tst_cancelisolation)
 # Generates its own TLS certificate with openssl, so the fixture cannot expire.
 # The timeout covers that plus the deliberate 1.2s stall on the held reply.
 set_tests_properties(cancelisolation PROPERTIES TIMEOUT 60)
+
+qt_add_executable(tst_retrypolicy tst_retrypolicy.cpp)
+target_include_directories(tst_retrypolicy PRIVATE ..)
+target_link_libraries(tst_retrypolicy PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::Network Qt6::Test)
+add_test(NAME retrypolicy COMMAND tst_retrypolicy)
+
+qt_add_executable(tst_hostunreachable tst_hostunreachable.cpp)
+target_include_directories(tst_hostunreachable PRIVATE ..)
+target_link_libraries(tst_hostunreachable PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::Network Qt6::Test)
+add_test(NAME hostunreachable COMMAND tst_hostunreachable)
+# Waits out the 5s transfer timeout; generates its own TLS certificate.
+set_tests_properties(hostunreachable PROPERTIES TIMEOUT 60)
