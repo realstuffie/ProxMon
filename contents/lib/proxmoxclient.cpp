@@ -279,6 +279,12 @@ void handleFinishedReply(QNetworkReply *r,
         }
 
         QString msg = r->errorString();
+        // DNS lookup failed. Tag it so the controller can tell "host
+        // unreachable" from errors the server itself returned. Timeouts are
+        // tagged in requestFor(), which can tell them apart from our cancels.
+        if (r->error() == QNetworkReply::HostNotFoundError) {
+            msg = ProxmoxConst::ErrorText::HostUnreachable + QStringLiteral(": ") + msg;
+        }
         const QString jsonMsg = extractJsonMessage(body);
         if (!jsonMsg.isEmpty()) {
             msg += QStringLiteral(" - ") + jsonMsg;
@@ -400,7 +406,7 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
 
     QObject::connect(r, &QNetworkReply::finished, this, [this, r, seq, sessionKey, kind, node]() {
         // Remove early so cancelAll() never sees a finished reply.
-        m_refreshInFlight.remove(r);
+        const bool stillTracked = m_refreshInFlight.remove(r);
 
         auto emitErr = [&](const QString &msg) {
             if (sessionKey.isEmpty()) {
@@ -409,6 +415,20 @@ void ProxmoxClient::requestFor(const QString &sessionKey,
                 emit errorFor(seq, sessionKey, kind, node, msg);
             }
         };
+
+        // Timeouts, including a DNS lookup that never answers. Our own cancels
+        // take the reply out of m_refreshInFlight before aborting it, so a
+        // cancel on a reply still tracked here came from the transfer timeout.
+        // Which code Qt uses for that differs by version (OperationCanceledError
+        // in older Qt 6, TimeoutError in newer), so accept either rather than
+        // depend on one; otherwise the old code is dropped as a silent cancel.
+        if (r->error() == QNetworkReply::TimeoutError
+            || (stillTracked && r->error() == QNetworkReply::OperationCanceledError)) {
+            emitErr(ProxmoxConst::ErrorText::HostUnreachable
+                    + QStringLiteral(": Operation timed out (HTTP 0)"));
+            r->deleteLater();
+            return;
+        }
         auto emitOk = [&](const QVariant &data) {
             if (sessionKey.isEmpty()) {
                 emit reply(seq, kind, node, data);

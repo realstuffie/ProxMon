@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- fix(retry): stop auto-retry after 6 attempts. An unreachable host used to be retried forever. A manual refresh or a successful refresh starts the count again, and the status line says when retrying has stopped. Failures reported while a retry is already pending, and retries that fire while a refresh is running, no longer count as extra attempts or restart the refresh
+- fix(client): tag DNS failures and timeouts as "Host unreachable", including the timeout code that Qt reports differently between versions. Before, one of the two codes was dropped as a silent cancel and the panel showed no error
+- feat(retry): multi-host mode now auto-retries with the same backoff and cap as single-host when any endpoint or request fails. A fully clean refresh resets it
 - feat(ui): node cards put the CPU and memory meters side by side when no storage is configured, instead of stacking them
 - fix(pbs): stop a PBS refresh clearing the shared connection cache when it cancels its own requests. It was closing whichever node request was still in flight, leaving that request to hang until it timed out. On the first refresh after a plasmashell start that was usually the container list, so the panel showed a fraction of the real guests until the next refresh
 - fix(refresh): ignore the config-change events that creating the widget reports for every setting. They are the values arriving for the first time, not edits, and each one cancelled in-flight requests and queued a refresh nothing had asked for

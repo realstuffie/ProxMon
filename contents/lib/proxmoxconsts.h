@@ -44,6 +44,14 @@ namespace Defaults {
     constexpr int RequestTimeoutMs     = 10000;
     constexpr int LowLatencyTimeoutMs  = 5000;
     constexpr int TaskPollIntervalMs   = 200;
+    constexpr int MaxAutoRetryAttempts = 6;     // auto-retries before giving up until a manual refresh
 } // namespace Defaults
+
+// Error text shared between ProxmoxClient (which produces it) and
+// ProxmoxController (which classifies it).
+namespace ErrorText {
+    // Prefix for DNS failures and timeouts: the host could not be reached at all.
+    inline const QString HostUnreachable = QStringLiteral("Host unreachable");
+} // namespace ErrorText
 
 } // namespace ProxmoxConst

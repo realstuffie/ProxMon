@@ -208,6 +208,12 @@ ProxmoxController::ProxmoxController(QObject *parent)
     m_retryTimer = new QTimer(this);
     m_retryTimer->setSingleShot(true);
     connect(m_retryTimer, &QTimer::timeout, this, [this]() {
+        // Debounce: a refresh already in flight is the reconnect attempt.
+        // Its result re-arms or resets the retry, so don't cancel and restart it.
+        if (m_isRefreshing || m_loading) {
+            appendDebugLog(QStringLiteral("[ProxmoxController] auto-retry skipped: refresh already in flight"));
+            return;
+        }
         appendDebugLog(QStringLiteral("[ProxmoxController] auto-retry firing attempt=%1").arg(QString::number(m_retryAttempt)));
         fetchData();
     });
@@ -324,6 +330,15 @@ QString storageErrorText(const QString &node, const QString &message) {
     return QStringLiteral("Storage usage unavailable%1: %2. Reading it needs Datastore.Audit. "
                           "Turn off Storage Usage in settings to stop asking for it.")
         .arg(node.isEmpty() ? QString() : QStringLiteral(" for %1").arg(node), detail);
+}
+
+// True when the host could not be reached at all: DNS failure or timeout.
+// ProxmoxClient tags those with ErrorText::HostUnreachable; the substring
+// checks keep catching timeout messages that come through untagged.
+bool isHostUnreachable(const QString &message) {
+    return message.startsWith(ProxmoxConst::ErrorText::HostUnreachable)
+        || message.contains(QStringLiteral("timed out"), Qt::CaseInsensitive)
+        || message.contains(QStringLiteral("timeout"), Qt::CaseInsensitive);
 }
 } // namespace
 
@@ -952,6 +967,10 @@ void ProxmoxController::fetchData(bool userInitiated) {
     }
 
     cancelRefresh();
+    if (userInitiated) {
+        // A manual refresh starts the auto-retry budget again.
+        resetRetryState();
+    }
     m_refreshSeq += 1;
 
     const bool isInitial = (m_connectionMode == QStringLiteral("multiHost"))
@@ -1300,15 +1319,36 @@ void ProxmoxController::resetRetryState() {
 
 void ProxmoxController::scheduleRetry(const QString &reason) {
     if (!m_autoRetry) return;
+    // Debounce: one pending retry at a time. A second failure report before
+    // it fires must not count as another attempt or push the retry back.
+    if (m_retryTimer && m_retryTimer->isActive()) {
+        appendDebugLog(QStringLiteral("[ProxmoxController] auto-retry already pending, ignoring: %1").arg(reason));
+        return;
+    }
+    // Give up after the cap so an unreachable host is not retried forever.
+    // A manual refresh (fetchData(true)) or a successful reply resets the count.
+    if (m_retryAttempt >= ProxmoxConst::Defaults::MaxAutoRetryAttempts) {
+        setRetryNextDelayMs(0);
+        setRetryStatusText(isHostUnreachable(reason)
+            ? QStringLiteral("Host unreachable. Auto-retry stopped; refresh to try again.")
+            : QStringLiteral("Auto-retry stopped after %1 attempts; refresh to try again.").arg(m_retryAttempt));
+        appendDebugLog(QStringLiteral("[ProxmoxController] auto-retry gave up after %1 attempts: %2")
+            .arg(QString::number(m_retryAttempt), reason));
+        return;
+    }
     setRetryAttempt(m_retryAttempt + 1);
     int delay = int(m_retryStartMs * qPow(2.0, m_retryAttempt - 1));
     delay = qMin(delay, m_retryMaxMs);
     setRetryNextDelayMs(delay);
     setRetryStatusText(QStringLiteral("Retrying in %1s…").arg(qRound(double(delay) / 1000.0)));
+    appendDebugLog(QStringLiteral("[ProxmoxController] auto-retry %1/%2 in %3 ms: %4")
+        .arg(QString::number(m_retryAttempt),
+             QString::number(ProxmoxConst::Defaults::MaxAutoRetryAttempts),
+             QString::number(delay),
+             reason));
     if (m_retryTimer) {
         m_retryTimer->start(delay);
     }
-    Q_UNUSED(reason)
 }
 
 int ProxmoxController::runningVMs() const {
@@ -2289,7 +2329,7 @@ void ProxmoxController::handleMultiError(int seq, const QString &sessionKey, con
     QVariantMap bucket = ensureEndpointBucket(sessionKey);
     if (kind == ProxmoxConst::Kind::Nodes) {
         bucket.insert(QStringLiteral("error"), m_errorMessage);
-        const bool offline = m_errorMessage.contains(QStringLiteral("timed out"), Qt::CaseInsensitive) || m_errorMessage.contains(QStringLiteral("timeout"), Qt::CaseInsensitive);
+        const bool offline = isHostUnreachable(m_errorMessage);
         bucket.insert(QStringLiteral("offline"), offline);
         if (offline) {
             bucket.insert(QStringLiteral("nodes"), QVariantList());
@@ -2344,14 +2384,24 @@ void ProxmoxController::checkMultiRequestsComplete() {
     setDisplayedLxcData(aggLxcs);
     correlateBackups();
     setDisplayedProxmoxData(QVariant());
+    // Keep the failure text for the retry log; the block below clears it.
+    const QString retryReason = m_errorMessage.isEmpty()
+        ? QStringLiteral("partial refresh failure")
+        : m_errorMessage;
     if (!m_displayedEndpoints.isEmpty()) {
         setErrorMessage(QString());
     }
     const QString completedAt = QDateTime::currentDateTime().toString(QStringLiteral("hh:mm:ss"));
     setLastUpdate(m_partialFailure ? completedAt + QStringLiteral(" ⚠") : completedAt);
-    resetRetryState();
     setIsRefreshing(false);
     setLoading(false);
+    // Same backoff as single-host: any failed endpoint or child request re-arms
+    // it, and a fully clean refresh resets it.
+    if (m_partialFailure) {
+        scheduleRetry(retryReason);
+    } else {
+        resetRetryState();
+    }
 }
 
 QVariantList ProxmoxController::parseMultiHosts() const {
