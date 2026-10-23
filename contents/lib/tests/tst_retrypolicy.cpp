@@ -35,6 +35,7 @@ private slots:
     void singleHostStopsAtCap();
     void capMessageNamesUnreachableHost();
     void capMessageForOtherErrorsCountsAttempts();
+    void serverGatewayTimeoutIsNotHostUnreachable();
     void secondFailureWhilePendingIsNotAnotherAttempt();
     void multiHostFailureSchedulesRetry();
     void multiHostStopsAtCap();
@@ -83,6 +84,23 @@ void RetryPolicyTest::capMessageForOtherErrorsCountsAttempts() {
     failSingle(client, other);
     QVERIFY(!controller.retryStatusText().startsWith(QStringLiteral("Host unreachable")));
     QVERIFY(controller.retryStatusText().contains(QString::number(Cap)));
+    QVERIFY(controller.retryStatusText().contains(QStringLiteral("stopped")));
+}
+
+// A proxy in front of Proxmox answering "Gateway Timeout" reached the host's
+// network, so it must not be classed as unreachable just because the text
+// mentions a timeout. Only the client's tag counts.
+void RetryPolicyTest::serverGatewayTimeoutIsNotHostUnreachable() {
+    ProxmoxController controller;
+    auto *client = controller.findChild<ProxmoxClient *>();
+    QVERIFY(client);
+    const QString gateway = QStringLiteral("Error transferring https://pve:8006/api2/json/nodes - server replied: Gateway Timeout (HTTP 504)");
+    for (int i = 0; i < Cap; ++i) {
+        failSingle(client, gateway);
+        controller.cancelRefresh();
+    }
+    failSingle(client, gateway);
+    QVERIFY(!controller.retryStatusText().startsWith(QStringLiteral("Host unreachable")));
     QVERIFY(controller.retryStatusText().contains(QStringLiteral("stopped")));
 }
 

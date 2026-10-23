@@ -43,6 +43,7 @@ ui_*.h
 qmlls.ini
 docs/local-qmllint-notes.md
 .claude/
+.playwright-mcp/
 
 # ---- IDE / tooling (common safe defaults) ----
 # VS Code

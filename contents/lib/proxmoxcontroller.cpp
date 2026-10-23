@@ -333,12 +333,12 @@ QString storageErrorText(const QString &node, const QString &message) {
 }
 
 // True when the host could not be reached at all: DNS failure or timeout.
-// ProxmoxClient tags those with ErrorText::HostUnreachable; the substring
-// checks keep catching timeout messages that come through untagged.
+// ProxmoxClient tags those with ErrorText::HostUnreachable. The tag is the
+// only signal: matching "timeout" in the text would also catch a server's own
+// reply such as a proxy's "Gateway Timeout" (HTTP 504), which means the host
+// was reached.
 bool isHostUnreachable(const QString &message) {
-    return message.startsWith(ProxmoxConst::ErrorText::HostUnreachable)
-        || message.contains(QStringLiteral("timed out"), Qt::CaseInsensitive)
-        || message.contains(QStringLiteral("timeout"), Qt::CaseInsensitive);
+    return message.startsWith(ProxmoxConst::ErrorText::HostUnreachable);
 }
 } // namespace
 
