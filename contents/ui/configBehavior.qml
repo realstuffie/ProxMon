@@ -74,6 +74,10 @@ KCM.SimpleKCM {
     property int cfg_keyringImportTokenDefault: 0
     property string cfg_keyringImportStatus: ""
     property string cfg_keyringImportStatusDefault: ""
+    property bool cfg_storageEnabled: true
+    property bool cfg_storageEnabledDefault: true
+    property string cfg_storageFilter: ""
+    property string cfg_storageFilterDefault: ""
 
     /*  Bind cfg_* keys to the actual controls (KDE Plasma config convention).
         This ensures Apply/Cancel works and values persist via Plasmoid.configuration.

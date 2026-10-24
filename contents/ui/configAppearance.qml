@@ -83,6 +83,14 @@ KCM.SimpleKCM {
     property int cfg_keyringImportTokenDefault: 0
     property string cfg_keyringImportStatus: ""
     property string cfg_keyringImportStatusDefault: ""
+    property bool cfg_storageEnabled: true
+    property bool cfg_storageEnabledDefault: true
+    property string cfg_storageFilter: ""
+    property string cfg_storageFilterDefault: ""
+    property string cfg_terminalSize: "medium"
+    property string cfg_terminalSizeDefault: "medium"
+    property bool cfg_statsEnabled: true
+    property bool cfg_statsEnabledDefault: true
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
     property var cfg_customGuestOrder: []

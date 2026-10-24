@@ -207,3 +207,9 @@ One known cosmetic quirk: the handler's `enabled: !Plasmoid.editMode` binding ca
 `.editorconfig` sets 4 spaces per indent level, with no tabs and no trailing whitespace. YAML uses 2 spaces, because the keys of a list item line up two columns after its dash.
 
 `./check-style.sh` checks these rules and runs in CI. It also requires shell scripts to indent in multiples of 4 and YAML in multiples of 2. C++ and QML are not checked for multiples, because continuation lines line up under the code above them. Heredoc bodies in shell scripts are skipped, since they print as written.
+
+## Settings pages
+
+Plasma injects every setting from `contents/config/main.xml` into every settings page as `cfg_<name>` and `cfg_<name>Default`. A page that doesn't declare one logs "Setting initial properties failed" when the dialog opens. When you add a setting, add its two properties to each of the four pages. `./check-config-pages.sh` lists what is missing and runs in CI.
+
+Settings pages shouldn't depend on the native plugin. The Keyring tab is the exception, because it has to ask the plugin which keyrings exist. It loads that section through a `Loader`, so a plugin that fails to load shows a message on that tab and leaves the others working.

@@ -21,6 +21,10 @@ ColumnLayout {
         info = probe.probe(keepassCheck.checked)
     }
 
+    // The page sets the checkbox from its stored value and on Restore Defaults,
+    // as well as the user clicking it, so refresh on every change.
+    onUseKeePassXCChanged: refresh()
+
     readonly property string owner: info.secretServiceOwner || ""
 
     Layout.fillWidth: true
@@ -55,17 +59,11 @@ ColumnLayout {
 
     Component.onCompleted: refresh()
 
-    Kirigami.Heading {
-        text: "Keyring"
-        level: 2
-    }
-
     QQC2.CheckBox {
         id: keepassCheck
         text: "Store token secrets in KeePassXC (Secret Service) instead of KWallet"
         checked: false
         Layout.leftMargin: 45
-        onToggled: root.refresh()
     }
 
     QQC2.Label {
@@ -73,13 +71,29 @@ ColumnLayout {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         opacity: 0.7
-        text: "Off lets QtKeychain choose, which is KWallet on Plasma. On needs KeePassXC's Secret "
-            + "Service integration. Only one program can own the Secret Service, so GNOME Keyring "
-            + "or KDE's ksecretd must not. It also moves the Secret Service for your whole desktop, "
-            + "not only ProxMon. A change needs a Plasma restart after Apply, and a button appears "
-            + "when one is due. Secrets already in KWallet don't move on their own, so use the "
-            + "import below after that restart. ProxMon reads the token on every refresh and keeps "
-            + "nothing in memory, so monitoring pauses while the database is locked."
+        text: "Off lets QtKeychain choose, which is KWallet on Plasma. On stores the token secrets "
+            + "in KeePassXC and needs its Secret Service integration enabled. Only one program can "
+            + "own the Secret Service, so GNOME Keyring and KDE's ksecretd must not. This moves it "
+            + "for your whole desktop, not only ProxMon."
+    }
+
+    QQC2.Label {
+        Layout.leftMargin: 45
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        opacity: 0.7
+        text: "A change needs a Plasma restart after Apply, and a button appears when one is due. "
+            + "Secrets already in KWallet don't move on their own, so use the import below after "
+            + "that restart."
+    }
+
+    QQC2.Label {
+        Layout.leftMargin: 45
+        Layout.fillWidth: true
+        wrapMode: Text.WordWrap
+        opacity: 0.7
+        text: "ProxMon reads the token on every refresh and keeps nothing in memory, so monitoring "
+            + "pauses while the database is locked."
     }
 
     QQC2.Label {

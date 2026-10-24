@@ -9,6 +9,12 @@ ConfigModel {
     }
 
     ConfigCategory {
+        name: "Keyring"
+        icon: "security-high"
+        source: "../ui/configKeyring.qml"
+    }
+
+    ConfigCategory {
         name: "Behavior"
         icon: "configure"
         source: "../ui/configBehavior.qml"

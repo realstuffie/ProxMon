@@ -128,7 +128,7 @@ KCM.SimpleKCM {
     property alias cfg_retryMaxSeconds: retrySection.retryMaxValue
 
     // Keyring choice and KWallet import (handled in main.qml)
-    property alias cfg_useKeePassXC: keyringSection.useKeePassXC
+    property bool cfg_useKeePassXC: false
     property int cfg_keyringImportToken: 0
     property string cfg_keyringImportStatus: ""
     property bool cfg_useKeePassXCDefault: false
@@ -492,20 +492,6 @@ KCM.SimpleKCM {
         ConfigGeneralRetrySection {
             id: retrySection
             autoRetryChecked: true
-        }
-
-        // Separator
-        Rectangle {
-            Layout.fillWidth: true
-            implicitHeight: 1
-            color: Kirigami.Theme.disabledTextColor
-            opacity: 0.3
-        }
-
-        ConfigKeyringSection {
-            id: keyringSection
-            importStatus: root.cfg_keyringImportStatus
-            onImportRequested: root.cfg_keyringImportToken += 1
         }
 
         QtObject {

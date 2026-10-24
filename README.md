@@ -198,7 +198,7 @@ Right-click the widget → **Configure Proxmox Monitor**.
 - **Storage usage.** **Storage Usage** turns the node card's disk bars on or off, per endpoint. **Storage Monitored** takes storage names separated by commas, and each name gets its own bar. Leave it empty and ProxMon tracks the fullest store holding guest disks, meaning content `images` or `rootfs`. Bars turn amber at 75% and red at 90%. The tooltip lists every monitored store.
 - **Behavior.** Sorting, compact panel label mode (Avg CPU, running workloads, error state, last update), notifications, rate limiting, privacy (redact token fragments in notifications).
 - **Appearance.** Custom running/stopped/node colors, per-color hex or RGB input, card tint opacity, window opacity, live preview with one-click theme defaults.
-- **Keyring.** By default QtKeychain picks the keyring, which is KWallet on Plasma. The KeePassXC option on the Connection page stores token secrets in KeePassXC instead. See [Using KeePassXC](#using-keepassxc).
+- **Keyring.** By default QtKeychain picks the keyring, which is KWallet on Plasma. The KeePassXC option on the Keyring tab stores token secrets in KeePassXC instead. See [Using KeePassXC](#using-keepassxc).
 
 ## Using KeePassXC
 
@@ -218,7 +218,7 @@ busctl --user status org.freedesktop.secrets
 systemctl --user mask --now gnome-keyring-daemon.service gnome-keyring-daemon.socket
 ```
 
-Some distros also start it from an autostart entry. If it comes back after a login, copy `/etc/xdg/autostart/gnome-keyring-secrets.desktop` to `~/.config/autostart/` and add `Hidden=true` to the copy. Log out and back in, start KeePassXC and run the `busctl` command again. The owner should now be `keepassxc`. If `ksecretd` owns the name, the same check applies. The Keyring section on the Connection page shows the current owner and warns when it isn't KeePassXC. Press **Check again** after each change.
+Some distros also start it from an autostart entry. If it comes back after a login, copy `/etc/xdg/autostart/gnome-keyring-secrets.desktop` to `~/.config/autostart/` and add `Hidden=true` to the copy. Log out and back in, start KeePassXC and run the `busctl` command again. The owner should now be `keepassxc`. If `ksecretd` owns the name, the same check applies. The Keyring tab shows the current owner and warns when it isn't KeePassXC. Press **Check again** after each change.
 
 This switches the Secret Service for your whole desktop, not only ProxMon. Browsers, Evolution, Remmina and the GitHub CLI all keep secrets there. Chrome's Safe Storage key decides whether it can read its saved passwords, so a browser that loses the key loses that data. Copy the entries you want to keep into KeePassXC before you switch, or expect to sign in again.
 
