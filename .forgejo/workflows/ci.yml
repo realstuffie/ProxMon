@@ -32,4 +32,23 @@ jobs:
               exit 1
             }
           done
+      # The Secret Service test hosts a fake provider on a private bus and skips
+      # itself when dbus-daemon is missing. Install it when the image lacks it,
+      # and fail if it is still missing, so a skipped test cannot pass unnoticed.
+      # Bake dbus-daemon into the images to make this a no-op.
+      - name: Ensure dbus-daemon is available
+        run: |
+          if ! command -v dbus-daemon >/dev/null 2>&1; then
+            if command -v apt-get >/dev/null 2>&1; then
+              apt-get update && apt-get install -y dbus-daemon
+            elif command -v dnf >/dev/null 2>&1; then
+              dnf install -y dbus-daemon
+            elif command -v pacman >/dev/null 2>&1; then
+              pacman -Sy --noconfirm dbus
+            fi
+          fi
+          command -v dbus-daemon || {
+            echo "dbus-daemon is missing from the CI image and could not be installed, so the secretservice test would be skipped"
+            exit 1
+          }
       - run: ctest --test-dir build --output-on-failure
