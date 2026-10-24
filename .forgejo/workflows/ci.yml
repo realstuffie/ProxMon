@@ -25,9 +25,12 @@ jobs:
       # Without this check a missing runner drops them silently.
       - name: Verify the QML tests are registered
         run: |
-          ctest --test-dir build -N
+          # Read the list once, then search it. Piping ctest into grep -q fails
+          # under pipefail: grep exits at the first match and ctest dies of SIGPIPE.
+          registered=$(ctest --test-dir build -N)
+          echo "$registered"
           for qml_test in configportability refreshdebounce; do
-            ctest --test-dir build -N | grep -q "$qml_test" || {
+            grep -q "$qml_test" <<< "$registered" || {
               echo "$qml_test is not registered: qmltestrunner missing from the CI image"
               exit 1
             }
