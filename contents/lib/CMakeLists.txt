@@ -17,8 +17,16 @@ set(BUILD_TEST_APPLICATION OFF CACHE BOOL "Disable qtkeychain test app" FORCE)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build qtkeychain as static for bundling into plugin" FORCE)
 # Ensure keychain library is built with PIC so we can link it into our plugin .so
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-# libsecret dev package may not be installed; allow qtkeychain to build without it (fallbacks: KWallet/plaintext)
-set(LIBSECRET_SUPPORT OFF CACHE BOOL "Disable libsecret support for bundled qtkeychain" FORCE)
+# libsecret adds the Secret Service backend (KeePassXC, GNOME Keyring). Its dev
+# package is optional: without it qtkeychain builds with KWallet only.
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PROXMON_LIBSECRET QUIET libsecret-1)
+if(PROXMON_LIBSECRET_FOUND)
+    set(LIBSECRET_SUPPORT ON CACHE BOOL "Build bundled qtkeychain with libsecret support" FORCE)
+else()
+    message(STATUS "libsecret-1 not found: building without the Secret Service backend")
+    set(LIBSECRET_SUPPORT OFF CACHE BOOL "Build bundled qtkeychain without libsecret support" FORCE)
+endif()
 # Ensure qtkeychain doesn't build its own tests when embedded. ProxMon's test
 # option is independent so enabling our tests does not enable dependency tests.
 set(BUILD_TESTING OFF)
@@ -51,6 +59,8 @@ qt_add_library(proxmoxclientplugin SHARED
     pbstypes.h
     secretstore.cpp
     secretstore.h
+    keyringprobe.cpp
+    keyringprobe.h
     notifier.cpp
     notifier.h
     vncclient.cpp
@@ -64,6 +74,10 @@ qt_add_library(proxmoxclientplugin SHARED
     lxcauthframing.cpp
     lxcauthframing.h
 )
+
+if(LIBSECRET_SUPPORT)
+    target_compile_definitions(proxmoxclientplugin PRIVATE PROXMON_HAVE_LIBSECRET=1)
+endif()
 
 target_include_directories(proxmoxclientplugin PRIVATE
     ${LIBVNCCLIENT_INCLUDE_DIRS}

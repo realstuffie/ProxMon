@@ -71,20 +71,20 @@ install_deps_best_effort() {
     pm="zypper"
     pm_update="zypper refresh"
     pm_install="zypper install -y"
-    pkgs_build="cmake make gcc-c++ pkg-config qt6-base-devel qt6-declarative-devel qt6-websockets-devel LibVNCServer-devel utf8proc-devel"
+    pkgs_build="cmake make gcc-c++ pkg-config qt6-base-devel qt6-declarative-devel qt6-websockets-devel libsecret-devel LibVNCServer-devel utf8proc-devel"
     pkgs_qtermwidget="qtermwidget-devel qtermwidget-qt6-devel"
     pkgs_ecm="extra-cmake-modules"
   elif command -v dnf >/dev/null 2>&1; then
     pm="dnf"
     pm_install="dnf install -y"
     pm_provider_prefix="*/"
-    pkgs_build="cmake make gcc-c++ pkgconf-pkg-config qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwebsockets-devel libvncserver-devel utf8proc-devel"
+    pkgs_build="cmake make gcc-c++ pkgconf-pkg-config qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qtwebsockets-devel libsecret-devel libvncserver-devel utf8proc-devel"
     pkgs_qtermwidget="qtermwidget-devel"
     pkgs_ecm="extra-cmake-modules"
   elif command -v pacman >/dev/null 2>&1; then
     pm="pacman"
     pm_install="pacman -Sy --noconfirm --needed"
-    pkgs_build="cmake make gcc pkgconf qt6-base qt6-declarative qt6-websockets libvncserver libutf8proc"
+    pkgs_build="cmake make gcc pkgconf qt6-base qt6-declarative qt6-websockets libsecret libvncserver libutf8proc"
     pkgs_qtermwidget="qtermwidget"
     pkgs_ecm="extra-cmake-modules"
   else
@@ -168,10 +168,17 @@ fi
 if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
   printf '%s\n' "[ git  ] Initializing submodules..."
   # Refresh cached submodule URLs from .gitmodules first, so checkouts made
-  # before the qtkeychain fork repoint don't try to fetch the pinned commit
-  # from the old upstream URL (where it doesn't exist).
+  # before the URL changed fetch the pinned commit from the current one.
   git submodule sync --recursive
-  git submodule update --init --recursive
+  # A submodule checked out on a branch is someone's own working copy, so leave
+  # it alone. A detached checkout belongs to this repository: move it to the
+  # commit this repository records.
+  QTKEYCHAIN_DIR="contents/lib/third_party/qtkeychain"
+  if [ -e "$QTKEYCHAIN_DIR/.git" ] && git -C "$QTKEYCHAIN_DIR" symbolic-ref -q HEAD >/dev/null 2>&1; then
+    printf '%s\n' "[ git  ] $QTKEYCHAIN_DIR is on a branch, leaving it as is."
+  else
+    git submodule update --init --recursive
+  fi
 fi
 
 require_cmd cmake

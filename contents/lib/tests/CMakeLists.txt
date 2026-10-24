@@ -259,3 +259,21 @@ target_link_libraries(tst_hostunreachable PRIVATE
 add_test(NAME hostunreachable COMMAND tst_hostunreachable)
 # Waits out the 5s transfer timeout; generates its own TLS certificate.
 set_tests_properties(hostunreachable PROPERTIES TIMEOUT 60)
+
+# Needs dbus-daemon: hosts a fake org.freedesktop.secrets on a private bus.
+qt_add_executable(tst_secretservice tst_secretservice.cpp)
+target_include_directories(tst_secretservice PRIVATE ..)
+target_link_libraries(tst_secretservice PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::DBus Qt6::Test)
+add_test(NAME secretservice COMMAND tst_secretservice)
+set_tests_properties(secretservice PROPERTIES TIMEOUT 30)
+
+qt_add_executable(tst_keyringselect tst_keyringselect.cpp)
+target_include_directories(tst_keyringselect PRIVATE ..)
+target_link_libraries(tst_keyringselect PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::DBus Qt6::Test)
+add_test(NAME keyringselect COMMAND tst_keyringselect)
+# Unreachable session bus, as for keyringfailure: no real keyring is touched.
+set_tests_properties(keyringselect PROPERTIES
+    TIMEOUT 30
+    ENVIRONMENT "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/proxmon-test-bus;QT_LOGGING_RULES=proxmon.keyring.warning=false")

@@ -167,6 +167,20 @@
         <entry name="retryMaxSeconds" type="Int">
             <default>300</default>
         </entry>
+
+        <!-- Keyring: false lets QtKeychain pick (KWallet on Plasma); true uses the
+             Secret Service (KeePassXC). Takes effect after a Plasma restart. -->
+        <entry name="useKeePassXC" type="Bool">
+            <default>false</default>
+        </entry>
+        <!-- Bumped by the "Import from KWallet" button; the runtime imports on each change. -->
+        <entry name="keyringImportToken" type="Int">
+            <default>0</default>
+        </entry>
+        <!-- Result of the last import, written by the runtime and shown in settings. -->
+        <entry name="keyringImportStatus" type="String">
+            <default></default>
+        </entry>
         <entry name="lowLatency" type="Bool">
             <default>false</default>
         </entry>

@@ -115,6 +115,20 @@ PlasmoidItem {
         autoRetry: root.autoRetry
         retryStartMs: root.retryStartMs
         retryMaxMs: root.retryMaxMs
+        useKeePassXC: root.useKeePassXC
+        onKeyringImportFinished: function(imported, skipped, failed, provider, error) {
+            var where = provider || "the Secret Service"
+            var text = error !== ""
+                ? error
+                : "Imported " + imported + " into " + where + ", kept " + skipped
+                  + " already there" + (failed > 0 ? ", " + failed + " failed" : "")
+            Plasmoid.configuration.keyringImportStatus = text
+            root.sendNotification("Keyring import", text,
+                                  (error !== "" || failed > 0) ? "dialog-warning" : "dialog-information")
+            // The first read, before the import, found no secret. Read again now
+            // instead of waiting for a Plasma restart.
+            if (error === "") controller.fetchData(true)
+        }
         onRestoreSingleConfigRequested: function(host, port, tokenId) {
             Plasmoid.configuration.connectionMode = "single"
             Plasmoid.configuration.proxmoxHost = host
@@ -204,6 +218,11 @@ PlasmoidItem {
     property int retryStartMs: Math.max(1000, (Plasmoid.configuration.retryStartSeconds || 5) * 1000)
     property int retryMaxMs: Math.max(retryStartMs, (Plasmoid.configuration.retryMaxSeconds || 300) * 1000)
     property int retryAttempt: controller ? controller.retryAttempt : 0
+
+    // Keyring choice (applied in C++ before the first keyring access) and the
+    // counter the settings page bumps to ask for a KWallet import.
+    property bool useKeePassXC: Plasmoid.configuration.useKeePassXC === true
+    property int keyringImportToken: Plasmoid.configuration.keyringImportToken || 0
     property int retryNextDelayMs: controller ? controller.retryNextDelayMs : 0
     // Propagated explicitly via Connections.onRetryStatusTextChanged below.
     // Do NOT re-add a controller binding here: imperative clearing in
@@ -1444,6 +1463,11 @@ PlasmoidItem {
     onAutoRetryChanged: triggerRefreshFromConfigChange("autoRetry")
     onRetryStartMsChanged: triggerRefreshFromConfigChange("retryStartMs")
     onRetryMaxMsChanged: triggerRefreshFromConfigChange("retryMaxMs")
+    // The settings page bumps this once per click. Changes reported while the
+    // widget is still starting up are the stored value arriving, not a click.
+    onKeyringImportTokenChanged: {
+        if (configSettled && keyringImportToken > 0) controller.importKWalletSecrets()
+    }
     onEnableNotificationsChanged: triggerRefreshFromConfigChange("enableNotifications")
     onNotifyModeChanged: triggerRefreshFromConfigChange("notifyMode")
     onNotifyFilterChanged: triggerRefreshFromConfigChange("notifyFilter")

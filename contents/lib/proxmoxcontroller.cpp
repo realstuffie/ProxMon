@@ -251,6 +251,10 @@ ProxmoxController::ProxmoxController(QObject *parent)
     });
 
     connect(m_singleSecretStore, &SecretStore::keyListError, this, &ProxmoxController::keyListError);
+    connect(m_singleSecretStore, &SecretStore::importFinished, this,
+            [this](int imported, int skipped, int failed, const QString &error) {
+        emit keyringImportFinished(imported, skipped, failed, SecretStore::secretServiceProvider(), error);
+    });
 
     m_secretRetryTimer = new QTimer(this);
     m_secretRetryTimer->setSingleShot(true);
@@ -865,7 +869,7 @@ void ProxmoxController::resolveSecretsIfNeeded() {
 }
 
 void ProxmoxController::listStoredKeys() {
-    m_singleSecretStore->listKWalletKeys();
+    m_singleSecretStore->listKeys();
 }
 
 void ProxmoxController::storeSingleSecret(const QString &secret) {
@@ -918,6 +922,22 @@ void ProxmoxController::setAutoRetry(bool value) {
     if (m_autoRetry == value) return;
     m_autoRetry = value;
     emit autoRetryChanged();
+}
+
+void ProxmoxController::setUseKeePassXC(bool value) {
+    if (m_useKeePassXC == value) return;
+    m_useKeePassXC = value;
+    SecretStore::selectBackend(value);
+    emit useKeePassXCChanged();
+}
+
+void ProxmoxController::importKWalletSecrets() {
+    if (!SecretStore::usesSecretService()) {
+        emit keyringImportFinished(0, 0, 0, SecretStore::secretServiceProvider(),
+            QStringLiteral("KeePassXC is not the keyring in use. Turn on the KeePassXC option in the settings, apply, and restart Plasma first."));
+        return;
+    }
+    m_singleSecretStore->importFromKWallet();
 }
 
 void ProxmoxController::setRetryStartMs(int value) {

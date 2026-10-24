@@ -77,6 +77,12 @@ KCM.SimpleKCM {
     property int cfg_retryStartSecondsDefault: 5
     property int cfg_retryMaxSeconds: 300
     property int cfg_retryMaxSecondsDefault: 300
+    property bool cfg_useKeePassXC: false
+    property bool cfg_useKeePassXCDefault: false
+    property int cfg_keyringImportToken: 0
+    property int cfg_keyringImportTokenDefault: 0
+    property string cfg_keyringImportStatus: ""
+    property string cfg_keyringImportStatusDefault: ""
     property string cfg_defaultSorting: "status"
     property string cfg_defaultSortingDefault: "status"
     property var cfg_customGuestOrder: []

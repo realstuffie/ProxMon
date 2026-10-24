@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- feat(keyring): add a KeePassXC option to Connection Settings. It stores token secrets in KeePassXC through the Secret Service. Without it QtKeychain picks the keyring, which is KWallet on Plasma. The page names the program that owns the Secret Service and warns when it isn't KeePassXC, for example when GNOME Keyring or ksecretd got there first. Plasma needs a restart to apply it
+- feat(keyring): add an "Import secrets from KWallet" button. It copies the token secrets into KeePassXC, keeps any entry already there and deletes nothing from KWallet. When the import finishes, the panel refreshes and reads the new entry without a Plasma restart
+- feat(keyring): the Keyring section warns when a switch waits for a Plasma restart and has a Restart Plasma button. Until the restart the widget keeps using the old keyring, so saves and imports still go there
+- fix(keyring): remove the QTKEYCHAIN_BACKEND that ProxMon sets from plasmashell's environment after the first keyring access, so programs started from the panel don't inherit it
+- feat(keyring): a locked KeePassXC database pauses monitoring. ProxMon checks the lock state before each read, so it no longer opens an unlock dialog on every refresh. It shows "KeePassXC is locked. Unlock it to resume." and retries when the provider announces the unlock or on its normal backoff. Nothing is cached to bridge the lock
+- feat(keyring): restoring endpoints from stored keys also works with the Secret Service
+- fix(keyring): stop forcing QtKeychain to kwallet6 inside plasmashell. The setting leaked into every terminal started from the session and overrode user choices. QtKeychain's own detection decides unless the KeePassXC option is on, and it falls back to the Secret Service where KWallet is missing
+- fix(install): leave a QtKeychain checkout that is on a branch alone. A detached checkout still moves to the commit the repository records
+- build(deps): libsecret is an optional build dependency that adds the Secret Service backend. `install.sh` installs its development package on zypper, dnf and pacman
+- build(deps): bundle upstream QtKeychain instead of a fork. Upstream now has the KWallet fix (frankosterfeld/qtkeychain#304). It probes KWallet with a D-Bus ping instead of `networkWallet`, so a locked wallet no longer freezes the GUI thread for 25 seconds, and it handles a failed `networkWallet` call instead of passing an empty wallet name to `open()`
+
 ## v0.8.6
 
 - fix(retry): stop auto-retry after 6 attempts. It used to retry an unreachable host forever. A manual refresh or a successful refresh starts the count again, and the status line says when retrying has stopped. A failure reported while a retry is already pending no longer counts as another attempt, and a retry that fires during a running refresh no longer restarts it

@@ -59,6 +59,9 @@ class ProxmoxController : public QObject {
     Q_PROPERTY(bool autoRetry READ autoRetry WRITE setAutoRetry NOTIFY autoRetryChanged)
     Q_PROPERTY(int retryStartMs READ retryStartMs WRITE setRetryStartMs NOTIFY retryStartMsChanged)
     Q_PROPERTY(int retryMaxMs READ retryMaxMs WRITE setRetryMaxMs NOTIFY retryMaxMsChanged)
+    // Store secrets in the Secret Service (KeePassXC) instead of letting
+    // QtKeychain pick. Applies only before the first keyring access.
+    Q_PROPERTY(bool useKeePassXC READ useKeePassXC WRITE setUseKeePassXC NOTIFY useKeePassXCChanged)
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(bool isRefreshing READ isRefreshing NOTIFY isRefreshingChanged)
     Q_PROPERTY(QString errorMessage READ errorMessage NOTIFY errorMessageChanged)
@@ -191,6 +194,8 @@ public:
     void setRetryStartMs(int value);
     int retryMaxMs() const { return m_retryMaxMs; }
     void setRetryMaxMs(int value);
+    bool useKeePassXC() const { return m_useKeePassXC; }
+    void setUseKeePassXC(bool value);
     bool loading() const { return m_loading; }
     bool isRefreshing() const { return m_isRefreshing; }
     QString errorMessage() const { return m_errorMessage; }
@@ -229,6 +234,9 @@ public:
 
     Q_INVOKABLE void resolveSecretsIfNeeded();
     Q_INVOKABLE void listStoredKeys();
+    // Copies the token secrets from KWallet into the Secret Service keyring.
+    // Reports through keyringImportFinished(); never deletes from KWallet.
+    Q_INVOKABLE void importKWalletSecrets();
     Q_INVOKABLE void storeSingleSecret(const QString &secret);
     Q_INVOKABLE void storeSinglePBSSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
     Q_INVOKABLE void storeMultiHostSecret(const QString &host, int port, const QString &tokenId, const QString &secret);
@@ -295,6 +303,10 @@ signals:
     void autoRetryChanged();
     void retryStartMsChanged();
     void retryMaxMsChanged();
+    void useKeePassXCChanged();
+    // provider names the Secret Service program the secrets went to; error is
+    // empty unless the import could not run.
+    void keyringImportFinished(int imported, int skipped, int failed, const QString &provider, const QString &error);
     void loadingChanged();
     void isRefreshingChanged();
     void errorMessageChanged();
@@ -526,6 +538,7 @@ private:
     QString m_errorMessage;
     QString m_lastUpdate;
     bool m_partialFailure = false;
+    bool m_useKeePassXC = false;
     int m_retryAttempt = 0;
     int m_retryNextDelayMs = 0;
     QString m_retryStatusText;

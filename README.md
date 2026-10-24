@@ -59,6 +59,7 @@
 - [Proxmox API token setup](#proxmox-api-token-setup)
 - [Proxmox Backup Server setup](#proxmox-backup-server-setup)
 - [Configuration](#configuration)
+- [Using KeePassXC](#using-keepassxc)
 - [Security](#security)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
@@ -88,6 +89,7 @@
 
 - KDE Plasma 6.0+
 - Proxmox VE 7.0+ with API access
+- Optional: the libsecret development package at build time, for KeePassXC support (`libsecret-1-dev`, `libsecret-devel` or `libsecret`). Without it ProxMon builds with KWallet only.
 
 ## Installation
 
@@ -196,6 +198,47 @@ Right-click the widget → **Configure Proxmox Monitor**.
 - **Storage usage.** **Storage Usage** turns the node card's disk bars on or off, per endpoint. **Storage Monitored** takes storage names separated by commas, and each name gets its own bar. Leave it empty and ProxMon tracks the fullest store holding guest disks, meaning content `images` or `rootfs`. Bars turn amber at 75% and red at 90%. The tooltip lists every monitored store.
 - **Behavior.** Sorting, compact panel label mode (Avg CPU, running workloads, error state, last update), notifications, rate limiting, privacy (redact token fragments in notifications).
 - **Appearance.** Custom running/stopped/node colors, per-color hex or RGB input, card tint opacity, window opacity, live preview with one-click theme defaults.
+- **Keyring.** By default QtKeychain picks the keyring, which is KWallet on Plasma. The KeePassXC option on the Connection page stores token secrets in KeePassXC instead. See [Using KeePassXC](#using-keepassxc).
+
+## Using KeePassXC
+
+ProxMon can store its token secrets in KeePassXC through the freedesktop Secret Service. KeePassXC still handles unlocking, so a database protected by a password, a key file and a YubiKey works the same as it does for any other program.
+
+**1. Enable the Secret Service in KeePassXC.** Open Tools, Settings and turn on Secret Service Integration. Then open Database Settings, go to Secret Service Integration and expose a group. Make a new group for this and put nothing else in it, because every program in your session can read every entry under the exposed group. Menu names differ a little between KeePassXC versions.
+
+**2. Make sure KeePassXC owns the Secret Service.** Only one program can own `org.freedesktop.secrets` on the session bus. GNOME Keyring and KDE's `ksecretd` can both claim it, and D-Bus starts them on demand, so they often get there first. If one of them owns the name, ProxMon stores its secrets there without telling you. Find the owner with:
+
+```bash
+busctl --user status org.freedesktop.secrets
+```
+
+`Comm=` names the program. If it says `gnome-keyring-d`, stop it from claiming the name:
+
+```bash
+systemctl --user mask --now gnome-keyring-daemon.service gnome-keyring-daemon.socket
+```
+
+Some distros also start it from an autostart entry. If it comes back after a login, copy `/etc/xdg/autostart/gnome-keyring-secrets.desktop` to `~/.config/autostart/` and add `Hidden=true` to the copy. Log out and back in, start KeePassXC and run the `busctl` command again. The owner should now be `keepassxc`. If `ksecretd` owns the name, the same check applies. The Keyring section on the Connection page shows the current owner and warns when it isn't KeePassXC. Press **Check again** after each change.
+
+This switches the Secret Service for your whole desktop, not only ProxMon. Browsers, Evolution, Remmina and the GitHub CLI all keep secrets there. Chrome's Safe Storage key decides whether it can read its saved passwords, so a browser that loses the key loses that data. Copy the entries you want to keep into KeePassXC before you switch, or expect to sign in again.
+
+**3. Turn the option on.** Tick the KeePassXC option, press Apply and restart Plasma. The Keyring section shows a **Restart Plasma** button while a restart is due. Press Apply first, because the restart reloads every panel and closes the dialog. To restart by hand:
+
+```bash
+kquitapp6 plasmashell && kstart plasmashell
+```
+
+QtKeychain picks its keyring at the first access, so the option only takes effect after a restart. Until then the widget keeps using the old keyring, and saving a token or importing still goes there. ProxMon removes the variable it sets from Plasma's environment after that first access, so programs started from the panel don't inherit it. A `QTKEYCHAIN_BACKEND` already in your environment wins over the option. Older ProxMon versions set `kwallet6` inside plasmashell, and a terminal started from that session keeps it. Run `unset QTKEYCHAIN_BACKEND` first if the page reports an override.
+
+**4. Move your secrets.** The option does not move secrets already in KWallet. After the restart, press **Import secrets from KWallet** and then Apply. ProxMon copies each token secret into KeePassXC, keeps any entry that already exists there and deletes nothing from KWallet. KeePassXC may ask you to unlock the database, which includes a YubiKey touch. A notification and the line under the button show the result. Once everything works you can delete the old entries in KWalletManager.
+
+**A locked database pauses monitoring.** ProxMon holds a token secret in memory only while a request is in flight, and it reads the secret from the keyring on every refresh. A locked KeePassXC database can't hand one out, so monitoring pauses until you unlock it. ProxMon checks the lock state first, so it doesn't open an unlock dialog on every refresh. The panel shows "KeePassXC is locked. Unlock it to resume." and retries on its backoff, or at once if your KeePassXC announces the unlock. Import and Update Keyring do open the dialog, because you asked for them. Caching the token would avoid the pause but break the in-flight-only rule, so ProxMon doesn't. Your options:
+
+- Keep the database unlocked while you want monitoring. That means turning auto-lock off.
+- Lock only on screen lock or suspend, not after a timeout.
+- Stay on KWallet on this machine. The KeePassXC option is off by default, and KWallet unlocks once at login.
+
+**Limits.** Restoring endpoints from stored keys when the config is empty works with KWallet and with KeePassXC. If QtKeychain falls back to the Secret Service on its own because KWallet is missing, saving and reading secrets work but that restore does not. The wake-up on unlock depends on the provider announcing it. If yours doesn't, ProxMon retries on its backoff, from 30 seconds up to 10 minutes.
 
 ## Security
 
