@@ -14,11 +14,24 @@ jobs:
       matrix:
         os: [ubuntu-26.04, fedora-44, manjaro]
     runs-on: ${{ matrix.os }}
+    env:
+      # One cache folder per image, on a volume the runner mounts at /ccache so
+      # it survives between jobs. Without that volume ccache starts empty.
+      CCACHE_DIR: /ccache/${{ matrix.os }}
+      CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - run: cmake -S contents/lib -B build -DCMAKE_BUILD_TYPE=Release -DPROXMON_BUILD_TESTS=ON
+      - name: Configure
+        run: |
+          # CMake reads these at the first configure. Use ccache only where the
+          # image has it, so an image without it still builds.
+          if command -v ccache >/dev/null 2>&1; then
+            export CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache
+            ccache --zero-stats
+          fi
+          cmake -S contents/lib -B build -DCMAKE_BUILD_TYPE=Release -DPROXMON_BUILD_TESTS=ON
       - run: cmake --build build -- -j$(nproc)
       - run: test -f build/libproxmoxclientplugin.so
       # The QML tests are registered only if CMake located qmltestrunner.
@@ -55,3 +68,8 @@ jobs:
             exit 1
           }
       - run: ctest --test-dir build --output-on-failure
+      # Hit and miss counts show whether the cache volume is working: after the
+      # first run on an image, most compiles should be hits.
+      - name: ccache statistics
+        if: always()
+        run: command -v ccache >/dev/null 2>&1 && ccache --show-stats || echo "ccache is not installed in this image"
