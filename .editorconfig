@@ -1,0 +1,25 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# YAML puts the keys of a list item two columns after its dash, so a 4-space
+# grid does not fit. 2 spaces is the usual convention for it.
+[*.{yml,yaml}]
+indent_size = 2
+
+# Git writes this file itself, with tabs.
+[.gitmodules]
+indent_style = tab
+
+# Licence texts keep the layout of the published originals.
+[{LICENSES/*,License}]
+indent_style = unset
+indent_size = unset
+trim_trailing_whitespace = unset
+insert_final_newline = unset

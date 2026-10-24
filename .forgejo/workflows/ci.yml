@@ -6,7 +6,15 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck install.sh uninstall.sh check-and-rebuild.sh
+      - run: shellcheck install.sh uninstall.sh check-and-rebuild.sh check-style.sh
+
+  style:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+      # Tabs, trailing whitespace and indentation steps. The rules live in
+      # .editorconfig and are explained in docs/developer-notes.md.
+      - run: bash check-style.sh
 
   build:
     strategy:

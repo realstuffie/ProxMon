@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- chore(style): add an `.editorconfig` with 4 spaces per indent level, no tabs and no trailing whitespace, and a `check-style.sh` check that runs in CI. The shell scripts move from 2 to 4 spaces. YAML keeps 2, because the keys of a list item line up two columns after its dash
+- ci: use ccache when the image has it, and install dbus-daemon when it is missing
 - feat(keyring): add a KeePassXC option to Connection Settings. It stores token secrets in KeePassXC through the Secret Service. Without it QtKeychain picks the keyring, which is KWallet on Plasma. The page names the program that owns the Secret Service and warns when it isn't KeePassXC, for example when GNOME Keyring or ksecretd got there first. Plasma needs a restart to apply it
 - feat(keyring): add an "Import secrets from KWallet" button. It copies the token secrets into KeePassXC, keeps any entry already there and deletes nothing from KWallet. When the import finishes, the panel refreshes and reads the new entry without a Plasma restart
 - feat(keyring): the Keyring section warns when a switch waits for a Plasma restart and has a Restart Plasma button. Until the restart the widget keeps using the old keyring, so saves and imports still go there

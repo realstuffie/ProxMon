@@ -201,3 +201,9 @@ through the wallet or process memory. See the [credential security model](ARCHIT
 Expansion is driven from two places that complement each other: `activationTogglesExpanded: true` on the `PlasmoidItem` in main.qml lets Plasma toggle the popup on activation, and a `TapHandler` in CompactRepresentation.qml calls `root.expanded = !root.expanded` on direct taps. `root` resolves through the component creation context at tap time.
 
 One known cosmetic quirk: the handler's `enabled: !Plasmoid.editMode` binding cannot resolve `Plasmoid` inside that component and logs one harmless `ReferenceError: Plasmoid is not defined` per plasmashell load. The handler is load-bearing; do not remove it to silence the warning (tap-to-expand stops working; verified at runtime). A `HoverHandler` provides passive hover highlighting. `Kirigami.Icon` absorbs plain `MouseArea` clicks over the icon area (KDE bug 518024), which is why the handler sits at the root item level.
+
+## Code style
+
+`.editorconfig` sets 4 spaces per indent level, with no tabs and no trailing whitespace. YAML uses 2 spaces, because the keys of a list item line up two columns after its dash.
+
+`./check-style.sh` checks these rules and runs in CI. It also requires shell scripts to indent in multiples of 4 and YAML in multiples of 2. C++ and QML are not checked for multiples, because continuation lines line up under the code above them. Heredoc bodies in shell scripts are skipped, since they print as written.
