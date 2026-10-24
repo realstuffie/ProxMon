@@ -232,13 +232,13 @@ QtKeychain picks its keyring at the first access, so the option only takes effec
 
 **4. Move your secrets.** The option does not move secrets already in KWallet. After the restart, press **Import secrets from KWallet** and then Apply. ProxMon copies each token secret into KeePassXC, keeps any entry that already exists there and deletes nothing from KWallet. KeePassXC may ask you to unlock the database, which includes a YubiKey touch. A notification and the line under the button show the result. Once everything works you can delete the old entries in KWalletManager.
 
-**A locked database pauses monitoring.** ProxMon holds a token secret in memory only while a request is in flight, and it reads the secret from the keyring on every refresh. A locked KeePassXC database can't hand one out, so monitoring pauses until you unlock it. ProxMon checks the lock state first, so it doesn't open an unlock dialog on every refresh. The panel shows "KeePassXC is locked. Unlock it to resume." and retries on its backoff, or at once if your KeePassXC announces the unlock. Import and Update Keyring do open the dialog, because you asked for them. Caching the token would avoid the pause but break the in-flight-only rule, so ProxMon doesn't. Your options:
+**A locked database pauses monitoring.** ProxMon holds a token secret in memory only while a request is in flight, and it reads the secret from the keyring on every refresh. A locked KeePassXC database can't hand one out, so monitoring pauses until you unlock it. ProxMon checks the lock state first, so it doesn't open an unlock dialog on every refresh. The panel shows "KeePassXC is locked. Unlock it to resume." and retries as soon as you unlock the database, or on its backoff if that announcement is missed. Import and Update Keyring do open the dialog, because you asked for them. Caching the token would avoid the pause but break the in-flight-only rule, so ProxMon doesn't. Your options:
 
 - Keep the database unlocked while you want monitoring. That means turning auto-lock off.
 - Lock only on screen lock or suspend, not after a timeout.
 - Stay on KWallet on this machine. The KeePassXC option is off by default, and KWallet unlocks once at login.
 
-**Limits.** Restoring endpoints from stored keys when the config is empty works with KWallet and with KeePassXC. If QtKeychain falls back to the Secret Service on its own because KWallet is missing, saving and reading secrets work but that restore does not. The wake-up on unlock depends on the provider announcing it. If yours doesn't, ProxMon retries on its backoff, from 30 seconds up to 10 minutes.
+**Limits.** Restoring endpoints from stored keys when the config is empty works with KWallet and with KeePassXC. If QtKeychain falls back to the Secret Service on its own because KWallet is missing, saving and reading secrets work but that restore does not. The wake-up on unlock depends on the provider announcing it. KeePassXC does, with a collection-changed signal. If another provider doesn't, ProxMon retries on its backoff, from 30 seconds up to 10 minutes.
 
 ## Security
 

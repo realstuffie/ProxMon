@@ -7,6 +7,7 @@
 
 QT_BEGIN_NAMESPACE
 class QDBusMessage;
+class QDBusObjectPath;
 class QProcess;
 QT_END_NAMESPACE
 
@@ -87,8 +88,10 @@ private slots:
     void onWalletOpened(const QString &wallet);
     void onSecretServiceChanged(const QString &interface, const QVariantMap &changed,
                                 const QStringList &invalidated);
+    void onCollectionChanged(const QDBusObjectPath &collection);
 
 private:
+    void secretServiceUnlocked();
     void startRead(const QString &key, SecretHandler onReady, ErrorHandler onError);
     void checkCollectionLocked(std::function<void(bool locked)> done);
     void emitFilteredKeys(const QStringList &raw);

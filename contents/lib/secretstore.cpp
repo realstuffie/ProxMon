@@ -242,15 +242,26 @@ void SecretStore::watchWalletOpened() {
 
 void SecretStore::connectWalletOpened() {
     if (usesSecretService()) {
-        // Providers announce an unlock as Locked turning false on a collection.
-        // An empty path matches every collection.
+        // Providers announce an unlock in one of two ways. Some change the
+        // collection's Locked property, which arrives as PropertiesChanged on
+        // any collection path, so the path is left empty. KeePassXC sends no
+        // property change; it sends Service.CollectionChanged on both lock and
+        // unlock, so that handler asks for the Locked flag again.
         if (m_secretServiceSignalConnected) return;
-        m_secretServiceSignalConnected = QDBusConnection::sessionBus().connect(
+        QDBusConnection bus = QDBusConnection::sessionBus();
+        const bool properties = bus.connect(
             QStringLiteral("org.freedesktop.secrets"),
             QString(),
             QStringLiteral("org.freedesktop.DBus.Properties"),
             QStringLiteral("PropertiesChanged"),
             this, SLOT(onSecretServiceChanged(QString,QVariantMap,QStringList)));
+        const bool collection = bus.connect(
+            QStringLiteral("org.freedesktop.secrets"),
+            QStringLiteral("/org/freedesktop/secrets"),
+            QStringLiteral("org.freedesktop.Secret.Service"),
+            QStringLiteral("CollectionChanged"),
+            this, SLOT(onCollectionChanged(QDBusObjectPath)));
+        m_secretServiceSignalConnected = properties || collection;
         return;
     }
     if (m_walletSignalConnected) return;
@@ -284,13 +295,31 @@ void SecretStore::onSecretServiceChanged(const QString &interface, const QVarian
     Q_UNUSED(invalidated);
     if (interface != QLatin1String("org.freedesktop.Secret.Collection")) return;
     if (!changed.contains(QStringLiteral("Locked")) || changed.value(QStringLiteral("Locked")).toBool()) return;
+    secretServiceUnlocked();
+}
 
-    QDBusConnection::sessionBus().disconnect(
+void SecretStore::onCollectionChanged(const QDBusObjectPath &) {
+    // This fires for a lock as well as an unlock, so look at the flag.
+    checkCollectionLocked([this](bool locked) {
+        if (!locked) secretServiceUnlocked();
+    });
+}
+
+void SecretStore::secretServiceUnlocked() {
+    if (!m_secretServiceSignalConnected) return;
+    QDBusConnection bus = QDBusConnection::sessionBus();
+    bus.disconnect(
         QStringLiteral("org.freedesktop.secrets"),
         QString(),
         QStringLiteral("org.freedesktop.DBus.Properties"),
         QStringLiteral("PropertiesChanged"),
         this, SLOT(onSecretServiceChanged(QString,QVariantMap,QStringList)));
+    bus.disconnect(
+        QStringLiteral("org.freedesktop.secrets"),
+        QStringLiteral("/org/freedesktop/secrets"),
+        QStringLiteral("org.freedesktop.Secret.Service"),
+        QStringLiteral("CollectionChanged"),
+        this, SLOT(onCollectionChanged(QDBusObjectPath)));
     m_secretServiceSignalConnected = false;
     // From here on it is the same as a wallet opening: retry the failed read.
     onWalletOpened(QString());

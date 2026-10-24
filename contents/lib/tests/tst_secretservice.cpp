@@ -100,6 +100,7 @@ private slots:
     void providerIsTheProcessOwningTheName();
     void lockedKeyringFailsAReadWithoutPrompting();
     void unlockWakesAWatcherButLockingDoesNot();
+    void collectionChangedWakesAWatcherOnlyOnceUnlocked();
 
 private:
     QProcess m_bus;
@@ -202,6 +203,34 @@ void SecretServiceTest::unlockWakesAWatcherButLockingDoesNot() {
 
     emitLocked(false);
     QVERIFY2(opened.wait(5000), "unlocking did not wake the watcher");
+    QCOMPARE(opened.count(), 1);
+}
+
+// KeePassXC announces a lock and an unlock the same way, with
+// Service.CollectionChanged and no property change. The watcher has to look at
+// the Locked flag, so a lock must not wake it and an unlock must.
+void SecretServiceTest::collectionChangedWakesAWatcherOnlyOnceUnlocked() {
+    SecretStore store;
+    QSignalSpy opened(&store, &SecretStore::walletOpened);
+    store.watchWalletOpened();
+
+    auto emitChanged = []() {
+        QDBusMessage signal = QDBusMessage::createSignal(
+            QStringLiteral("/org/freedesktop/secrets"),
+            QStringLiteral("org.freedesktop.Secret.Service"),
+            QStringLiteral("CollectionChanged"));
+        signal << QVariant::fromValue(QDBusObjectPath(Collection));
+        QDBusConnection::sessionBus().send(signal);
+    };
+
+    m_service.locked = true;
+    emitChanged();
+    QTest::qWait(400);
+    QCOMPARE(opened.count(), 0);
+
+    m_service.locked = false;
+    emitChanged();
+    QVERIFY2(opened.wait(5000), "an unlock announced by CollectionChanged did not wake the watcher");
     QCOMPARE(opened.count(), 1);
 }
 
