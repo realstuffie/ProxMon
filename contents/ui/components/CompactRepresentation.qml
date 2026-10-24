@@ -47,7 +47,7 @@ Item {
 
     function averageCpuText() {
         if (typeof safeCpuPercent !== "function") return "-"
-            
+
         if (connectionMode === "multiHost") {
             if (!displayedEndpoints || displayedEndpoints.length === 0) return "-"
 
@@ -84,7 +84,7 @@ Item {
         gesturePolicy: TapHandler.ReleaseWithinBounds
         onTapped: root.expanded = !root.expanded
     }
-    
+
     Rectangle {
         anchors.fill: compactLayout
         visible: compactRoot.debugBounds

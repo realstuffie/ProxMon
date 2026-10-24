@@ -77,12 +77,12 @@ KCM.SimpleKCM {
 
     /*  Bind cfg_* keys to the actual controls (KDE Plasma config convention).
         This ensures Apply/Cancel works and values persist via Plasmoid.configuration.
-     
+
         IMPORTANT:
         Avoid adding custom properties directly onto QQC2.ComboBox. Some Plasma/Qt
         versions will throw "Cannot override FINAL property" which prevents the
         entire KCM page (Behavior tab) from loading.
-        Store the selected value in a separate QtObject and alias to it. 
+        Store the selected value in a separate QtObject and alias to it.
     */
     QtObject {
         id: sortingValue
@@ -844,7 +844,7 @@ KCM.SimpleKCM {
             opacity: 0.3
         }
 
-        // Info section 
+        // Info section
         RowLayout {
             spacing: 8
 

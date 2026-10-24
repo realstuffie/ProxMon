@@ -7,7 +7,7 @@ ConfigModel {
         icon: "preferences-system-network"
         source: "../ui/configGeneral.qml"
     }
-    
+
     ConfigCategory {
         name: "Behavior"
         icon: "configure"

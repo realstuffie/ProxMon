@@ -60,7 +60,7 @@ PlasmoidItem {
         txt += " · " + runningVMs + "/" + displayedVmData.length + " VMs"
         txt += " · " + runningLXC + "/" + displayedLxcData.length + " CTs"
         if (lastUpdate) txt += "\nUpdated: " + lastUpdate
-        return txt 
+        return txt
     }
 
     // Connection mode: "single" | "multiHost"
@@ -478,7 +478,7 @@ PlasmoidItem {
         x = Math.max(0, Math.min(x, 1))
         return x * 100
     }
- 
+
     // Redact sensitive identity fragments in debug logs / copied debug output.
     // Matches "user@realm" and "!tokenid"
     property string secretRedactRegex: "([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+)|!([A-Za-z0-9._:-]+)"
