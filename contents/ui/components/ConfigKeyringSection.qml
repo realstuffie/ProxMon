@@ -61,7 +61,7 @@ ColumnLayout {
 
     QQC2.CheckBox {
         id: keepassCheck
-        text: "Store token secrets in KeePassXC (Secret Service) instead of KWallet"
+        text: "Store token secrets in KeePassXC instead of KWallet"
         checked: false
         Layout.leftMargin: 45
     }
@@ -71,29 +71,8 @@ ColumnLayout {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         opacity: 0.7
-        text: "Off lets QtKeychain choose, which is KWallet on Plasma. On stores the token secrets "
-            + "in KeePassXC and needs its Secret Service integration enabled. Only one program can "
-            + "own the Secret Service, so GNOME Keyring and KDE's ksecretd must not. This moves it "
-            + "for your whole desktop, not only ProxMon."
-    }
-
-    QQC2.Label {
-        Layout.leftMargin: 45
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        opacity: 0.7
-        text: "A change needs a Plasma restart after Apply, and a button appears when one is due. "
-            + "Secrets already in KWallet don't move on their own, so use the import below after "
-            + "that restart."
-    }
-
-    QQC2.Label {
-        Layout.leftMargin: 45
-        Layout.fillWidth: true
-        wrapMode: Text.WordWrap
-        opacity: 0.7
-        text: "ProxMon reads the token on every refresh and keeps nothing in memory, so monitoring "
-            + "pauses while the database is locked."
+        text: "Needs KeePassXC's Secret Service integration. Takes effect after a Plasma restart. "
+            + "Monitoring pauses while the database is locked."
     }
 
     QQC2.Label {
@@ -142,8 +121,7 @@ ColumnLayout {
         color: Kirigami.Theme.negativeTextColor
         visible: (root.info.envOverride || "") !== ""
         text: "QTKEYCHAIN_BACKEND=" + (root.info.envOverride || "") + " is set in Plasma's environment and "
-            + "wins over this option. Older ProxMon versions set kwallet6, and terminals started from "
-            + "that session keep it. Run unset QTKEYCHAIN_BACKEND before kstart plasmashell, or log "
+            + "wins over this option. Run unset QTKEYCHAIN_BACKEND before kstart plasmashell, or log "
             + "out and back in."
     }
 
@@ -152,9 +130,8 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.info.restartNeeded === true
         type: Kirigami.MessageType.Warning
-        text: "Plasma has to restart before the keyring changes. Until then ProxMon keeps using the "
-            + "keyring it started with, so saved tokens and imports still go to the old one. Press "
-            + "Apply first. Restarting reloads every panel and closes this dialog."
+        text: "Plasma has to restart before the keyring changes. Press Apply first. "
+            + "Restarting reloads every panel and closes this dialog."
         actions: [
             Kirigami.Action {
                 text: "Restart Plasma"
@@ -185,9 +162,8 @@ ColumnLayout {
         Layout.fillWidth: true
         wrapMode: Text.WordWrap
         opacity: 0.7
-        text: "The import runs after Apply. It copies the token secrets from KWallet into KeePassXC, "
-            + "keeps any entry already there and deletes nothing from KWallet. KeePassXC may ask "
-            + "you to unlock the database first."
+        text: "The import runs after Apply. It copies KWallet secrets into KeePassXC, leaves "
+            + "existing entries alone and deletes nothing from KWallet."
     }
 
     QQC2.Label {
