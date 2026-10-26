@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Checks the whitespace rules in .editorconfig on every tracked text file.
 #
-#   - no tab characters
+#   - no tab characters, except in debian/rules, whose recipes need them
 #   - no trailing whitespace
 #   - shell scripts indent in multiples of 4 spaces, YAML in multiples of 2
 #
@@ -26,7 +26,7 @@ for file in "${files[@]}"; do
     [ -f "$file" ] || continue
     grep -qI . "$file" || continue   # skip binary files
 
-    if grep -nP '\t' "$file" >/dev/null; then
+    if [ "$file" != debian/rules ] && grep -nP '\t' "$file" >/dev/null; then
         report "$file: contains tab characters (lines: $(grep -nP '\t' "$file" | cut -d: -f1 | head -5 | tr '\n' ' '))"
     fi
     if grep -nP '[ \t]+$' "$file" >/dev/null; then

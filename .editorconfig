@@ -17,6 +17,10 @@ indent_size = 2
 [.gitmodules]
 indent_style = tab
 
+# Makefile recipes must start with a tab.
+[debian/rules]
+indent_style = tab
+
 # Licence texts keep the layout of the published originals.
 [{LICENSES/*,License}]
 indent_style = unset
