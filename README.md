@@ -9,7 +9,7 @@
 <p>Live node, VM &amp; container stats · in-widget VNC &amp; LXC consoles · PBS backup status · multi-host.</p>
 
 <p>
-  <img src="https://img.shields.io/badge/version-0.9.0-1d99f3" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.9.1-1d99f3" alt="Version" />
   <img src="https://img.shields.io/badge/license-GPL--3.0--or--later-4caf50" alt="License" />
   <img src="https://img.shields.io/badge/KDE%20Plasma-6.0%2B-1d99f3?logo=kde&amp;logoColor=white" alt="KDE Plasma 6" />
   <img src="https://img.shields.io/badge/Proxmox%20VE-7.0%2B-e57000?logo=proxmox&amp;logoColor=white" alt="Proxmox VE 7+" />
@@ -369,7 +369,19 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 ## Changelog
 
 <details>
-<summary><strong>v0.9.0</strong> (latest)</summary>
+<summary><strong>v0.9.1</strong> (latest)</summary>
+
+- Builds can link the system QtKeychain. When it is older than 0.16.0 the Keyring tab is hidden, because that library cannot choose a keyring
+- `install.sh --cache` keeps the build folder between runs, and the sync no longer copies build folders into the install
+- `uninstall.sh` removes all five icons and the kept build folder
+- The Ubuntu package uses the system JetBrains Mono font instead of its own copy
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+
+</details>
+
+<details>
+<summary><strong>v0.9.0</strong></summary>
 
 - New Keyring settings tab with a KeePassXC option, and a button that imports your tokens from KWallet
 - A locked KeePassXC database pauses monitoring instead of asking for an unlock on every refresh

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.9.1
 
 - build: add `make-dist.sh`, which builds `dist/proxmon-<version>.tar.gz` with the QtKeychain sources included, because `git archive` leaves submodules out, and writes its `.sha256`. It refuses to run with uncommitted changes, or when HEAD is not at the version's tag
 - build(debian): depend on `fonts-jetbrains-mono` and link its font instead of shipping a second copy
