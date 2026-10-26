@@ -490,6 +490,7 @@ void ProxmoxController::setPbsRefreshInterval(int value) {
         m_pbsTimer->setInterval(m_pbsRefreshInterval * 1000);
     }
     emit pbsRefreshIntervalChanged();
+    refreshPBS();
 }
 
 void ProxmoxController::setPbsExcludeTag(const QString &value) {
@@ -892,6 +893,9 @@ void ProxmoxController::storeSinglePBSSecret(const QString &host, int port, cons
     appendDebugLog(QStringLiteral("[ProxmoxController] storeSinglePBSSecret host=%1 port=%2 key=%3")
         .arg(host).arg(port).arg(key));
     m_singleSecretStore->setKey(key);
+    // A new secret changes what the PBS fetch can read. Refresh once the write
+    // lands, even a failed one, so the failure shows up as the PBS error.
+    connect(m_singleSecretStore, &SecretStore::writeFinished, this, &ProxmoxController::refreshPBS, Qt::SingleShotConnection);
     m_singleSecretStore->writeSecret(secret);
 }
 
@@ -915,6 +919,7 @@ void ProxmoxController::storeMultiHostPBSSecret(const QString &host, int port, c
     appendDebugLog(QStringLiteral("[ProxmoxController] storeMultiHostPBSSecret host=%1 port=%2 key=%3")
         .arg(host).arg(port).arg(key));
     m_multiSecretStore->setKey(key);
+    connect(m_multiSecretStore, &SecretStore::writeFinished, this, &ProxmoxController::refreshPBS, Qt::SingleShotConnection);
     m_multiSecretStore->writeSecret(secret);
 }
 
@@ -2468,9 +2473,13 @@ void ProxmoxController::refreshPBSNow() {
     }
 
     m_pbsRefreshInterval = m_pbsRefreshInterval > 0 ? m_pbsRefreshInterval : ProxmoxConst::Defaults::PbsRefreshInterval;
+    // A single-host cycle with no PVE host fetches nothing. Arming the timer
+    // then would make startSecretRead() believe PBS has run, and the first
+    // real cycle would wait a whole interval.
+    const bool awaitingHost = m_connectionMode == QStringLiteral("single") && m_host.trimmed().isEmpty();
     if (m_pbsTimer) {
         m_pbsTimer->setInterval(m_pbsRefreshInterval * 1000);
-        if (!m_pbsTimer->isActive()) {
+        if (!awaitingHost && !m_pbsTimer->isActive()) {
             m_pbsTimer->start();
         }
     }

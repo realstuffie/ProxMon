@@ -277,3 +277,13 @@ add_test(NAME keyringselect COMMAND tst_keyringselect)
 set_tests_properties(keyringselect PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/proxmon-test-bus;QT_LOGGING_RULES=proxmon.keyring.warning=false")
+
+qt_add_executable(tst_pbsrefresh tst_pbsrefresh.cpp)
+target_include_directories(tst_pbsrefresh PRIVATE ..)
+target_link_libraries(tst_pbsrefresh PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::DBus Qt6::Network Qt6::Test)
+add_test(NAME pbsrefresh COMMAND tst_pbsrefresh)
+# Unreachable session bus, as for keyringfailure: no real keyring is touched.
+set_tests_properties(pbsrefresh PROPERTIES
+    TIMEOUT 60
+    ENVIRONMENT "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/proxmon-test-bus;QTKEYCHAIN_BACKEND=kwallet6;QT_LOGGING_RULES=proxmon.keyring.warning=false")
