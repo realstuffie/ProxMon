@@ -1,6 +1,10 @@
 #include "secretstore.h"
 #include <algorithm>
+#ifdef PROXMON_SYSTEM_QTKEYCHAIN
+#include <qt6keychain/keychain.h>
+#else
 #include <qtkeychain/keychain.h>
+#endif
 #include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusConnectionInterface>
@@ -472,8 +476,16 @@ void SecretStore::startQdbusFallback(int handle) {
     proc->start(QStringLiteral("qdbus"), args);
 }
 
+bool SecretStore::backendSelectionSupported() {
+#ifdef PROXMON_QTKEYCHAIN_BACKEND_SELECTION
+    return true;
+#else
+    return false;
+#endif
+}
+
 void SecretStore::selectBackend(bool useSecretService) {
-    if (s_jobStarted) return;
+    if (!backendSelectionSupported() || s_jobStarted) return;
     if (useSecretService) {
         // A QTKEYCHAIN_BACKEND the user set always wins; only replace our own.
         if (!qEnvironmentVariableIsEmpty("QTKEYCHAIN_BACKEND") && !s_envIsOurs) return;
@@ -486,10 +498,12 @@ void SecretStore::selectBackend(bool useSecretService) {
 }
 
 bool SecretStore::usesSecretService() {
+    if (!backendSelectionSupported()) return false;
     return s_jobStarted ? s_lockedSecretService : envSelectsSecretService();
 }
 
 QString SecretStore::envOverride() {
+    if (!backendSelectionSupported()) return QString();
     return s_envIsOurs ? QString() : QString::fromLocal8Bit(qgetenv("QTKEYCHAIN_BACKEND"));
 }
 

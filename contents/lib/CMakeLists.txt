@@ -6,31 +6,48 @@ find_package(Qt6 REQUIRED COMPONENTS Core Network Qml DBus Gui Quick WebSockets 
 set(CMAKE_AUTOMOC ON)
 set(QT_QML_LINT_OPTIONS --disable-warning unqualified)
 option(PROXMON_BUILD_TESTS "Build ProxMon unit tests" OFF)
-# Bundled dependency: QtKeychain (stores secrets in the desktop keyring: KWallet/libsecret/etc)
-# Build it with Qt6 (this project uses Qt6)
-set(BUILD_WITH_QT6 ON CACHE BOOL "Build qtkeychain with Qt 6" FORCE)
-set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable qtkeychain translations" FORCE)
-set(BUILD_TEST_APPLICATION OFF CACHE BOOL "Disable qtkeychain test app" FORCE)
-# Build qtkeychain as a STATIC library so it is compiled directly into
-# libproxmoxclientplugin.so. This eliminates the libqt6keychain.so runtime
-# dependency and the RUNPATH pointing to the (deleted) temp build directory.
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build qtkeychain as static for bundling into plugin" FORCE)
-# Ensure keychain library is built with PIC so we can link it into our plugin .so
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-# libsecret adds the Secret Service backend (KeePassXC, GNOME Keyring). Its dev
-# package is optional: without it qtkeychain builds with KWallet only.
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(PROXMON_LIBSECRET QUIET libsecret-1)
-if(PROXMON_LIBSECRET_FOUND)
-    set(LIBSECRET_SUPPORT ON CACHE BOOL "Build bundled qtkeychain with libsecret support" FORCE)
+# QtKeychain stores secrets in the desktop keyring (KWallet, libsecret and so on).
+# By default ProxMon builds the copy in third_party/qtkeychain. A distro package
+# that may not carry a bundled copy sets PROXMON_SYSTEM_QTKEYCHAIN instead.
+option(PROXMON_SYSTEM_QTKEYCHAIN "Link the system QtKeychain instead of the bundled copy" OFF)
+if(PROXMON_SYSTEM_QTKEYCHAIN)
+    find_package(Qt6Keychain REQUIRED)
+    # The QTKEYCHAIN_BACKEND variable, which the KeePassXC option sets, arrived in
+    # 0.16.0. Older libraries ignore it, so the option is switched off for them.
+    # A distro build of 0.16.0 or newer has the libsecret backend.
+    if(Qt6Keychain_VERSION VERSION_GREATER_EQUAL 0.16.0)
+        set(PROXMON_QTKEYCHAIN_BACKEND_SELECTION ON)
+        set(LIBSECRET_SUPPORT ON)
+    else()
+        message(STATUS "QtKeychain '${Qt6Keychain_VERSION}' cannot choose a backend: the KeePassXC option is off")
+    endif()
 else()
-    message(STATUS "libsecret-1 not found: building without the Secret Service backend")
-    set(LIBSECRET_SUPPORT OFF CACHE BOOL "Build bundled qtkeychain without libsecret support" FORCE)
+    # Build it with Qt6 (this project uses Qt6)
+    set(BUILD_WITH_QT6 ON CACHE BOOL "Build qtkeychain with Qt 6" FORCE)
+    set(BUILD_TRANSLATIONS OFF CACHE BOOL "Disable qtkeychain translations" FORCE)
+    set(BUILD_TEST_APPLICATION OFF CACHE BOOL "Disable qtkeychain test app" FORCE)
+    # Build qtkeychain as a STATIC library so it is compiled directly into
+    # libproxmoxclientplugin.so. This eliminates the libqt6keychain.so runtime
+    # dependency and the RUNPATH pointing to the (deleted) temp build directory.
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build qtkeychain as static for bundling into plugin" FORCE)
+    # Ensure keychain library is built with PIC so we can link it into our plugin .so
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    # libsecret adds the Secret Service backend (KeePassXC, GNOME Keyring). Its dev
+    # package is optional: without it qtkeychain builds with KWallet only.
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(PROXMON_LIBSECRET QUIET libsecret-1)
+    if(PROXMON_LIBSECRET_FOUND)
+        set(LIBSECRET_SUPPORT ON CACHE BOOL "Build bundled qtkeychain with libsecret support" FORCE)
+    else()
+        message(STATUS "libsecret-1 not found: building without the Secret Service backend")
+        set(LIBSECRET_SUPPORT OFF CACHE BOOL "Build bundled qtkeychain without libsecret support" FORCE)
+    endif()
+    # Ensure qtkeychain doesn't build its own tests when embedded. ProxMon's test
+    # option is independent so enabling our tests does not enable dependency tests.
+    set(BUILD_TESTING OFF)
+    add_subdirectory(third_party/qtkeychain)
+    set(PROXMON_QTKEYCHAIN_BACKEND_SELECTION ON)
 endif()
-# Ensure qtkeychain doesn't build its own tests when embedded. ProxMon's test
-# option is independent so enabling our tests does not enable dependency tests.
-set(BUILD_TESTING OFF)
-add_subdirectory(third_party/qtkeychain)
 
 # Find libvncclient
 find_package(PkgConfig REQUIRED)
@@ -77,6 +94,12 @@ qt_add_library(proxmoxclientplugin SHARED
 
 if(LIBSECRET_SUPPORT)
     target_compile_definitions(proxmoxclientplugin PRIVATE PROXMON_HAVE_LIBSECRET=1)
+endif()
+if(PROXMON_SYSTEM_QTKEYCHAIN)
+    target_compile_definitions(proxmoxclientplugin PRIVATE PROXMON_SYSTEM_QTKEYCHAIN=1)
+endif()
+if(PROXMON_QTKEYCHAIN_BACKEND_SELECTION)
+    target_compile_definitions(proxmoxclientplugin PRIVATE PROXMON_QTKEYCHAIN_BACKEND_SELECTION=1)
 endif()
 
 target_include_directories(proxmoxclientplugin PRIVATE

@@ -14,11 +14,17 @@
 #include "keyringprobe.h"
 #include "secretstore.h"
 
+// A QtKeychain older than 0.16.0 ignores QTKEYCHAIN_BACKEND, so the tests that
+// pick a backend through it cannot pass there.
+#define SKIP_WITHOUT_BACKEND_SELECTION() \
+    if (!SecretStore::backendSelectionSupported()) QSKIP("QtKeychain older than 0.16.0 ignores QTKEYCHAIN_BACKEND")
+
 class KeyringSelectTest : public QObject {
     Q_OBJECT
 
 private slots:
     void initTestCase();
+    void selectionIsOffWithAnOldQtKeychain();
     void toggleSelectsAndClearsTheSecretService();
     void aUserSetBackendWins();
     void probeReportsTheChoiceAndAMissingBus();
@@ -34,7 +40,26 @@ void KeyringSelectTest::initTestCase() {
     qunsetenv("QTKEYCHAIN_BACKEND");
 }
 
+// With a QtKeychain that cannot choose a backend, ProxMon must not claim it did.
+void KeyringSelectTest::selectionIsOffWithAnOldQtKeychain() {
+    if (SecretStore::backendSelectionSupported()) {
+        QSKIP("this build's QtKeychain can choose a backend");
+    }
+    SecretStore::selectBackend(true);
+    QVERIFY(qEnvironmentVariableIsEmpty("QTKEYCHAIN_BACKEND"));
+    QVERIFY(!SecretStore::usesSecretService());
+
+    // The variable would not be honoured, so it is neither used nor an override.
+    qputenv("QTKEYCHAIN_BACKEND", "libsecret");
+    QVERIFY(!SecretStore::usesSecretService());
+    QVERIFY(SecretStore::envOverride().isEmpty());
+    qunsetenv("QTKEYCHAIN_BACKEND");
+
+    QCOMPARE(KeyringProbe().probe(true).value("backendSelectable").toBool(), false);
+}
+
 void KeyringSelectTest::toggleSelectsAndClearsTheSecretService() {
+    SKIP_WITHOUT_BACKEND_SELECTION();
     QVERIFY(!SecretStore::usesSecretService());
 
     SecretStore::selectBackend(true);
@@ -50,6 +75,7 @@ void KeyringSelectTest::toggleSelectsAndClearsTheSecretService() {
 }
 
 void KeyringSelectTest::aUserSetBackendWins() {
+    SKIP_WITHOUT_BACKEND_SELECTION();
     qputenv("QTKEYCHAIN_BACKEND", "kwallet6");
     SecretStore::selectBackend(true);
     QCOMPARE(qgetenv("QTKEYCHAIN_BACKEND"), QByteArray("kwallet6"));
@@ -81,12 +107,15 @@ void KeyringSelectTest::probeReportsTheChoiceAndAMissingBus() {
     QCOMPARE(info.value("secretServiceOwner").toString(), QString());
     QCOMPARE(info.value("secretServiceActivatable").toBool(), false);
     QVERIFY(info.contains("libsecretBuilt"));
+    QCOMPARE(info.value("backendSelectable").toBool(), SecretStore::backendSelectionSupported());
+    QCOMPARE(probe.backendSelectable(), SecretStore::backendSelectionSupported());
 }
 
 // The variable ProxMon sets only has to live until QtKeychain has read it at
 // its first job. If it stayed, every program plasmashell starts afterwards
 // would inherit it and it would override their own choice.
 void KeyringSelectTest::ourEnvIsReleasedAfterTheFirstJob() {
+    SKIP_WITHOUT_BACKEND_SELECTION();
     qunsetenv("QTKEYCHAIN_BACKEND");
     SecretStore::selectBackend(true);
     QCOMPARE(qgetenv("QTKEYCHAIN_BACKEND"), QByteArray("libsecret"));
@@ -105,6 +134,7 @@ void KeyringSelectTest::ourEnvIsReleasedAfterTheFirstJob() {
 }
 
 void KeyringSelectTest::choiceIsFrozenOnceAJobStarts() {
+    SKIP_WITHOUT_BACKEND_SELECTION();
     // A job has started, so neither direction can change the backend any more.
     SecretStore::selectBackend(false);
     QVERIFY(SecretStore::usesSecretService());

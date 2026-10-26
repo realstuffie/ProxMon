@@ -9,6 +9,10 @@
 KeyringProbe::KeyringProbe(QObject *parent)
     : QObject(parent) {}
 
+bool KeyringProbe::backendSelectable() const {
+    return SecretStore::backendSelectionSupported();
+}
+
 QVariantMap KeyringProbe::probe(bool wantKeePassXC) const {
     const bool usingSecretService = SecretStore::usesSecretService();
 
@@ -36,6 +40,7 @@ QVariantMap KeyringProbe::probe(bool wantKeePassXC) const {
         {QStringLiteral("restartNeeded"), wantKeePassXC != usingSecretService},
         {QStringLiteral("envOverride"), SecretStore::envOverride()},
         {QStringLiteral("libsecretBuilt"), libsecretBuilt},
+        {QStringLiteral("backendSelectable"), backendSelectable()},
         {QStringLiteral("kwalletRunning"), kwalletRunning},
         {QStringLiteral("kwalletActivatable"), kwalletActivatable},
         {QStringLiteral("secretServiceOwner"), SecretStore::secretServiceProvider()},

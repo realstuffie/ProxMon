@@ -46,6 +46,10 @@ public:
     void listKeys();
     void listKWalletKeys();
 
+    // False when the QtKeychain this was built with is older than 0.16.0. It
+    // ignores QTKEYCHAIN_BACKEND, so selectBackend() does nothing,
+    // usesSecretService() is false and the settings hide the KeePassXC option.
+    static bool backendSelectionSupported();
     // true makes QtKeychain use the Secret Service (KeePassXC); false leaves
     // QtKeychain's own tiered detection alone (KWallet first on Plasma).
     // QtKeychain fixes its backend at the first keychain job, so this only

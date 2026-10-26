@@ -108,6 +108,9 @@ private:
 };
 
 void SecretServiceTest::initTestCase() {
+    if (!SecretStore::backendSelectionSupported()) {
+        QSKIP("QtKeychain older than 0.16.0 cannot be pointed at the fake Secret Service");
+    }
     m_bus.start(QStringLiteral("dbus-daemon"),
                 {QStringLiteral("--session"), QStringLiteral("--nofork"), QStringLiteral("--print-address")});
     // Some build images have no dbus-daemon. Skip there instead of failing, since
