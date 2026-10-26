@@ -38,3 +38,4 @@ git ls-files -z --recurse-submodules \
 
 (cd dist && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
 printf '%s\n' "Wrote $tarball ($(du -h "$tarball" | cut -f1))"
+cat "$tarball.sha256"
