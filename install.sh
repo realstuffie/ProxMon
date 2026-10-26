@@ -25,19 +25,24 @@ AUTO_DEPS=1
 INSTALL_STANDALONE_QML_MODULE=0
 INSTALL_WATCHER=1
 REBUILD_ONLY=0
+USE_CACHE=0
 for arg in "$@"; do
     case "$arg" in
         --no-deps) AUTO_DEPS=0 ;;
         --no-watcher) INSTALL_WATCHER=0 ;;
         --rebuild) REBUILD_ONLY=1 ; AUTO_DEPS=0 ; INSTALL_WATCHER=0 ;;
+        --cache) USE_CACHE=1 ;;
         --install-standalone-qml-module) INSTALL_STANDALONE_QML_MODULE=1 ;;
         -h|--help)
             cat <<'EOF'
-Usage: ./install.sh [--no-deps] [--no-watcher] [--install-standalone-qml-module]
+Usage: ./install.sh [--no-deps] [--no-watcher] [--cache] [--install-standalone-qml-module]
 
 Options:
   --no-deps     Skip automatic dependency installation.
   --no-watcher  Skip auto-update watcher install.
+  --cache       Keep the build directory in ~/.cache/proxmon between runs, so a
+                repeat install only recompiles what changed. Meant for development.
+                The auto-update watcher always builds from scratch.
   --install-standalone-qml-module
                 Also copy the native plugin/qmldir to the user-local Qt6 QML
                 module path for stricter distro/policy setups.
@@ -189,8 +194,16 @@ require_cmd mkdir
 
 printf '%s\n' "[ build] Compiling native plugin..."
 
-BUILD_DIR="$(mktemp -d -t proxmon-build-XXXXXX)"
-trap 'rm -rf "$BUILD_DIR"' EXIT
+if [ "$USE_CACHE" -eq 1 ]; then
+    # One directory per checkout, because CMake refuses a cache that was made for
+    # another source path.
+    BUILD_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/proxmon/build-$(printf '%s' "$PWD" | cksum | cut -d' ' -f1)"
+    mkdir -p "$BUILD_DIR"
+    printf '%s\n' "[ build] Using the kept build directory $BUILD_DIR"
+else
+    BUILD_DIR="$(mktemp -d -t proxmon-build-XXXXXX)"
+    trap 'rm -rf "$BUILD_DIR"' EXIT
+fi
 
 cmake -S contents/lib -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release || exit 1
 
@@ -248,6 +261,7 @@ ICON_DIR="$ICON_BASE/hicolor/scalable/apps"
 
 # Checksum-based sync: copy only files whose md5 differs from the installed copy.
 # Copies everything unconditionally if md5sum is unavailable.
+# build directories are skipped: they hold local build output the plasmoid never reads.
 sync_contents() {
     local src="$1" dst="$2"
     local have_md5=1
@@ -268,7 +282,7 @@ sync_contents() {
             atomic_cp "$srcfile" "$dstfile"
             copied=$(( copied + 1 ))
         fi
-    done < <(find "$src" -type f -print0)
+    done < <(find "$src" -type d -name build -prune -o -type f -print0)
     printf '%s\n' "[ install] Synced $copied file(s) → $dst"
 }
 
@@ -298,6 +312,13 @@ elif [ -d "$PLASMOID_CONTENTS" ]; then
     # current when the plasmoid was first installed.
     atomic_cp "metadata.json" "$(dirname "$PLASMOID_CONTENTS")/"
     printf '%s\n' "[ install] metadata.json synced → $(dirname "$PLASMOID_CONTENTS")/metadata.json"
+fi
+
+# Older versions of the sync copied local build directories into the install.
+# They are dead weight and the sync skips them now, so remove what is left.
+if [ -d "$PLASMOID_CONTENTS/lib/build" ]; then
+    rm -rf "${PLASMOID_CONTENTS:?}/lib/build"
+    printf '%s\n' "[ clean ] Removed a leftover build directory from the install"
 fi
 
 mkdir -p "$ICON_DIR"
