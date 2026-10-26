@@ -1,3 +1,10 @@
+proxmon (0.9.0-1~ppa2~resolute1) resolute; urgency=medium
+
+  * Depend on fonts-jetbrains-mono and link to its font instead of shipping
+    a second copy.
+
+ -- Thomas Moore <moore.thomas123456789@gmail.com>  Mon, 26 Oct 2026 15:00:00 +1300
+
 proxmon (0.9.0-1~ppa1~resolute1) resolute; urgency=medium
 
   * Initial packaging.

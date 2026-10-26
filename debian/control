@@ -22,6 +22,7 @@ Rules-Requires-Root: no
 Package: proxmon
 Architecture: any
 Depends:
+ fonts-jetbrains-mono,
  plasma-workspace (>= 4:6.0),
  qml6-module-org-kde-kcmutils,
  qml6-module-org-kde-kirigami,
