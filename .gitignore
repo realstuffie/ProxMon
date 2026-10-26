@@ -36,6 +36,15 @@ ui_*.h
 *.dll
 *.exe
 
+# ---- Debian packaging build output (from dpkg-buildpackage run in the tree) ----
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/*.substvars
+debian/proxmon/
+debian/proxmon-dbgsym/
+obj-*/
+
 # ---- Logs / misc ----
 *.log
 
