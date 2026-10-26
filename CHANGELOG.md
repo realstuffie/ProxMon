@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.9.0
 
 - chore(style): add an `.editorconfig` with 4 spaces per indent level, no tabs and no trailing whitespace, and a `check-style.sh` check that runs in CI. The shell scripts move from 2 to 4 spaces. YAML keeps 2, because the keys of a list item line up two columns after its dash
 - ci: use ccache when the image has it, and install dbus-daemon when it is missing
