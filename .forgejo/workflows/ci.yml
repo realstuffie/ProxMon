@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
-      - run: shellcheck install.sh uninstall.sh check-and-rebuild.sh check-style.sh check-config-pages.sh
+      - run: shellcheck install.sh uninstall.sh make-dist.sh check-and-rebuild.sh check-style.sh check-config-pages.sh
 
   style:
     runs-on: ubuntu-26.04
@@ -17,6 +17,25 @@ jobs:
       - run: bash check-style.sh
       # Every settings page must declare every setting in main.xml.
       - run: bash check-config-pages.sh
+
+  # Distro packages link the system QtKeychain. Ubuntu 26.04 ships 0.15.0, which
+  # cannot choose a backend, so this job covers the build where the KeePassXC
+  # option is off and the Keyring tab is hidden. It needs no submodule checkout,
+  # because that build never touches third_party/qtkeychain.
+  system-qtkeychain:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure the QtKeychain development package is available
+        run: |
+          if ! dpkg -s qtkeychain-qt6-dev >/dev/null 2>&1; then
+            apt-get update && apt-get install -y qtkeychain-qt6-dev
+          fi
+          dpkg -s qtkeychain-qt6-dev | grep '^Version'
+      - name: Configure
+        run: cmake -S contents/lib -B build -DCMAKE_BUILD_TYPE=Release -DPROXMON_BUILD_TESTS=ON -DPROXMON_SYSTEM_QTKEYCHAIN=ON
+      - run: cmake --build build -- -j$(nproc)
+      - run: ctest --test-dir build --output-on-failure
 
   build:
     strategy:
