@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- build: add `make-dist.sh`, which builds `dist/proxmon-<version>.tar.gz` with the QtKeychain sources included, because `git archive` leaves submodules out, and writes its `.sha256`. It refuses to run with uncommitted changes, or when HEAD is not at the version's tag
+- build(debian): depend on `fonts-jetbrains-mono` and link its font instead of shipping a second copy
+- feat(keyring): `PROXMON_SYSTEM_QTKEYCHAIN` links the system QtKeychain instead of the bundled copy. It is off by default. A QtKeychain older than 0.16.0 ignores `QTKEYCHAIN_BACKEND`, so with one ProxMon no longer claims to have picked the Secret Service, and the Keyring tab is hidden
+- feat(install): `--cache` keeps the build directory in `~/.cache/proxmon` between runs, so a repeat install recompiles only what changed. The auto-update watcher still builds from scratch
+- fix(install): the sync skips `build` directories, which hold local build output the plasmoid never reads, and removes a leftover one from the install
+- fix(uninstall): remove all five icons that `install.sh` copies, and the kept build directory
+
 ## v0.9.0
 
 - chore(style): add an `.editorconfig` with 4 spaces per indent level, no tabs and no trailing whitespace, and a `check-style.sh` check that runs in CI. The shell scripts move from 2 to 4 spaces. YAML keeps 2, because the keys of a list item line up two columns after its dash
@@ -15,6 +24,8 @@
 - fix(install): leave a QtKeychain checkout that is on a branch alone. A detached checkout still moves to the commit the repository records
 - build(deps): libsecret is an optional build dependency that adds the Secret Service backend. `install.sh` installs its development package on zypper, dnf and pacman
 - build(deps): bundle upstream QtKeychain instead of a fork. Upstream now has the KWallet fix (frankosterfeld/qtkeychain#304). It probes KWallet with a D-Bus ping instead of `networkWallet`, so a locked wallet no longer freezes the GUI thread for 25 seconds, and it handles a failed `networkWallet` call instead of passing an empty wallet name to `open()`
+- build(debian): add Debian packaging in `debian/`. The widget installs under `/usr/share/plasma/plasmoids/org.kde.plasma.proxmox` and the compiled plugin under `/usr/lib/<triplet>/proxmon`, with a symlink next to the `qmldir`. It is published for Ubuntu 26.04 in `ppa:realstuffie/proxmon`, for `amd64` and `amd64v3`
+- ci: `debian/rules` keeps its tabs, because Makefile recipes need them. `.editorconfig` and `check-style.sh` exempt it
 
 ## v0.8.6
 

@@ -369,7 +369,19 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 ## Changelog
 
 <details>
-<summary><strong>v0.8.6</strong> (latest)</summary>
+<summary><strong>v0.9.0</strong> (latest)</summary>
+
+- New Keyring settings tab with a KeePassXC option, and a button that imports your tokens from KWallet
+- A locked KeePassXC database pauses monitoring instead of asking for an unlock on every refresh
+- The settings pages no longer log "Setting initial properties failed"
+- A package for Ubuntu 26.04 in `ppa:realstuffie/proxmon`
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+
+</details>
+
+<details>
+<summary><strong>v0.8.6</strong></summary>
 
 - Auto-retry gives up after 6 attempts and now also runs in multi-host mode
 - Only DNS failures and timeouts mark a host unreachable, so a proxy's "Gateway Timeout" no longer marks an endpoint offline

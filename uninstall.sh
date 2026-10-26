@@ -30,8 +30,10 @@ fi
 PLASMA_ENV_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/plasma-workspace/env/proxmon-qml.sh"
 [ -f "$PLASMA_ENV_FILE" ] && rm -f "$PLASMA_ENV_FILE"
 
-rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/proxmox-monitor.svg"
-rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/lxc.svg"
+# The same five icons install.sh copies from contents/icons.
+for icon in clock lxc-14 lxc proxmox-monitor vm; do
+    rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor/scalable/apps/$icon.svg"
+done
 printf '%s\n' "[ icons] Icons removed."
 
 rm -rf "${HOME}/.config/proxmox-plasmoid" || true
@@ -43,6 +45,13 @@ if command -v systemctl >/dev/null 2>&1; then
     rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/proxmox-plasmoid-rebuild.path"
     rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/proxmox-plasmoid-rebuild.service"
     printf '%s\n' "[ watch] Auto-update watcher disabled."
+fi
+
+# Build directories that install.sh --cache keeps.
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/proxmon"
+if [ -d "$CACHE_DIR" ]; then
+    rm -rf "${CACHE_DIR:?}"
+    printf '%s\n' "[ cache] Kept build directories removed."
 fi
 
 rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/plasma/plasmoids/org.kde.plasma.proxmox"
