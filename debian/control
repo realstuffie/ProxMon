@@ -1,0 +1,48 @@
+Source: proxmon
+Section: kde
+Priority: optional
+Maintainer: Thomas Moore <moore.thomas123456789@gmail.com>
+Build-Depends:
+ cmake,
+ debhelper-compat (= 13),
+ libqtermwidget6-2-dev,
+ libsecret-1-dev,
+ libutf8proc-dev,
+ libvncserver-dev,
+ pkgconf,
+ qt6-base-dev,
+ qt6-declarative-dev,
+ qt6-websockets-dev,
+Standards-Version: 4.7.2
+Homepage: https://github.com/realstuffie/ProxMon
+Vcs-Browser: https://github.com/realstuffie/ProxMon
+Vcs-Git: https://github.com/realstuffie/ProxMon.git
+Rules-Requires-Root: no
+
+Package: proxmon
+Architecture: any
+Depends:
+ plasma-workspace (>= 4:6.0),
+ qml6-module-org-kde-kcmutils,
+ qml6-module-org-kde-kirigami,
+ qml6-module-org-kde-plasma-plasma5support,
+ qml6-module-qtcore,
+ qml6-module-qtquick,
+ qml6-module-qtquick-controls,
+ qml6-module-qtquick-dialogs,
+ qml6-module-qtquick-layouts,
+ qml6-module-qtquick-window,
+ ${misc:Depends},
+ ${shlibs:Depends},
+Recommends:
+ libsecret-1-0,
+Suggests:
+ keepassxc,
+Description: Proxmox VE and Backup Server monitor for KDE Plasma
+ ProxMon is a Plasma 6 widget that shows the state of Proxmox VE nodes,
+ virtual machines and containers, and of Proxmox Backup Server, in a
+ panel or on the desktop.
+ .
+ It can open a VNC console to a virtual machine and a terminal to an LXC
+ container. API tokens are stored in KWallet, or in KeePassXC through the
+ Secret Service.

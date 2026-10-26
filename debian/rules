@@ -1,0 +1,29 @@
+#!/usr/bin/make -f
+
+include /usr/share/dpkg/architecture.mk
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+PLUGIN_DIR := usr/lib/$(DEB_HOST_MULTIARCH)/proxmon
+PLASMOID_DIR := debian/proxmon/usr/share/plasma/plasmoids/org.kde.plasma.proxmox
+
+%:
+	dh $@ --sourcedirectory=contents/lib
+
+override_dh_auto_configure:
+	dh_auto_configure -- -DPROXMON_BUILD_TESTS=OFF -DCMAKE_SKIP_RPATH=ON
+
+# The CMake project has no install rules of its own, and the bundled qtkeychain
+# has some that would ship its static library and headers. Install the plugin
+# by hand. It is architecture dependent, so it goes under /usr/lib and a symlink
+# puts it next to the qmldir, where main.qml's relative import looks for it.
+override_dh_auto_install:
+	install -D -m 0644 obj-$(DEB_HOST_GNU_TYPE)/libproxmoxclientplugin.so \
+		debian/proxmon/$(PLUGIN_DIR)/libproxmoxclientplugin.so
+	install -D -m 0644 contents/lib/proxmox/qmldir \
+		$(PLASMOID_DIR)/contents/lib/proxmox/qmldir
+	ln -s /$(PLUGIN_DIR)/libproxmoxclientplugin.so \
+		$(PLASMOID_DIR)/contents/lib/proxmox/libproxmoxclientplugin.so
+
+# The unit tests are not built for packages.
+override_dh_auto_test:

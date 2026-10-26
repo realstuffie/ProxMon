@@ -1,0 +1,7 @@
+metadata.json usr/share/plasma/plasmoids/org.kde.plasma.proxmox/
+contents/config usr/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/
+contents/fonts usr/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/
+contents/icons usr/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/
+contents/qml usr/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/
+contents/ui usr/share/plasma/plasmoids/org.kde.plasma.proxmox/contents/
+contents/icons/*.svg usr/share/icons/hicolor/scalable/apps/
