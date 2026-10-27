@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-26.04, fedora-44, manjaro]
+        os: [ubuntu-26.04, fedora-44, manjaro, opensuse-tumbleweed]
     runs-on: ${{ matrix.os }}
     env:
       # One cache folder per image, on a volume the runner mounts at /ccache so
@@ -90,6 +90,8 @@ jobs:
               dnf install -y dbus-daemon
             elif command -v pacman >/dev/null 2>&1; then
               pacman -Sy --noconfirm dbus
+            elif command -v zypper >/dev/null 2>&1; then
+              zypper --non-interactive install dbus-1-daemon
             fi
           fi
           command -v dbus-daemon || {

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - fix(pbs): load PBS data on the first refresh and refresh it at once when a PBS setting changes. A PBS cycle that ran before the PVE host was set armed the PBS timer without fetching anything, so the first real fetch waited a full interval. A new PBS token secret and a new PBS refresh interval now start a refresh too
+- ci: build and test on openSUSE Tumbleweed as well as Ubuntu, Fedora and Manjaro
 
 ## v0.9.1
 
