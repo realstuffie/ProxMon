@@ -24,6 +24,9 @@ jobs:
   # because that build never touches third_party/qtkeychain.
   system-qtkeychain:
     runs-on: ubuntu-26.04
+    env:
+      CCACHE_DIR: /ccache/system-qtkeychain
+      CCACHE_MAXSIZE: 2G
     steps:
       - uses: actions/checkout@v4
       - name: Ensure the QtKeychain development package is available
@@ -33,7 +36,12 @@ jobs:
           fi
           dpkg -s qtkeychain-qt6-dev | grep '^Version'
       - name: Configure
-        run: cmake -S contents/lib -B build -DCMAKE_BUILD_TYPE=Release -DPROXMON_BUILD_TESTS=ON -DPROXMON_SYSTEM_QTKEYCHAIN=ON
+        run: |
+          if command -v ccache >/dev/null 2>&1; then
+            export CMAKE_C_COMPILER_LAUNCHER=ccache CMAKE_CXX_COMPILER_LAUNCHER=ccache
+            ccache --zero-stats
+          fi
+          cmake -S contents/lib -B build -DCMAKE_BUILD_TYPE=Release -DPROXMON_BUILD_TESTS=ON -DPROXMON_SYSTEM_QTKEYCHAIN=ON
       - run: cmake --build build -- -j$(nproc)
       - run: ctest --test-dir build --output-on-failure
 
