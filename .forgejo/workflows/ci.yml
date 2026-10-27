@@ -44,6 +44,9 @@ jobs:
           cmake -S contents/lib -B build -DCMAKE_BUILD_TYPE=Release -DPROXMON_BUILD_TESTS=ON -DPROXMON_SYSTEM_QTKEYCHAIN=ON
       - run: cmake --build build -- -j$(nproc)
       - run: ctest --test-dir build --output-on-failure
+      - name: ccache statistics
+        if: always()
+        run: command -v ccache >/dev/null 2>&1 && ccache --show-stats || echo "ccache is not installed in this image"
 
   build:
     strategy:
