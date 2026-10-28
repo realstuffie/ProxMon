@@ -331,12 +331,27 @@ sync_contents() {
 PKG_PATH="."
 if [ ! -d "$PLASMOID_CONTENTS" ]; then
     if "$KPACKAGETOOL" --help 2>/dev/null | grep -q -- '--type'; then
-        "$KPACKAGETOOL" --type Plasma/Applet --install "$PKG_PATH" 2>/dev/null || \
-        "$KPACKAGETOOL" --type Plasma/Applet --upgrade "$PKG_PATH" || true
+        kp_install=(--type Plasma/Applet --install)
+        kp_upgrade=(--type Plasma/Applet --upgrade)
     else
-        "$KPACKAGETOOL" -t Plasma/Applet -i "$PKG_PATH" 2>/dev/null || \
-        "$KPACKAGETOOL" -t Plasma/Applet -u "$PKG_PATH" || true
+        kp_install=(-t Plasma/Applet -i)
+        kp_upgrade=(-t Plasma/Applet -u)
     fi
+    # Keep the install output. The upgrade fallback reports "not installed" when
+    # the install failed, which hides the real reason.
+    KPKG_LOG="$(mktemp -t proxmon-kpackagetool-XXXXXX)"
+    if "$KPACKAGETOOL" "${kp_install[@]}" "$PKG_PATH" >"$KPKG_LOG" 2>&1; then
+        cat "$KPKG_LOG"
+    else
+        "$KPACKAGETOOL" "${kp_upgrade[@]}" "$PKG_PATH" || true
+    fi
+    if [ ! -d "$PLASMOID_CONTENTS" ]; then
+        printf '%s\n' "$KPACKAGETOOL did not install the plasmoid into $PLASMOID_CONTENTS. Its output:" >&2
+        cat "$KPKG_LOG" >&2
+        rm -f "$KPKG_LOG"
+        exit 1
+    fi
+    rm -f "$KPKG_LOG"
 fi
 
 # Checksum sync contents - skips unchanged files.
