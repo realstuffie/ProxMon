@@ -52,6 +52,27 @@ EOF
     esac
 done
 
+# A copy installed here would shadow the apt package for this user, because
+# Plasma loads ~/.local/share/plasma/plasmoids before /usr/share/plasma/plasmoids.
+if command -v dpkg-query >/dev/null 2>&1; then
+    # shellcheck disable=SC2016
+    pkg_status="$(dpkg-query -W -f='${db:Status-Abbrev}' proxmon 2>/dev/null || true)"
+    case "$pkg_status" in
+        ii*)
+            printf '%s\n' \
+                "The proxmon package is installed from apt. This script would put a second copy" \
+                "in your home folder, and Plasma would load that one instead of the package." \
+                "" \
+                "To keep the package, do not run this script. Update it with apt." \
+                "To use this script instead, remove the package first: sudo apt remove proxmon" \
+                "" \
+                "If an older install from this script is still there, run: bash uninstall.sh" \
+                "It removes that install and the update watcher." >&2
+            exit 1
+            ;;
+    esac
+fi
+
 install_deps_best_effort() {
     if [ "$AUTO_DEPS" -ne 1 ]; then
         return 0

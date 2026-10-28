@@ -101,6 +101,15 @@ bash install.sh
 
 The script handles dependencies, builds the native plugin, installs the plasmoid, and sets up an auto-rebuild watcher that detects library changes (e.g. libplasma soname bumps) and rebuilds automatically. Re-run with `--no-deps` to skip dependency installation on subsequent installs.
 
+**Ubuntu 26.04 package.** The PPA has a package for `amd64` and `amd64v3`:
+
+```bash
+sudo add-apt-repository ppa:realstuffie/proxmon
+sudo apt install proxmon
+```
+
+If you installed with `install.sh` before, please use the uninstall script first to remove the old install and its update watcher: `bash uninstall.sh`. Plasma loads the copy in your home folder before the package, so the old install would keep running. `install.sh` refuses to run while the package is installed.
+
 <details>
 <summary><strong>Upgrading</strong></summary>
 
@@ -203,6 +212,8 @@ Right-click the widget → **Configure Proxmox Monitor**.
 ## Using KeePassXC
 
 ProxMon can store its token secrets in KeePassXC through the freedesktop Secret Service. KeePassXC still handles unlocking, so a database protected by a password, a key file and a YubiKey works the same as it does for any other program.
+
+**Requirement.** The option needs QtKeychain 0.16.0 or newer. That release added the `QTKEYCHAIN_BACKEND` variable, which is how ProxMon points QtKeychain at the Secret Service. The release tarball, `install.sh` and the Ubuntu package bundle a new enough copy. A build linked against an older system QtKeychain, such as the 0.15.0 in Ubuntu 26.04 and Debian 13, cannot honour the choice, so it hides the Keyring tab. A system QtKeychain up to 0.17.0 also lacks two KWallet fixes that are not in a release yet. Without them a locked KWallet can freeze the panel for up to 25 seconds while it waits for the unlock. The bundled copy has the fixes.
 
 **1. Enable the Secret Service in KeePassXC.** Open Tools, Settings and turn on Secret Service Integration. Then open Database Settings, go to Secret Service Integration and expose a group. Make a new group for this and put nothing else in it, because every program in your session can read every entry under the exposed group. Menu names differ a little between KeePassXC versions.
 
