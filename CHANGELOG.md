@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.9.2
+
+- ui: remove the vertical scrollbar of the guest list. The sections now have 6 px of padding on both sides. The left was 12 px, and the right was 10 px to clear the scrollbar. The fade at the bottom edge still shows when the list goes on, and wheel and touch scrolling are unchanged
+- fix(ui): size the CPU and memory legend swatches and the section divider with `Layout.preferredWidth` and `Layout.preferredHeight`, because `width` and `height` on an item in a layout is undefined behaviour. The terminal size box declares the index argument of its handler. `qmllint` reports no warnings now
 - fix(pbs): load PBS data on the first refresh and refresh it at once when a PBS setting changes. A PBS cycle that ran before the PVE host was set armed the PBS timer without fetching anything, so the first real fetch waited a full interval. A new PBS token secret and a new PBS refresh interval now start a refresh too
 - ci: build and test on openSUSE Tumbleweed as well as Ubuntu, Fedora and Manjaro
 - ci: a `package` job test-builds the Ubuntu package from `make-dist.sh` with `dpkg-buildpackage`, runs Lintian and checks the package contents. It signs and uploads nothing and deletes the build afterwards

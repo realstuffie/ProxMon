@@ -9,7 +9,7 @@
 <p>Live node, VM &amp; container stats · in-widget VNC &amp; LXC consoles · PBS backup status · multi-host.</p>
 
 <p>
-  <img src="https://img.shields.io/badge/version-0.9.1-1d99f3" alt="Version" />
+  <img src="https://img.shields.io/badge/version-0.9.2-1d99f3" alt="Version" />
   <img src="https://img.shields.io/badge/license-GPL--3.0--or--later-4caf50" alt="License" />
   <img src="https://img.shields.io/badge/KDE%20Plasma-6.0%2B-1d99f3?logo=kde&amp;logoColor=white" alt="KDE Plasma 6" />
   <img src="https://img.shields.io/badge/Proxmox%20VE-7.0%2B-e57000?logo=proxmox&amp;logoColor=white" alt="Proxmox VE 7+" />
@@ -380,14 +380,24 @@ GPL-3.0 or later. See [LICENSE](License) for details.
 ## Changelog
 
 <details>
-<summary><strong>v0.9.1</strong> (latest)</summary>
+<summary><strong>v0.9.2</strong> (latest)</summary>
+
+- PBS data loads on the first refresh, and changing a PBS setting refreshes at once
+- Listing the tokens in KWallet no longer starts the `qdbus` program
+- `install.sh` refuses to run while the `proxmon` apt package is installed, and points to `uninstall.sh` for an older install
+- `install.sh` installs `kpackagetool6` under its current Ubuntu name and shows its error when the install fails
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
+
+</details>
+
+<details>
+<summary><strong>v0.9.1</strong></summary>
 
 - Builds can link the system QtKeychain. When it is older than 0.16.0 the Keyring tab is hidden, because that library cannot choose a keyring
 - `install.sh --cache` keeps the build folder between runs, and the sync no longer copies build folders into the install
 - `uninstall.sh` removes all five icons and the kept build folder
 - The Ubuntu package uses the system JetBrains Mono font instead of its own copy
-
-See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 </details>
 
