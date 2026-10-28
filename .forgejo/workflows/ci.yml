@@ -48,6 +48,56 @@ jobs:
         if: always()
         run: command -v ccache >/dev/null 2>&1 && ccache --show-stats || echo "ccache is not installed in this image"
 
+  # Test-builds the Ubuntu package the way a PPA upload is prepared: the release
+  # tarball from make-dist.sh becomes the orig tarball, then dpkg-buildpackage
+  # makes the source package and the .deb. Nothing is signed or uploaded, and the
+  # build directory is removed at the end. Signing and dput stay local.
+  package:
+    runs-on: ubuntu-26.04
+    env:
+      PKG_DIR: /tmp/proxmon-package
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install the packaging tools and build dependencies
+        run: |
+          apt-get update
+          apt-get install -y dpkg-dev debhelper fakeroot lintian
+          apt-get build-dep -y ./
+      - name: Build the release tarball and the package
+        run: |
+          bash make-dist.sh
+          version="$(dpkg-parsechangelog -S Version)"
+          upstream="${version%-*}"
+          test -f "dist/proxmon-$upstream.tar.gz" || {
+            echo "debian/changelog is at $upstream, but make-dist.sh built a different version from metadata.json"
+            exit 1
+          }
+          mkdir -p "$PKG_DIR"
+          cp "dist/proxmon-$upstream.tar.gz" "$PKG_DIR/proxmon_$upstream.orig.tar.gz"
+          tar -xzf "$PKG_DIR/proxmon_$upstream.orig.tar.gz" -C "$PKG_DIR"
+          cd "$PKG_DIR/proxmon-$upstream"
+          dpkg-buildpackage -us -uc
+      - name: Check the package
+        run: |
+          cd "$PKG_DIR"
+          lintian --fail-on error --display-info ./*.changes
+          deb="$(ls ./proxmon_*.deb)"
+          contents="$(dpkg -c "$deb")"
+          echo "$contents"
+          # The plugin, and the link that puts it next to the qmldir.
+          grep -q 'usr/lib/.*/proxmon/libproxmoxclientplugin\.so$' <<< "$contents"
+          grep -q 'contents/lib/proxmox/libproxmoxclientplugin\.so -> ' <<< "$contents"
+          # The bundled QtKeychain is static, so none of it may be installed.
+          if grep -qi 'keychain' <<< "$contents"; then
+            echo "The package ships QtKeychain files"
+            exit 1
+          fi
+      - name: Remove the build
+        if: always()
+        run: rm -rf "$PKG_DIR" dist
+
   build:
     strategy:
       fail-fast: false
