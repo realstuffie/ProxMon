@@ -51,9 +51,11 @@ jobs:
   # Test-builds the Ubuntu package the way a PPA upload is prepared: the release
   # tarball from make-dist.sh becomes the orig tarball, then dpkg-buildpackage
   # makes the source package and the .deb. Nothing is signed or uploaded, and the
-  # build directory is removed at the end. Signing and dput stay local.
+  # build directory is removed at the end. Signing and dput stay local. The
+  # image is built from .forgejo/images/Dockerfile.packaging and already holds
+  # the tools and build dependencies, so the install step below is a safety net.
   package:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-26.04-packaging
     env:
       PKG_DIR: /tmp/proxmon-package
     steps:

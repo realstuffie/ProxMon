@@ -1,0 +1,16 @@
+# CI image for the "package" job. It adds the Debian packaging tools and the
+# package's build dependencies (Build-Depends in debian/control) to the Ubuntu
+# 26.04 CI image, so the job does not install them on every run.
+#
+# Build on the runner VM, from the folder holding this file:
+#   docker build -f Dockerfile.packaging -t proxmon-ci-packaging:26.04 .
+# Rebuild when Build-Depends in debian/control changes. The job still runs
+# apt-get build-dep, which does nothing while the image is current.
+FROM proxmon-ci:26.04
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      dpkg-dev debhelper fakeroot lintian \
+      cmake pkgconf qt6-base-dev qt6-declarative-dev qt6-websockets-dev \
+      libqtermwidget6-2-dev libsecret-1-dev libutf8proc-dev libvncserver-dev \
+ && rm -rf /var/lib/apt/lists/*
