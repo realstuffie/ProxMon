@@ -1934,7 +1934,9 @@ PlasmoidItem {
                 QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AlwaysOff
 
                 readonly property int __scrollbarGap: 0
-                readonly property int __scrollbarReserve: 0
+                // Right margin of the sections. It equals their 6 px left
+                // margin, so both sides have the same padding.
+                readonly property int __scrollbarReserve: 6
 
                 ColumnLayout {
                     id: mainContentColumn

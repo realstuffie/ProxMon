@@ -105,7 +105,7 @@ ColumnLayout {
 
     ColumnLayout {
         Layout.fillWidth: true
-        Layout.leftMargin: 12
+        Layout.leftMargin: 6
         Layout.rightMargin: root.scrollbarReserve
         visible: !root.isCollapsed
         spacing: 5

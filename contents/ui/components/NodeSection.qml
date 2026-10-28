@@ -68,7 +68,7 @@ ColumnLayout {
     spacing: 4
 
     NodeCard {
-        Layout.leftMargin: 12
+        Layout.leftMargin: 6
         Layout.rightMargin: root.scrollbarReserve
         nodeModel: root.nodeModel
         nodeIndex: root.nodeIndex
@@ -92,7 +92,7 @@ ColumnLayout {
 
     ColumnLayout {
         Layout.fillWidth: true
-        Layout.leftMargin: 12
+        Layout.leftMargin: 6
         Layout.rightMargin: root.scrollbarReserve
         visible: !root.isCollapsed
         spacing: 5
