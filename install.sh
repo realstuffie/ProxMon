@@ -26,16 +26,18 @@ INSTALL_STANDALONE_QML_MODULE=0
 INSTALL_WATCHER=1
 REBUILD_ONLY=0
 USE_CACHE=0
+CI_BUILD_DIR=""
 for arg in "$@"; do
     case "$arg" in
         --no-deps) AUTO_DEPS=0 ;;
         --no-watcher) INSTALL_WATCHER=0 ;;
         --rebuild) REBUILD_ONLY=1 ; AUTO_DEPS=0 ; INSTALL_WATCHER=0 ;;
         --cache) USE_CACHE=1 ;;
+        --ci-build-dir=*) CI_BUILD_DIR="${arg#--ci-build-dir=}" ; AUTO_DEPS=0 ; INSTALL_WATCHER=0 ;;
         --install-standalone-qml-module) INSTALL_STANDALONE_QML_MODULE=1 ;;
         -h|--help)
             cat <<'EOF'
-Usage: ./install.sh [--no-deps] [--no-watcher] [--cache] [--install-standalone-qml-module]
+Usage: ./install.sh [--no-deps] [--no-watcher] [--cache] [--ci-build-dir=DIR] [--install-standalone-qml-module]
 
 Options:
   --no-deps     Skip automatic dependency installation.
@@ -43,6 +45,10 @@ Options:
   --cache       Keep the build directory in ~/.cache/proxmon between runs, so a
                 repeat install only recompiles what changed. Meant for development.
                 The auto-update watcher always builds from scratch.
+  --ci-build-dir=DIR
+                Install the libproxmoxclientplugin.so already built in DIR and skip
+                the dependency install, the submodule update, the build and the
+                auto-update watcher. Only for CI, which builds the plugin first. Not for normal installs.
   --install-standalone-qml-module
                 Also copy the native plugin/qmldir to the user-local Qt6 QML
                 module path for stricter distro/policy setups.
@@ -73,6 +79,14 @@ if command -v dpkg-query >/dev/null 2>&1; then
     esac
 fi
 
+if [ -n "$CI_BUILD_DIR" ]; then
+    if [ ! -f "$CI_BUILD_DIR/libproxmoxclientplugin.so" ]; then
+        printf '%s\n' "--ci-build-dir: $CI_BUILD_DIR/libproxmoxclientplugin.so not found. Build the plugin there first." >&2
+        exit 1
+    fi
+    CI_BUILD_DIR="$(cd "$CI_BUILD_DIR" && pwd)"
+fi
+
 install_deps_best_effort() {
     if [ "$AUTO_DEPS" -ne 1 ]; then
         return 0
@@ -92,7 +106,7 @@ install_deps_best_effort() {
         pkgs_build="cmake make g++ pkg-config qt6-base-dev qt6-declarative-dev qt6-websockets-dev libsecret-1-dev libvncserver-dev libutf8proc-dev qtermwidget6-data"
         pkgs_qtermwidget="libqtermwidget6-2-dev libqtermwidget6-dev"
         pkgs_ecm="extra-cmake-modules"
-        pkgs_kpackage="libkf6package-bin"
+        pkgs_kpackage="kpackagetool6"
     elif command -v zypper >/dev/null 2>&1; then
         pm="zypper"
         pm_update="zypper refresh"
@@ -191,7 +205,7 @@ else
     exit 1
 fi
 
-if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
+if [ -z "$CI_BUILD_DIR" ] && command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
     printf '%s\n' "[ git  ] Initializing submodules..."
     # Refresh cached submodule URLs from .gitmodules first, so checkouts made
     # before the URL changed fetch the pinned commit from the current one.
@@ -207,32 +221,38 @@ if command -v git >/dev/null 2>&1 && [ -f .gitmodules ] && [ -d .git ]; then
     fi
 fi
 
-require_cmd cmake
 require_cmd mktemp
-require_cmd getconf
 require_cmd cp
 require_cmd mkdir
 
-printf '%s\n' "[ build] Compiling native plugin..."
-
-if [ "$USE_CACHE" -eq 1 ]; then
-    # One directory per checkout, because CMake refuses a cache that was made for
-    # another source path.
-    BUILD_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/proxmon/build-$(printf '%s' "$PWD" | cksum | cut -d' ' -f1)"
-    mkdir -p "$BUILD_DIR"
-    printf '%s\n' "[ build] Using the kept build directory $BUILD_DIR"
+if [ -n "$CI_BUILD_DIR" ]; then
+    BUILD_DIR="$CI_BUILD_DIR"
+    printf '%s\n' "[ build] Using the CI-built plugin in $BUILD_DIR"
 else
-    BUILD_DIR="$(mktemp -d -t proxmon-build-XXXXXX)"
-    trap 'rm -rf "$BUILD_DIR"' EXIT
+    require_cmd cmake
+    require_cmd getconf
+
+    printf '%s\n' "[ build] Compiling native plugin..."
+
+    if [ "$USE_CACHE" -eq 1 ]; then
+        # One directory per checkout, because CMake refuses a cache that was made for
+        # another source path.
+        BUILD_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/proxmon/build-$(printf '%s' "$PWD" | cksum | cut -d' ' -f1)"
+        mkdir -p "$BUILD_DIR"
+        printf '%s\n' "[ build] Using the kept build directory $BUILD_DIR"
+    else
+        BUILD_DIR="$(mktemp -d -t proxmon-build-XXXXXX)"
+        trap 'rm -rf "$BUILD_DIR"' EXIT
+    fi
+
+    cmake -S contents/lib -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release || exit 1
+
+    JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
+    BUILD_START="$(date +%s)"
+    cmake --build "$BUILD_DIR" -- -j"$JOBS" || exit 1
+    BUILD_END="$(date +%s)"
+    printf '%s\n' "[ build] Done in $(( BUILD_END - BUILD_START ))s"
 fi
-
-cmake -S contents/lib -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release || exit 1
-
-JOBS="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)"
-BUILD_START="$(date +%s)"
-cmake --build "$BUILD_DIR" -- -j"$JOBS" || exit 1
-BUILD_END="$(date +%s)"
-printf '%s\n' "[ build] Done in $(( BUILD_END - BUILD_START ))s"
 
 # Replace dst atomically via rename(2). A plain cp truncates and rewrites the
 # existing inode in place - if a running plasmashell has that .so mmap'd, its

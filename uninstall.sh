@@ -41,7 +41,7 @@ rm -rf "${HOME}/.config/proxmox-plasmoid" || true
 if command -v systemctl >/dev/null 2>&1; then
     systemctl --user disable --now proxmox-plasmoid-rebuild.path 2>/dev/null || true
     systemctl --user disable --now proxmox-plasmoid-rebuild.service 2>/dev/null || true
-    systemctl --user daemon-reload
+    systemctl --user daemon-reload || true
     rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/proxmox-plasmoid-rebuild.path"
     rm -f "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/proxmox-plasmoid-rebuild.service"
     printf '%s\n' "[ watch] Auto-update watcher disabled."
