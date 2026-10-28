@@ -108,7 +108,7 @@ ColumnLayout {
             }
             if (root.owner !== "KeePassXC") {
                 return "The Secret Service is owned by " + root.owner + ", not KeePassXC. ProxMon would store "
-                    + "its secrets there. The README explains how to free it.";
+                    + "its secrets there. The \"Using KeePassXC\" page in the wiki explains how to free it.";
             }
             return "";
         }

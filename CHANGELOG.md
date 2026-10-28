@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- docs: the README is a short entry point now. The Proxmox setup, KeePassXC, security model, configuration, installation and troubleshooting guides moved to the wiki, and the Keyring tab hint points to the wiki page
+
 ## v0.9.2
 
 - ui: remove the vertical scrollbar of the guest list. The sections now have 6 px of padding on both sides. The left was 12 px, and the right was 10 px to clear the scrollbar. The fade at the bottom edge still shows when the list goes on, and wheel and touch scrolling are unchanged
