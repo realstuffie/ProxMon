@@ -246,7 +246,7 @@ ColumnLayout {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignVCenter
             Layout.rightMargin: 2
-            height: 1
+            Layout.preferredHeight: 1
             color: Qt.rgba(Kirigami.Theme.textColor.r,
                            Kirigami.Theme.textColor.g,
                            Kirigami.Theme.textColor.b, 0.12)

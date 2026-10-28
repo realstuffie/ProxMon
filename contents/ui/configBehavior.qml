@@ -350,7 +350,7 @@ KCM.SimpleKCM {
                     if (root.cfg_terminalSize === "large") return 2
                     return 1
                 }
-                onActivated: {
+                onActivated: function(index) {
                     if (index === 0) root.cfg_terminalSize = "small"
                     else if (index === 2) root.cfg_terminalSize = "large"
                     else root.cfg_terminalSize = "medium"

@@ -664,13 +664,13 @@ Rectangle {
                 Item { Layout.fillWidth: true }
 
                 Rectangle {
-                    width: 10; height: 3; radius: 1.5
+                    Layout.preferredWidth: 10; Layout.preferredHeight: 3; radius: 1.5
                     color: root.uiCpuColor
                     visible: statsPanel.hasGraph
                 }
                 Text { text: "CPU"; font.pixelSize: 9; opacity: 0.7; visible: statsPanel.hasGraph }
                 Rectangle {
-                    width: 10; height: 3; radius: 1.5
+                    Layout.preferredWidth: 10; Layout.preferredHeight: 3; radius: 1.5
                     color: root.uiMemColor
                     visible: statsPanel.hasGraph
                 }

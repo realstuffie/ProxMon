@@ -1929,13 +1929,12 @@ PlasmoidItem {
                 clip: true
 
                 QQC2.ScrollBar.horizontal.policy: QQC2.ScrollBar.AlwaysOff
-                // The guest list is routinely taller than the panel. Hiding the
-                // scrollbar left a row clipped mid-height as the only hint that
-                // more content existed.
-                QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AsNeeded
+                // No scrollbar: the fade at the bottom edge hints that the list
+                // goes on, and the wheel and touch scrolling work as usual.
+                QQC2.ScrollBar.vertical.policy: QQC2.ScrollBar.AlwaysOff
 
                 readonly property int __scrollbarGap: 0
-                readonly property int __scrollbarReserve: 10
+                readonly property int __scrollbarReserve: 0
 
                 ColumnLayout {
                     id: mainContentColumn
@@ -2080,9 +2079,8 @@ PlasmoidItem {
                 }
             }
 
-            // Plasma renders the scrollbar as an overlay that only fades in on
-            // hover, so on its own it still doesn't announce a clipped list.
-            // This fade is always on when there is content below the fold.
+            // With the scrollbar off, this fade is the only cue that the list
+            // goes on. It is always on when there is content below the fold.
             Rectangle {
                 anchors.left: parent.left
                 anchors.right: parent.right
