@@ -278,6 +278,14 @@ set_tests_properties(keyringselect PROPERTIES
     TIMEOUT 30
     ENVIRONMENT "DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/proxmon-test-bus;QT_LOGGING_RULES=proxmon.keyring.warning=false")
 
+# Needs dbus-daemon: hosts a fake org.kde.kwalletd6 on a private bus.
+qt_add_executable(tst_kwalletlist tst_kwalletlist.cpp)
+target_include_directories(tst_kwalletlist PRIVATE ..)
+target_link_libraries(tst_kwalletlist PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::DBus Qt6::Test)
+add_test(NAME kwalletlist COMMAND tst_kwalletlist)
+set_tests_properties(kwalletlist PROPERTIES TIMEOUT 30)
+
 qt_add_executable(tst_pbsrefresh tst_pbsrefresh.cpp)
 target_include_directories(tst_pbsrefresh PRIVATE ..)
 target_link_libraries(tst_pbsrefresh PRIVATE

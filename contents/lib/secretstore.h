@@ -8,7 +8,6 @@
 QT_BEGIN_NAMESPACE
 class QDBusMessage;
 class QDBusObjectPath;
-class QProcess;
 QT_END_NAMESPACE
 
 class SecretStore : public QObject {
@@ -108,13 +107,11 @@ private:
     void asyncKWalletCall(const QString &method, const QVariantList &args,
                           std::function<void(const QDBusMessage &)> handler);
     void startKWalletEntryList(int handle);
-    void finishKeyListSuccess(const QStringList &raw, int handle);
+    void finishKeyListSuccess(const QStringList &raw);
     void finishKeyListFailure(const QDBusMessage &reply, const QString &message);
-    void startQdbusFallback(int handle);
 
     QString m_service = QStringLiteral("ProxMon");
     QString m_key = QStringLiteral("apiTokenSecret");
-    QProcess *m_kwalletListProcess = nullptr;
     bool m_walletSignalConnected = false;
     bool m_secretServiceSignalConnected = false;
     bool m_listRetryPending = false;

@@ -4,6 +4,8 @@
 
 - fix(pbs): load PBS data on the first refresh and refresh it at once when a PBS setting changes. A PBS cycle that ran before the PVE host was set armed the PBS timer without fetching anything, so the first real fetch waited a full interval. A new PBS token secret and a new PBS refresh interval now start a refresh too
 - ci: build and test on openSUSE Tumbleweed as well as Ubuntu, Fedora and Manjaro
+- feat(install): `install.sh` refuses to run while the `proxmon` apt package is installed, because a copy in the home folder would shadow the package. The message points to `uninstall.sh` for an older install and its update watcher. The README documents the Ubuntu package and the same advice
+- fix(keyring): stop starting `qdbus` to list KWallet entries. The listing already uses asynchronous D-Bus calls, so the process was left over from the old blocking code. It ran whenever KWallet answered with an empty list, and it needs a `qdbus` program that some systems lack. A valid empty answer now ends the listing at once, and a failed call reports an error. A new test hosts a fake kwalletd on a private bus
 
 ## v0.9.1
 

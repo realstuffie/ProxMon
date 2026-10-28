@@ -17,8 +17,6 @@
 #include <QDBusVariant>
 #include <QFile>
 #include <QMap>
-#include <QProcess>
-#include <QRegularExpression>
 
 using namespace QKeychain;
 
@@ -70,29 +68,6 @@ QString friendlyProviderName(const QString &comm) {
         return QStringLiteral("KDE Wallet (ksecretd)");
     }
     return comm;
-}
-
-QStringList parseKWalletListOutput(const QString &out) {
-    QStringList raw;
-
-    const QRegularExpression quotedRe(QStringLiteral("\"([^\"]+)\""));
-    QRegularExpressionMatchIterator it = quotedRe.globalMatch(out);
-    while (it.hasNext()) {
-        const QString s = it.next().captured(1);
-        if (!s.isEmpty()) raw.push_back(s);
-    }
-
-    if (raw.isEmpty()) {
-        const QStringList tokens = out.split(QRegularExpression(QStringLiteral("[\\r\\n\\t ]+")), Qt::SkipEmptyParts);
-        for (const QString &t : tokens) {
-            QString cleaned = t;
-            cleaned.remove(QRegularExpression(QStringLiteral("^[\\(\\),]+|[\\(\\),]+$")));
-            cleaned.remove('"');
-            if (!cleaned.isEmpty()) raw.push_back(cleaned);
-        }
-    }
-
-    return raw;
 }
 
 } // namespace
@@ -407,73 +382,24 @@ void SecretStore::startKWalletEntryList(int handle) {
         {handle, QStringLiteral("ProxMon"), QStringLiteral("proxmox-monitor")},
         [this, handle](const QDBusMessage &reply) {
             if (reply.type() == QDBusMessage::ReplyMessage) {
-                finishKeyListSuccess(reply.arguments().value(0).toStringList(), handle);
+                finishKeyListSuccess(reply.arguments().value(0).toStringList());
                 return;
             }
             asyncKWalletCall(QStringLiteral("entryList"),
                 {handle, m_service, QStringLiteral("proxmox-monitor")},
-                [this, handle](const QDBusMessage &fallbackReply) {
-                    const QStringList raw = fallbackReply.type() == QDBusMessage::ReplyMessage
-                        ? fallbackReply.arguments().value(0).toStringList()
-                        : QStringList();
-                    finishKeyListSuccess(raw, handle);
+                [this](const QDBusMessage &fallbackReply) {
+                    if (fallbackReply.type() != QDBusMessage::ReplyMessage) {
+                        finishKeyListFailure(fallbackReply, QStringLiteral("Failed to read KWallet entry list"));
+                        return;
+                    }
+                    finishKeyListSuccess(fallbackReply.arguments().value(0).toStringList());
                 });
         });
 }
 
-void SecretStore::finishKeyListSuccess(const QStringList &raw, int handle) {
-    if (!raw.isEmpty()) {
-        m_listInFlight = false;
-        emitFilteredKeys(raw);
-        return;
-    }
-    startQdbusFallback(handle);
-}
-
-// Fallback: QProcess qdbus
-void SecretStore::startQdbusFallback(int handle) {
-    if (m_kwalletListProcess) {
-        m_kwalletListProcess->deleteLater();
-        m_kwalletListProcess = nullptr;
-    }
-
-    auto *proc = new QProcess(this);
-    m_kwalletListProcess = proc;
-
-    const QStringList args{
-        QStringLiteral("org.kde.kwalletd6"),
-        QStringLiteral("/modules/kwalletd6"),
-        QStringLiteral("org.kde.KWallet.entryList"),
-        QString::number(handle),
-        QStringLiteral("ProxMon"),
-        QStringLiteral("proxmox-monitor")
-    };
-
-    connect(proc,QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),this,
-            [this, proc](int, QProcess::ExitStatus) {
-                if (m_kwalletListProcess != proc) {
-                    proc->deleteLater();
-                    return;
-                }
-                m_kwalletListProcess = nullptr;
-                m_listInFlight = false;
-                emitFilteredKeys(parseKWalletListOutput(QString::fromUtf8(proc->readAllStandardOutput())));
-                proc->deleteLater();
-            });
-
-    connect(proc,&QProcess::errorOccurred,this,[this, proc](QProcess::ProcessError) {
-                if (m_kwalletListProcess != proc) {
-                    proc->deleteLater();
-                    return;
-                }
-                m_kwalletListProcess = nullptr;
-                m_listInFlight = false;
-                emit keyListError(QStringLiteral("Failed to read KWallet entry list"));
-                emit keysReady({});
-                proc->deleteLater();
-            });
-
-    proc->start(QStringLiteral("qdbus"), args);
+void SecretStore::finishKeyListSuccess(const QStringList &raw) {
+    m_listInFlight = false;
+    emitFilteredKeys(raw);
 }
 
 bool SecretStore::backendSelectionSupported() {
