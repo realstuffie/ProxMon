@@ -162,6 +162,19 @@ jobs:
             exit 1
           }
       - run: ctest --test-dir build --output-on-failure
+      # Runs the installer against the plugin built above, in a throwaway home
+      # folder, then the uninstaller. It needs kpackagetool6 in the image.
+      - name: Install and uninstall
+        run: |
+          export HOME="$(mktemp -d)"
+          unset XDG_DATA_HOME XDG_CONFIG_HOME XDG_CACHE_HOME
+          bash install.sh --ci-build-dir=build
+          dir="$HOME/.local/share/plasma/plasmoids/org.kde.plasma.proxmox"
+          test -f "$dir/metadata.json"
+          test -f "$dir/contents/lib/proxmox/libproxmoxclientplugin.so"
+          test -f "$dir/contents/lib/proxmox/qmldir"
+          bash uninstall.sh
+          test ! -e "$dir"
       # Hit and miss counts show whether the cache volume is working: after the
       # first run on an image, most compiles should be hits.
       - name: ccache statistics
