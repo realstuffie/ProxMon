@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- feat(ui): click a guest row to show or hide its stats, and the stats button is gone. A drag still reorders rows in custom sort mode, and the buttons on a row keep their own clicks. The pointer is a hand over a row that has stats, and the power actions area no longer reserves a slot for the old button
 - docs: the README is a short entry point now. The Proxmox setup, KeePassXC, security model, configuration, installation and troubleshooting guides moved to the wiki, and the Keyring tab hint points to the wiki page
 
 ## v0.9.2

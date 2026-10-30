@@ -94,6 +94,13 @@ Rectangle {
         return root.armedTimerRunning && root.armedActionKey === (root.actionKeyPrefix + ":" + action)
     }
 
+    function toggleStats() {
+        root.statsExpanded = !root.statsExpanded
+        if (root.statsExpanded && typeof root.onStatsToggled === "function") {
+            root.onStatsToggled(root.kind, root.nodeName, root.vmid)
+        }
+    }
+
     // Numeric metrics, defensively coerced. A missing or non-finite value
     // reads as "no data" and draws nothing rather than a misleading zero bar.
     readonly property real cpuFraction: {
@@ -151,6 +158,8 @@ Rectangle {
 
     HoverHandler {
         id: rowHover
+        // The row is clickable when it has stats to show.
+        cursorShape: root.statsEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
     }
 
     ColumnLayout {
@@ -204,6 +213,14 @@ Rectangle {
                         root.onDragMoved(centroid.scenePosition.y)
                 }
                 onCanceled: wasCanceled = true
+            }
+
+            // A plain click on the row shows or hides its stats. The default
+            // gesture policy drops the tap once the pointer passes the drag
+            // threshold, so finishing a reorder drag never toggles the stats.
+            TapHandler {
+                enabled: root.statsEnabled
+                onTapped: root.toggleStats()
             }
 
             RowLayout {
@@ -386,14 +403,13 @@ Rectangle {
                     }
                 }
 
-                // Stats + power actions. Fixed reservation that tracks which
-                // features are enabled: stats takes one slot, power actions up
-                // to two (shutdown + reboot). Buttons are right-anchored inside
-                // it so they stay flush against the console button.
+                // Power actions. Fixed reservation that tracks whether they are
+                // enabled: up to two slots (shutdown + reboot). Buttons are
+                // right-anchored inside it so they stay flush against the
+                // console button.
                 FocusScope {
                     id: actions
-                    readonly property int reserveSlots: (root.statsEnabled ? 1 : 0)
-                        + (root.powerActionsEnabled ? 2 : 0)
+                    readonly property int reserveSlots: root.powerActionsEnabled ? 2 : 0
                     readonly property int reservePx: reserveSlots > 0
                         ? reserveSlots * (root.uiActionButtonSize + 4) : 0
 
@@ -406,7 +422,7 @@ Rectangle {
                     Layout.preferredHeight: 28
                     Layout.minimumHeight: 28
                     Layout.maximumHeight: 28
-                    visible: root.powerActionsEnabled || root.statsEnabled
+                    visible: root.powerActionsEnabled
 
                     opacity: (rowHover.hovered || root.busy || root.armed || root.statsExpanded || actions.activeFocus)
                         ? 1.0 : root.uiActionIdleOpacity
@@ -416,23 +432,6 @@ Rectangle {
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 4
-
-                        RowActionButton {
-                            icon.name: "view-statistics"
-                            implicitWidth: root.uiActionButtonSize
-                            implicitHeight: root.uiActionButtonSize
-                            visible: root.statsEnabled
-                            checked: root.statsExpanded
-
-                            PlasmaComponents.ToolTip { text: "Resource history" }
-
-                            onClicked: {
-                                root.statsExpanded = !root.statsExpanded
-                                if (root.statsExpanded && typeof root.onStatsToggled === "function") {
-                                    root.onStatsToggled(root.kind, root.nodeName, root.vmid)
-                                }
-                            }
-                        }
 
                         // Fixed two-slot box so the row never reflows between
                         // running / stopped / busy. Each action owns a slot
