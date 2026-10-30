@@ -25,6 +25,7 @@ Rectangle {
     property var lxcsModel: null
 
     property int uiRadiusL: 8
+    property int uiRadiusS: 5
     property real uiBorderOpacity: 0.22
     property real uiNodeCardOpacity: 0.98
     property real uiWindowOpacity: 1.0
@@ -87,13 +88,23 @@ Rectangle {
     Layout.fillWidth: true
     // Content drives the height so extra storage rows reflow the card.
     Layout.preferredHeight: Math.max(64, cardContent.implicitHeight + cardContent.anchors.margins * 2)
-    radius: uiRadiusL
-    color: Qt.rgba(uiNodeColor.r, uiNodeColor.g, uiNodeColor.b,
-    uiNodeCardOpacity * uiWindowOpacity)
-    border.color: Qt.rgba(Kirigami.Theme.disabledTextColor.r,
-    Kirigami.Theme.disabledTextColor.g,
-    Kirigami.Theme.disabledTextColor.b,
-    cardHover.hovered ? card.uiBorderOpacity * 1.4 : card.uiBorderOpacity * 0.65)
+    radius: uiRadiusS
+
+    // Same recipe as GuestRow: a faint tint over the panel that firms up on
+    // hover, and a highlight-colored outline on hover. A tint of the default
+    // node color (the theme background) would be invisible on the panel, so
+    // that case tints with the text color instead.
+    readonly property bool defaultNodeColor:
+        Qt.colorEqual(card.uiNodeColor, Kirigami.Theme.backgroundColor)
+    color: {
+        const c = card.defaultNodeColor ? Kirigami.Theme.textColor : card.uiNodeColor
+        const base = card.defaultNodeColor ? 0.05 : 0.30
+        return Qt.rgba(c.r, c.g, c.b, (base + (cardHover.hovered ? 0.04 : 0)) * card.uiWindowOpacity)
+    }
+    border.color: {
+        const c = cardHover.hovered ? Kirigami.Theme.highlightColor : Kirigami.Theme.disabledTextColor
+        return Qt.rgba(c.r, c.g, c.b, cardHover.hovered ? 0.25 : card.uiBorderOpacity * 0.5)
+    }
     border.width: 1
 
     Behavior on border.color {
@@ -126,17 +137,19 @@ Rectangle {
                 opacity: 0.8
             }
 
-            Kirigami.Icon {
-                source: "computer"
-                implicitWidth: 16
-                implicitHeight: 16
+            // The same dot the guest rows use, so state reads the same on both.
+            Rectangle {
+                implicitWidth: 6
+                implicitHeight: 6
+                radius: 3
+                color: card.isOnline ? card.uiRunningColor : card.uiStoppedColor
             }
 
             PlasmaComponents.Label {
                 text: card.anonymizeNodeName
                 ? card.anonymizeNodeName(card.nodeName, card.nodeIndex)
                 : card.nodeName
-                font.bold: true
+                font.weight: Font.DemiBold
                 Layout.fillWidth: true
                 elide: Text.ElideRight
             }
@@ -201,9 +214,12 @@ Rectangle {
                 }
             }
 
-            // Tinted chip rather than a solid fill with hardcoded white text,
-            // which only happened to be legible on dark themes.
+            // Only for a node that is not online. The dot already says
+            // "online", and a chip on every healthy node is noise. Tinted
+            // rather than a solid fill with hardcoded white text, which only
+            // happened to be legible on dark themes.
             Rectangle {
+                visible: !card.isOnline
                 implicitHeight: 16
                 implicitWidth: statusLabel.implicitWidth + 14
                 radius: 8
