@@ -105,60 +105,67 @@ Rectangle {
         return base
     }
 
-    // One fact on the detail line: an icon and a short text. A chip is drawn
-    // here because no icon in the theme matches the others in weight.
+    // The size every icon on the detail line is drawn at. Icon art is drawn for
+    // a fixed grid and is only crisp at that size or an even multiple of it, so
+    // this is the theme's standard small size and the icons in ui/icons are
+    // drawn on a 16 x 16 grid.
+    readonly property int statIconSize: 16
+
+    // One fact on the detail line: an icon and a short text. The core count
+    // gets a chip drawn on the same 16 x 16 grid, because there is no matching
+    // icon. Every edge sits on a whole pixel.
     component DetailStat: RowLayout {
         id: stat
 
-        property string iconName: ""
+        property url iconUrl: ""
         property bool chip: false
         property string text: ""
         // False when the line has no room left for this fact.
         property bool allowed: true
 
         visible: stat.text !== "" && stat.allowed
-        spacing: 5
+        spacing: 4
 
         Kirigami.Icon {
             visible: !stat.chip
-            source: stat.iconName
-            implicitWidth: 13
-            implicitHeight: 13
+            source: stat.iconUrl
+            implicitWidth: card.statIconSize
+            implicitHeight: card.statIconSize
             opacity: 0.7
         }
 
         Item {
             visible: stat.chip
-            implicitWidth: 13
-            implicitHeight: 13
+            implicitWidth: card.statIconSize
+            implicitHeight: card.statIconSize
             opacity: 0.7
 
             Rectangle {
-                x: 2.5
-                y: 2.5
-                width: 8
-                height: 8
-                radius: 1.5
+                x: 3
+                y: 3
+                width: 10
+                height: 10
+                radius: 1
                 color: "transparent"
                 border.width: 1
                 border.color: Kirigami.Theme.textColor
             }
 
             Rectangle {
-                x: 5
-                y: 5
-                width: 3
-                height: 3
+                x: 6
+                y: 6
+                width: 4
+                height: 4
                 color: Kirigami.Theme.textColor
             }
 
-            // Three pins on each side.
+            // Two pins on each side, placed so the set is centered on the grid.
             Repeater {
                 model: {
                     const pins = []
-                    for (const p of [4, 6, 8]) {
-                        pins.push({ x: p, y: 0.5, w: 1, h: 2 }, { x: p, y: 10.5, w: 1, h: 2 },
-                                  { x: 0.5, y: p, w: 2, h: 1 }, { x: 10.5, y: p, w: 2, h: 1 })
+                    for (const p of [5, 10]) {
+                        pins.push({ x: p, y: 1, w: 1, h: 2 }, { x: p, y: 13, w: 1, h: 2 },
+                                  { x: 1, y: p, w: 2, h: 1 }, { x: 13, y: p, w: 2, h: 1 })
                     }
                     return pins
                 }
@@ -254,38 +261,41 @@ Rectangle {
         anchors.margins: 12
         spacing: 8
 
-        // The arrow sits at the left edge and the rest is centered between
-        // equal margins, so a long name cannot slide under the arrow.
+        // The whole header is centered. Clicking the card collapses or
+        // expands the node, and the pointer turns into a hand to say so.
         Item {
             id: header
             Layout.fillWidth: true
             implicitHeight: headerColumn.implicitHeight
 
-            Kirigami.Icon {
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-                source: card.isCollapsed ? "arrow-right" : "arrow-down"
-                implicitWidth: 12
-                implicitHeight: 12
-                opacity: 0.8
-            }
-
             ColumnLayout {
                 id: headerColumn
                 anchors.fill: parent
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
                 spacing: 4
 
                 RowLayout {
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.maximumWidth: headerColumn.width
+                    id: nameRow
+                    // A layout inside a layout fills the width by default, which
+                    // would pack the dot and name to the left edge. It is placed
+                    // with a rounded margin, not centered by the layout, which
+                    // can leave it half a pixel off and blur it.
+                    readonly property int inset: Math.max(0,
+                        Math.round((headerColumn.width - nameRow.implicitWidth) / 2))
+                    Layout.fillWidth: false
+                    Layout.alignment: Qt.AlignLeft
+                    Layout.leftMargin: nameRow.inset
+                    Layout.maximumWidth: headerColumn.width - nameRow.inset
                     spacing: 8
 
+                    // The dot is centered on the label's box, but lowercase
+                    // text sits lower in that box, so it is nudged down to
+                    // line up with the middle of the letters.
                     Rectangle {
-                        implicitWidth: 7
-                        implicitHeight: 7
-                        radius: 3.5
+                        Layout.alignment: Qt.AlignVCenter
+                        Layout.topMargin: 3
+                        implicitWidth: 8
+                        implicitHeight: 8
+                        radius: 4
                         color: card.isOnline ? card.uiRunningColor : card.uiStoppedColor
                     }
 
@@ -338,17 +348,18 @@ Rectangle {
                     readonly property real fit: detailRow.implicitWidth > 0
                         ? Math.max(detailBox.minScale, Math.min(1, detailBox.width / detailRow.implicitWidth)) : 1
 
-                    // Measures the same font the facts use, so the cut-off is
-                    // decided before anything is drawn.
+                    // The facts use a monospace font, so one measured character
+                    // gives the width of any of them. The width of a fact is
+                    // worked out before anything is drawn.
                     TextMetrics {
-                        id: factMetrics
+                        id: cellMetrics
+                        text: "0"
                         font.pixelSize: 10
                         font.family: "JetBrains Mono"
                     }
 
                     function factWidth(text) {
-                        factMetrics.text = text
-                        return 13 + 5 + factMetrics.advanceWidth
+                        return card.statIconSize + 4 + text.length * cellMetrics.advanceWidth
                     }
 
                     // The last fact that fits at the smallest size. The first
@@ -373,12 +384,12 @@ Rectangle {
                         spacing: 16
                         transformOrigin: Item.TopLeft
                         scale: detailBox.fit
-                        x: Math.max(0, (detailBox.width - detailRow.width * detailBox.fit) / 2)
+                        x: Math.max(0, Math.round((detailBox.width - detailRow.width * detailBox.fit) / 2))
 
                         DetailStat { chip: true; text: card.coreText; allowed: 0 <= detailBox.lastSlot }
-                        DetailStat { iconName: "clock"; text: card.uptimeText; allowed: 1 <= detailBox.lastSlot }
-                        DetailStat { iconName: "vm"; text: card.vmText; allowed: 2 <= detailBox.lastSlot }
-                        DetailStat { iconName: "lxc"; text: card.ctText; allowed: 3 <= detailBox.lastSlot }
+                        DetailStat { iconUrl: Qt.resolvedUrl("../icons/clock-16.svg"); text: card.uptimeText; allowed: 1 <= detailBox.lastSlot }
+                        DetailStat { iconUrl: Qt.resolvedUrl("../icons/vm-16.svg"); text: card.vmText; allowed: 2 <= detailBox.lastSlot }
+                        DetailStat { iconUrl: Qt.resolvedUrl("../icons/lxc-16.svg"); text: card.ctText; allowed: 3 <= detailBox.lastSlot }
                     }
                 }
             }
@@ -404,7 +415,10 @@ Rectangle {
             readonly property real needed: cpuMeter.implicitWidth + memMeter.implicitWidth
                 + (card.hasStorage ? diskColumn.implicitWidth : 0)
                 + (card.hasStorage ? 2 : 1) * meters.columnSpacing
-            readonly property bool oneRow: meters.width >= meters.needed
+            // Compared against the card's width, which is known before this grid
+            // is laid out. Its own width is not, and using it makes the grid
+            // switch layouts while it is still being measured.
+            readonly property bool oneRow: cardContent.width >= meters.needed
 
             columns: card.hasStorage ? (meters.oneRow ? 3 : 2) : (meters.oneRow ? 2 : 1)
 
@@ -412,7 +426,7 @@ Rectangle {
                 id: cpuMeter
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                Layout.minimumWidth: Math.min(cpuMeter.implicitWidth, meters.width)
+                Layout.minimumWidth: cpuMeter.implicitWidth
                 Layout.alignment: Qt.AlignTop
                 label: "CPU"
                 valueText: card.nodeModel && card.safeCpuPercent
@@ -425,7 +439,7 @@ Rectangle {
                 id: memMeter
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                Layout.minimumWidth: Math.min(memMeter.implicitWidth, meters.width)
+                Layout.minimumWidth: memMeter.implicitWidth
                 Layout.alignment: Qt.AlignTop
                 label: "MEM"
                 valueText: card.memTotal > 0
@@ -442,7 +456,7 @@ Rectangle {
                 visible: card.hasStorage
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
-                Layout.minimumWidth: Math.min(diskColumn.implicitWidth, meters.width)
+                Layout.minimumWidth: diskColumn.implicitWidth
                 Layout.columnSpan: meters.columns === 3 ? 1 : meters.columns
                 Layout.alignment: Qt.AlignTop
                 spacing: 6
