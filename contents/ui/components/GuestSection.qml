@@ -231,10 +231,11 @@ ColumnLayout {
             font.pixelSize: 11
         }
 
+        // The running/total counts live on the node card and in the footer.
+        // Only a filter needs a count here: how many guests matched.
         PlasmaComponents.Label {
-            text: section.filtering
-                ? section.matchCount + " of " + section.totalCount
-                : section.runningCount + "/" + section.totalCount
+            visible: section.filtering
+            text: section.matchCount + " of " + section.totalCount
             font.pixelSize: 10
             font.family: "JetBrains Mono"
             opacity: 0.6

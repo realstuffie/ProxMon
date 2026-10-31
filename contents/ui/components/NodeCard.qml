@@ -9,10 +9,10 @@ import org.kde.kirigami as Kirigami
  * Header card for one Proxmox node, shared by the single-host and multi-host
  * views so the two can't drift apart.
  *
- * Guest counts appear only while the node is collapsed. Expanded, the section
- * headers below the card already carry them, and the footer carries them
- * again — three simultaneous copies of the same two numbers was the single
- * largest redundancy in the old panel.
+ * The header is centered: a status dot and the node name, then one line of
+ * facts (cores, uptime, guest counts) that shrinks to fit a narrow panel. Below
+ * a divider, CPU, memory and storage sit in one row when they fit side by side
+ * and wrap to two rows when they don't.
  */
 Rectangle {
     id: card
@@ -41,6 +41,25 @@ Rectangle {
 
     readonly property real bytesPerGiB: 1073741824.0
     readonly property bool isOnline: !!(nodeModel && nodeModel.status === "online")
+
+    // One entry per fact on the detail line. Each is empty when its data is
+    // missing, and an empty one is not drawn.
+    readonly property int coreCount: {
+        const n = Number(card.nodeModel ? card.nodeModel.maxcpu : 0)
+        return isFinite(n) && n > 0 ? n : 0
+    }
+    readonly property string coreText: card.coreCount > 0
+    ? card.coreCount + (card.coreCount === 1 ? " core" : " cores") : ""
+    readonly property string uptimeText: {
+        if (!card.nodeModel || !card.isOnline) return ""
+        const up = Number(card.nodeModel.uptime)
+        if (!isFinite(up) || up <= 0) return ""
+        return "up " + Math.floor(up / 86400) + "d " + Math.floor((up % 86400) / 3600) + "h"
+    }
+    readonly property string vmText: card.vmsModel
+    ? card.vmsModel.runningCount + "/" + card.vmsModel.count + " VMs" : ""
+    readonly property string ctText: card.lxcsModel
+    ? card.lxcsModel.runningCount + "/" + card.lxcsModel.count + " CTs" : ""
 
     readonly property real cpuFraction: {
         if (!card.nodeModel || !card.safeCpuPercent) return 0
@@ -78,10 +97,130 @@ Rectangle {
     readonly property string storageDetail: card.nodeModel && card.nodeModel.storageDetail
     ? card.nodeModel.storageDetail : ""
 
-    function loadColorFor(fraction) {
+    // The bar keeps its own color until the resource gets tight, then goes
+    // amber and red.
+    function toneFor(fraction, base) {
         if (fraction >= 0.90) return Kirigami.Theme.negativeTextColor
         if (fraction >= 0.75) return Kirigami.Theme.neutralTextColor
-        return card.uiCpuColor
+        return base
+    }
+
+    // One fact on the detail line: an icon and a short text. A chip is drawn
+    // here because no icon in the theme matches the others in weight.
+    component DetailStat: RowLayout {
+        id: stat
+
+        property string iconName: ""
+        property bool chip: false
+        property string text: ""
+        // False when the line has no room left for this fact.
+        property bool allowed: true
+
+        visible: stat.text !== "" && stat.allowed
+        spacing: 5
+
+        Kirigami.Icon {
+            visible: !stat.chip
+            source: stat.iconName
+            implicitWidth: 13
+            implicitHeight: 13
+            opacity: 0.7
+        }
+
+        Item {
+            visible: stat.chip
+            implicitWidth: 13
+            implicitHeight: 13
+            opacity: 0.7
+
+            Rectangle {
+                x: 2.5
+                y: 2.5
+                width: 8
+                height: 8
+                radius: 1.5
+                color: "transparent"
+                border.width: 1
+                border.color: Kirigami.Theme.textColor
+            }
+
+            Rectangle {
+                x: 5
+                y: 5
+                width: 3
+                height: 3
+                color: Kirigami.Theme.textColor
+            }
+
+            // Three pins on each side.
+            Repeater {
+                model: {
+                    const pins = []
+                    for (const p of [4, 6, 8]) {
+                        pins.push({ x: p, y: 0.5, w: 1, h: 2 }, { x: p, y: 10.5, w: 1, h: 2 },
+                                  { x: 0.5, y: p, w: 2, h: 1 }, { x: 10.5, y: p, w: 2, h: 1 })
+                    }
+                    return pins
+                }
+
+                Rectangle {
+                    required property var modelData
+                    x: modelData.x
+                    y: modelData.y
+                    width: modelData.w
+                    height: modelData.h
+                    color: Kirigami.Theme.textColor
+                }
+            }
+        }
+
+        PlasmaComponents.Label {
+            text: stat.text
+            font.pixelSize: 10
+            font.family: "JetBrains Mono"
+            opacity: 0.7
+        }
+    }
+
+    // A label and a right-aligned value over a bar.
+    component Meter: ColumnLayout {
+        id: meter
+
+        property string label: ""
+        property string valueText: ""
+        property real fraction: 0
+        property color barColor: Kirigami.Theme.highlightColor
+
+        spacing: 5
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8
+
+            PlasmaComponents.Label {
+                text: meter.label
+                font.pixelSize: 10
+                font.family: "JetBrains Mono"
+                opacity: 0.6
+            }
+
+            PlasmaComponents.Label {
+                text: meter.valueText
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
+                font.pixelSize: 10
+                font.family: "JetBrains Mono"
+            }
+        }
+
+        UsageMeter {
+            Layout.fillWidth: true
+            implicitHeight: 6
+            value: meter.fraction
+            barColor: meter.barColor
+            trackOpacity: 0.10
+        }
     }
 
     Layout.fillWidth: true
@@ -112,267 +251,220 @@ Rectangle {
     ColumnLayout {
         id: cardContent
         anchors.fill: parent
-        anchors.margins: 9
-        spacing: 6
+        anchors.margins: 12
+        spacing: 8
 
-        RowLayout {
+        // The arrow sits at the left edge and the rest is centered between
+        // equal margins, so a long name cannot slide under the arrow.
+        Item {
+            id: header
             Layout.fillWidth: true
-            spacing: 7
+            implicitHeight: headerColumn.implicitHeight
 
             Kirigami.Icon {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
                 source: card.isCollapsed ? "arrow-right" : "arrow-down"
                 implicitWidth: 12
                 implicitHeight: 12
                 opacity: 0.8
             }
 
-            Kirigami.Icon {
-                source: "computer"
-                implicitWidth: 16
-                implicitHeight: 16
-            }
-
-            PlasmaComponents.Label {
-                text: card.anonymizeNodeName
-                ? card.anonymizeNodeName(card.nodeName, card.nodeIndex)
-                : card.nodeName
-                font.bold: true
-                Layout.fillWidth: true
-                elide: Text.ElideRight
-            }
-
-            // Only while collapsed: with the sections hidden this is the one
-            // place the guest counts can live.
-            RowLayout {
+            ColumnLayout {
+                id: headerColumn
+                anchors.fill: parent
+                anchors.leftMargin: 20
+                anchors.rightMargin: 20
                 spacing: 4
-                visible: card.isCollapsed
 
-                Kirigami.Icon {
-                    source: "vm"
-                    implicitWidth: 12
-                    implicitHeight: 12
-                    opacity: 0.7
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: headerColumn.width
+                    spacing: 8
+
+                    Rectangle {
+                        implicitWidth: 7
+                        implicitHeight: 7
+                        radius: 3.5
+                        color: card.isOnline ? card.uiRunningColor : card.uiStoppedColor
+                    }
+
+                    PlasmaComponents.Label {
+                        text: card.anonymizeNodeName
+                        ? card.anonymizeNodeName(card.nodeName, card.nodeIndex)
+                        : card.nodeName
+                        font.pixelSize: 15
+                        font.bold: true
+                        elide: Text.ElideRight
+                    }
+
+                    // Only for a node that is not online. The dot already says
+                    // "online", and a chip on every healthy node is noise.
+                    // Tinted rather than a solid fill with hardcoded white
+                    // text, which only happened to be legible on dark themes.
+                    Rectangle {
+                        visible: !card.isOnline
+                        implicitHeight: 16
+                        implicitWidth: statusLabel.implicitWidth + 14
+                        radius: 8
+                        color: Qt.rgba(card.uiStoppedColor.r, card.uiStoppedColor.g,
+                                       card.uiStoppedColor.b, 0.12)
+
+                        PlasmaComponents.Label {
+                            id: statusLabel
+                            anchors.centerIn: parent
+                            text: card.nodeModel ? card.nodeModel.status : ""
+                            color: card.uiStoppedColor
+                            font.pixelSize: 9
+                            font.bold: true
+                        }
+                    }
                 }
 
-                PlasmaComponents.Label {
-                    text: (card.vmsModel ? card.vmsModel.runningCount : 0)
-                    + "/" + (card.vmsModel ? card.vmsModel.count : 0)
-                    font.pixelSize: 10
-                    font.family: "JetBrains Mono"
-                    opacity: 0.7
-                }
+                // The facts line shrinks to fit, from full size down to 80%.
+                // When even that is too wide, facts drop off the right end one
+                // at a time, so no text is ever cut through. It is positioned
+                // by hand so it stays centered after scaling.
+                Item {
+                    id: detailBox
+                    Layout.fillWidth: true
+                    Layout.preferredWidth: 1
+                    Layout.preferredHeight: detailRow.implicitHeight * detailBox.fit
+                    visible: card.coreText !== "" || card.uptimeText !== ""
+                        || card.vmText !== "" || card.ctText !== ""
+                    clip: true
 
-                Item { implicitWidth: 2 }
+                    readonly property real minScale: 0.8
+                    readonly property real fit: detailRow.implicitWidth > 0
+                        ? Math.max(detailBox.minScale, Math.min(1, detailBox.width / detailRow.implicitWidth)) : 1
 
-                Kirigami.Icon {
-                    source: "lxc"
-                    implicitWidth: 12
-                    implicitHeight: 12
-                    opacity: 0.7
-                }
+                    // Measures the same font the facts use, so the cut-off is
+                    // decided before anything is drawn.
+                    TextMetrics {
+                        id: factMetrics
+                        font.pixelSize: 10
+                        font.family: "JetBrains Mono"
+                    }
 
-                PlasmaComponents.Label {
-                    text: (card.lxcsModel ? card.lxcsModel.runningCount : 0)
-                    + "/" + (card.lxcsModel ? card.lxcsModel.count : 0)
-                    font.pixelSize: 10
-                    font.family: "JetBrains Mono"
-                    opacity: 0.7
-                }
-            }
+                    function factWidth(text) {
+                        factMetrics.text = text
+                        return 13 + 5 + factMetrics.advanceWidth
+                    }
 
-            RowLayout {
-                visible: !card.isCollapsed
-                spacing: 3
-                opacity: 0.6
+                    // The last fact that fits at the smallest size. The first
+                    // fact is always kept.
+                    readonly property int lastSlot: {
+                        const texts = [card.coreText, card.uptimeText, card.vmText, card.ctText]
+                        const room = detailBox.width / detailBox.minScale
+                        let used = 0
+                        let last = -1
+                        for (let i = 0; i < texts.length; i++) {
+                            if (texts[i] === "") continue
+                            const next = used + (last >= 0 ? detailRow.spacing : 0) + detailBox.factWidth(texts[i])
+                            if (last >= 0 && next > room) break
+                            used = next
+                            last = i
+                        }
+                        return last
+                    }
 
-                Kirigami.Icon {
-                    source: "chronometer"
-                    implicitWidth: 12
-                    implicitHeight: 12
-                }
+                    RowLayout {
+                        id: detailRow
+                        spacing: 16
+                        transformOrigin: Item.TopLeft
+                        scale: detailBox.fit
+                        x: Math.max(0, (detailBox.width - detailRow.width * detailBox.fit) / 2)
 
-                PlasmaComponents.Label {
-                    text: card.nodeModel
-                    ? (Math.floor(card.nodeModel.uptime / 86400) + "d "
-                    + Math.floor((card.nodeModel.uptime % 86400) / 3600) + "h")
-                    : ""
-                    font.pixelSize: 10
-                    font.family: "JetBrains Mono"
-                }
-            }
-
-            // Tinted chip rather than a solid fill with hardcoded white text,
-            // which only happened to be legible on dark themes.
-            Rectangle {
-                implicitHeight: 16
-                implicitWidth: statusLabel.implicitWidth + 14
-                radius: 8
-                color: {
-                    const c = card.isOnline ? card.uiRunningColor : card.uiStoppedColor
-                    return Qt.rgba(c.r, c.g, c.b, 0.12)
-                }
-                border.width: 0
-                border.color: {
-                    const c = card.isOnline ? card.uiRunningColor : card.uiStoppedColor
-                    return Qt.rgba(c.r, c.g, c.b, 0.45)
-                }
-
-                PlasmaComponents.Label {
-                    id: statusLabel
-                    anchors.centerIn: parent
-                    text: card.nodeModel ? card.nodeModel.status : ""
-                    color: card.isOnline ? card.uiRunningColor : card.uiStoppedColor
-                    font.pixelSize: 9
-                    font.bold: true
+                        DetailStat { chip: true; text: card.coreText; allowed: 0 <= detailBox.lastSlot }
+                        DetailStat { iconName: "clock"; text: card.uptimeText; allowed: 1 <= detailBox.lastSlot }
+                        DetailStat { iconName: "vm"; text: card.vmText; allowed: 2 <= detailBox.lastSlot }
+                        DetailStat { iconName: "lxc"; text: card.ctText; allowed: 3 <= detailBox.lastSlot }
+                    }
                 }
             }
         }
 
-        // CPU and memory on the left, storage bars on the right. The meters
-        // stack so a node with several stores grows downwards, not sideways.
-        // With no storage the right column is hidden and the two meters sit
-        // side by side instead, one row shorter.
-        RowLayout {
+        Rectangle {
             Layout.fillWidth: true
-            spacing: 16
+            implicitHeight: 1
+            color: Qt.rgba(Kirigami.Theme.textColor.r,
+                           Kirigami.Theme.textColor.g,
+                           Kirigami.Theme.textColor.b, 0.08)
+        }
 
-            GridLayout {
+        // CPU, memory and storage in one row when their text fits side by
+        // side. Otherwise storage wraps under the other two, and on a very
+        // narrow panel the two meters stack.
+        GridLayout {
+            id: meters
+            Layout.fillWidth: true
+            columnSpacing: 16
+            rowSpacing: 10
+
+            readonly property real needed: cpuMeter.implicitWidth + memMeter.implicitWidth
+                + (card.hasStorage ? diskColumn.implicitWidth : 0)
+                + (card.hasStorage ? 2 : 1) * meters.columnSpacing
+            readonly property bool oneRow: meters.width >= meters.needed
+
+            columns: card.hasStorage ? (meters.oneRow ? 3 : 2) : (meters.oneRow ? 2 : 1)
+
+            Meter {
+                id: cpuMeter
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
+                Layout.minimumWidth: Math.min(cpuMeter.implicitWidth, meters.width)
                 Layout.alignment: Qt.AlignTop
-                columns: card.hasStorage ? 1 : 2
-                rowSpacing: 5
-                columnSpacing: 16
+                label: "CPU"
+                valueText: card.nodeModel && card.safeCpuPercent
+                    ? card.safeCpuPercent(card.nodeModel.cpu).toFixed(1) + "%" : "–"
+                fraction: card.cpuFraction
+                barColor: card.toneFor(card.cpuFraction, card.uiCpuColor)
+            }
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 1
-                    spacing: 5
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 4
-
-                        PlasmaComponents.Label {
-                            text: "CPU"
-                            font.pixelSize: 9
-                            opacity: 0.6
-                        }
-
-                        PlasmaComponents.Label {
-                            text: card.nodeModel && card.safeCpuPercent
-                            ? card.safeCpuPercent(card.nodeModel.cpu).toFixed(1) + "%" : "–"
-                            Layout.fillWidth: true
-                            horizontalAlignment: Text.AlignLeft
-                            font.pixelSize: 10
-                            font.family: "JetBrains Mono"
-                        }
-                    }
-
-                    UsageMeter {
-                        Layout.fillWidth: true
-                        implicitHeight: 3
-                        value: card.cpuFraction
-                        barColor: card.loadColorFor(card.cpuFraction)
-                        trackOpacity: 0.10
-                    }
-                }
-
-                ColumnLayout {
-                    id: memColumn
-                    Layout.fillWidth: true
-                    Layout.preferredWidth: 1
-                    spacing: 5
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 4
-
-                        PlasmaComponents.Label {
-                            text: "MEM"
-                            font.pixelSize: 9
-                            opacity: 0.6
-                        }
-
-                        PlasmaComponents.Label {
-                            text: card.memTotal > 0
-                            ? (card.memUsed / card.bytesPerGiB).toFixed(1) + " / "
-                            + (card.memTotal / card.bytesPerGiB).toFixed(1) + "G"
-                            : "–"
-                            Layout.fillWidth: true
-                            horizontalAlignment: Text.AlignLeft
-                            font.pixelSize: 10
-                            font.family: "JetBrains Mono"
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    UsageMeter {
-                        Layout.fillWidth: true
-                        implicitHeight: 3
-                        value: card.memFraction
-                        barColor: card.memFraction >= 0.90
-                        ? Kirigami.Theme.negativeTextColor
-                        : (card.memFraction >= 0.75 ? Kirigami.Theme.neutralTextColor : card.uiMemColor)
-                        trackOpacity: 0.10
-                    }
-                }
-
+            Meter {
+                id: memMeter
+                Layout.fillWidth: true
+                Layout.preferredWidth: 1
+                Layout.minimumWidth: Math.min(memMeter.implicitWidth, meters.width)
+                Layout.alignment: Qt.AlignTop
+                label: "MEM"
+                valueText: card.memTotal > 0
+                    ? (card.memUsed / card.bytesPerGiB).toFixed(1) + " / "
+                    + (card.memTotal / card.bytesPerGiB).toFixed(1) + "G · "
+                    + Math.round(card.memFraction * 100) + "%"
+                    : "–"
+                fraction: card.memFraction
+                barColor: card.toneFor(card.memFraction, card.uiMemColor)
             }
 
             ColumnLayout {
+                id: diskColumn
+                visible: card.hasStorage
                 Layout.fillWidth: true
                 Layout.preferredWidth: 1
+                Layout.minimumWidth: Math.min(diskColumn.implicitWidth, meters.width)
+                Layout.columnSpan: meters.columns === 3 ? 1 : meters.columns
                 Layout.alignment: Qt.AlignTop
-                spacing: 5
-                visible: card.hasStorage
+                spacing: 6
 
                 Repeater {
                     model: card.storageBars
 
-                    ColumnLayout {
-                        id: storageRow
+                    Meter {
+                        id: diskMeter
                         required property int index
                         required property var modelData
-                        readonly property real fraction: {
-                            const v = Number(storageRow.modelData.fraction)
+                        readonly property real clamped: {
+                            const v = Number(diskMeter.modelData.fraction)
                             return isFinite(v) && v > 0 ? Math.min(1, v) : 0
                         }
 
                         Layout.fillWidth: true
-                        spacing: 5
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 4
-
-                            PlasmaComponents.Label {
-                                // The label belongs to the column, not the row.
-                                text: storageRow.index === 0 ? "DISK" : ""
-                                font.pixelSize: 9
-                                opacity: 0.6
-                            }
-
-                            PlasmaComponents.Label {
-                                text: storageRow.modelData.name + " "
-                                + Math.round(storageRow.fraction * 100) + "%"
-                                Layout.fillWidth: true
-                                horizontalAlignment: Text.AlignLeft
-                                font.pixelSize: 10
-                                font.family: "JetBrains Mono"
-                                elide: Text.ElideRight
-                            }
-                        }
-
-                        UsageMeter {
-                            Layout.fillWidth: true
-                            implicitHeight: 3
-                            value: storageRow.fraction
-                            barColor: storageRow.fraction >= 0.90
-                            ? Kirigami.Theme.negativeTextColor
-                            : (storageRow.fraction >= 0.75 ? Kirigami.Theme.neutralTextColor : card.uiDiskColor)
-                            trackOpacity: 0.10
-                        }
+                        // The label belongs to the column, not the row.
+                        label: diskMeter.index === 0 ? "DISK" : ""
+                        valueText: diskMeter.modelData.name + " " + Math.round(diskMeter.clamped * 100) + "%"
+                        fraction: diskMeter.clamped
+                        barColor: card.toneFor(diskMeter.clamped, card.uiDiskColor)
                     }
                 }
 

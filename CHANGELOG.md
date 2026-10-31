@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- feat(ui): redesign the node card. The status dot and node name are centered, with a line of facts under them: core count (when Proxmox reports it), uptime, and VM and container counts, each with an icon. The line shrinks to 80% to fit a narrow panel, then drops facts from the right instead of cutting text. CPU, memory and storage sit in one row with right-aligned values and 6 px bars, and wrap to two rows when they do not fit side by side. Memory also shows a percentage, and a thin divider separates the header from the meters. The `online` chip only shows for a node that is not online. The VMs and LXC section headers no longer show the running and total counts, because the card and the footer carry them. While a filter is active they still show how many guests matched, as "N of M"
 - feat(ui): click a guest row to show or hide its stats, and the stats button is gone. A drag still reorders rows in custom sort mode, and the buttons on a row keep their own clicks. The pointer is a hand over a row that has stats, and the power actions area no longer reserves a slot for the old button
 - docs: the README is a short entry point now. The Proxmox setup, KeePassXC, security model, configuration, installation and troubleshooting guides moved to the wiki, and the Keyring tab hint points to the wiki page
 
