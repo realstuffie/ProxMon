@@ -2154,7 +2154,16 @@ PlasmoidItem {
                 onClicked: root.handleFooterClick()
 
                 RowLayout {
-                    anchors.fill: parent
+                    // The row has a divider above it and an 8 px margin below it
+                    // that it does not use, so centering inside the row leaves
+                    // everything 4 px above the middle of the footer. Moving down
+                    // by half the margin centers it between the divider and the
+                    // bottom edge. Half of 8 is whole, so the icons stay sharp.
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.verticalCenterOffset: fullRep.bottomMargin / 2
+                    height: parent.height
                     spacing: 4
 
                     // 16 px is the size these icons are drawn for. The labels are
