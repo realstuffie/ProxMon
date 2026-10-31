@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.9.3
+
 - fix(ui): the footer's icons and text are centered between its divider and the bottom edge of the panel. They were centered in a row that has an 8 px margin below it, so they sat 4 px too high
 - fix(ui): the expanded panel has a maximum width of 520 px. It had none, so the popup could be stretched until the guest rows and the node card's bars were spread across empty space
 - fix(icons): the 14 px icons (`vm`, `clock`, `lxc-14`) set their faint fills as `rgba(...)`, which Qt's SVG renderer does not read, so the fill came out solid black. They use `fill-opacity` now. The `clock` icon drew a vertical line through a circle, and its second hand now points right. The node card, the VMs and LXC section headers and the footer draw their own 16 px icons (chip, clock, monitor and the LXC cube), kept in `contents/ui/icons`, at exactly 16 px, the theme's standard small size, and are placed on whole pixels at any panel width, so they stay sharp at 100% and 200% scaling
