@@ -1245,6 +1245,11 @@ void ProxmoxController::armSecretRetry() {
 void ProxmoxController::retrySecretResolution() {
     if (m_secretRetryTimer) m_secretRetryTimer->stop();
     if (m_secretState != QStringLiteral("error")) return;
+    // A refresh-time read can fail after resolution succeeded. Retire that
+    // refresh before resolving again so its late callbacks cannot overwrite
+    // recovery, and the UI can start a new fetch when we become ready.
+    cancelRefresh();
+    m_refreshSeq += 1;
     appendDebugLog(QStringLiteral("[ProxmoxController] retrying keyring read after error"));
     if (m_connectionMode == QStringLiteral("multiHost")) {
         startMultiSecretResolution();
@@ -1789,10 +1794,12 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
 
             const QString kind = request.value(QStringLiteral("kind")).toString();
             if (kind == ProxmoxConst::Kind::Fetch) {
+                setSecretState(QStringLiteral("error"));
                 dispatchSingleFetchWithSecret(QString());
                 return;
             }
             if (kind == ProxmoxConst::Kind::Children) {
+                setSecretState(QStringLiteral("error"));
                 dispatchSingleNodeChildrenWithSecret(
                     request.value(QStringLiteral("nodeNames")).toList(), QString());
                 return;
@@ -1967,11 +1974,13 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
         logKeyringError(QStringLiteral("reading an endpoint token secret failed"), message);
 
         if (kind == ProxmoxConst::Kind::Nodes) {
+            setSecretState(QStringLiteral("error"));
             dispatchMultiNodesWithSecret(sessionKey, endpointBySession(sessionKey), QString());
             return;
         }
 
         if (kind == ProxmoxConst::Kind::Children) {
+            setSecretState(QStringLiteral("error"));
             appendDebugLog(QStringLiteral("[ProxmoxController] multi child secret error session=%1 nodes=%2")
                 .arg(sessionKey,
                      QString::number(request.value(QStringLiteral("nodeNames")).toList().size())));

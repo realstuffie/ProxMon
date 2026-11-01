@@ -264,7 +264,7 @@ set_tests_properties(hostunreachable PROPERTIES TIMEOUT 60)
 qt_add_executable(tst_secretservice tst_secretservice.cpp)
 target_include_directories(tst_secretservice PRIVATE ..)
 target_link_libraries(tst_secretservice PRIVATE
-    proxmoxclientplugin Qt6::Core Qt6::DBus Qt6::Test)
+    proxmoxclientplugin Qt6::Core Qt6::DBus Qt6::Network Qt6::Test)
 add_test(NAME secretservice COMMAND tst_secretservice)
 set_tests_properties(secretservice PROPERTIES TIMEOUT 30)
 
