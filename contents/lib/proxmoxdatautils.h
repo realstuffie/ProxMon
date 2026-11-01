@@ -41,6 +41,9 @@ struct PbsBackupMatch {
 };
 
 // Keyring retry backoff: 30 s on the first failure, doubling to 10 min.
+// Pass KeyringJustUnlocked after a wallet opens to get one quick retry (4 s)
+// first, then the normal backoff from 30 s.
+constexpr int KeyringJustUnlocked = -1;
 int nextKeyringRetryDelayMs(int currentDelayMs);
 
 // Whether a keyring error should reach the journal: always when it differs

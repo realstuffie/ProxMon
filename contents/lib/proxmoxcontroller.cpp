@@ -261,6 +261,13 @@ ProxmoxController::ProxmoxController(QObject *parent)
     connect(m_secretRetryTimer, &QTimer::timeout, this, &ProxmoxController::retrySecretResolution);
     connect(m_singleSecretStore, &SecretStore::walletOpened, this, [this]() {
         appendDebugLog(QStringLiteral("[ProxmoxController] wallet opened, retrying keyring reads"));
+        // An unlock is fresh news, so earlier backoff no longer applies. A read
+        // that fails just after unlock (KeePassXC can answer with an empty
+        // error while it loads the database) retries after 4 s, then backs off
+        // from 30 s, instead of waiting out the old backoff of up to ten minutes.
+        if (m_secretState == QStringLiteral("error")) {
+            m_secretRetryDelayMs = ProxmoxDataUtils::KeyringJustUnlocked;
+        }
         retrySecretResolution();
         if (!m_pbsRefreshError.isEmpty()) refreshPBS();
     });

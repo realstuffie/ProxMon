@@ -88,9 +88,11 @@ PbsBackupMatch selectPbsBackup(const PbsBackupSources &sources,
 }
 
 int nextKeyringRetryDelayMs(int currentDelayMs) {
+    constexpr int quickMs = 4 * 1000;
     constexpr int startMs = 30 * 1000;
     constexpr int maxMs = 10 * 60 * 1000;
-    if (currentDelayMs <= 0) return startMs;
+    if (currentDelayMs == KeyringJustUnlocked) return quickMs;
+    if (currentDelayMs < startMs) return startMs;
     return currentDelayMs >= maxMs / 2 ? maxMs : currentDelayMs * 2;
 }
 

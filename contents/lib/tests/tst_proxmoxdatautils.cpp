@@ -488,6 +488,9 @@ void ProxmoxDataUtilsTest::keyringRetryBacksOffAndCaps() {
     using ProxmoxDataUtils::nextKeyringRetryDelayMs;
     QCOMPARE(nextKeyringRetryDelayMs(0), 30000);
     QCOMPARE(nextKeyringRetryDelayMs(-5), 30000);
+    // Just after an unlock: one quick retry, then the normal backoff.
+    QCOMPARE(nextKeyringRetryDelayMs(ProxmoxDataUtils::KeyringJustUnlocked), 4000);
+    QCOMPARE(nextKeyringRetryDelayMs(4000), 30000);
     QCOMPARE(nextKeyringRetryDelayMs(30000), 60000);
     QCOMPARE(nextKeyringRetryDelayMs(240000), 480000);
     QCOMPARE(nextKeyringRetryDelayMs(480000), 600000);
