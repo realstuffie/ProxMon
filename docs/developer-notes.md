@@ -213,3 +213,26 @@ One known cosmetic quirk: the handler's `enabled: !Plasmoid.editMode` binding ca
 Plasma injects every setting from `contents/config/main.xml` into every settings page as `cfg_<name>` and `cfg_<name>Default`. A page that doesn't declare one logs "Setting initial properties failed" when the dialog opens. When you add a setting, add its two properties to each of the four pages. `./check-config-pages.sh` lists what is missing and runs in CI.
 
 Settings pages shouldn't depend on the native plugin. The Keyring tab is the exception, because it has to ask the plugin which keyrings exist. It loads that section through a `Loader`, so a plugin that fails to load shows a message on that tab and leaves the others working.
+
+## Sharp icons and pixel alignment
+
+Icons and thin lines go soft unless they sit on whole screen pixels and are shown at a size their art was drawn for. The node card hit every one of these, one after another.
+
+- **Size.** Draw icon art on a grid and show it at that size or an even multiple of it. Use 16, the theme's standard small size, which doubles to 32 and halves to 8. Sizes such as 13 or 14 are scaled by the renderer and come out soft, and so does a theme icon asked for at a size the theme doesn't ship. The node card's own icons are drawn on a 16 x 16 grid in `contents/ui/icons/`. The section headers and the footer use the same icons. The 14 x 14 icons in `contents/icons/` are for the icon theme and the app, not for the panel.
+- **Strokes.** In SVG, put 1 px strokes on half-pixel coordinates such as `x="7.5"` and fills on whole ones. In QML, give rectangles and 1 px lines whole-number `x`, `y`, `width` and `height`.
+- **Fills.** Never write `fill="rgba(...)"` in an SVG. Qt's SVG renderer reads it as black. Write `fill="#FFFFFF" fill-opacity="0.2"`.
+- **Positions.** A layout can leave half a pixel. Centering by `(width - content) / 2` does it on an odd width, and so does any item after a label with a fractional width. Place crisp items by hand with `Math.round`, as the node card does for `nameRow.inset` and `detailRow.x`. `Layout.alignment: Qt.AlignHCenter` does not round.
+- **Scale.** Do not put icons inside an item that uses `scale`. The node card's facts line shrinks with `scale`, which is safe only because the panel's minimum width of 380 px keeps it at 1. If you lower that minimum, the icons will blur.
+
+Two layout pitfalls came up in the same work. A binding must not set a property it also reads, which Qt reports as a binding loop, so measure a text width once and multiply, and don't assign the text of a shared `TextMetrics` inside the binding. A layout that switches between one row and two must compare against its parent's width, because its own width is not known on the first pass and Qt aborts with "recursive rearrange".
+
+### Checking it without a desktop
+
+A screenshot at one width proves little, because the fuzz depends on the panel width. Measure instead.
+
+1. Run `/usr/lib/qt6/bin/qmltestrunner`. `/usr/bin/qml` is the Qt 5 chooser and does nothing useful. Use `QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software`, and pass `-maxwarnings 0`, or the runner stops printing once it has seen enough warnings and hides your output.
+2. In a `TestCase`, create the component with `Qt.createComponent`, walk its children, and read `item.mapToItem(null, 0, 0)` for each icon, dot and label. Anything with a fraction other than `.00` is soft.
+3. Sweep every width from the minimum (380) to the maximum (520). An even width can look fine while an odd one does not.
+4. To see the pixels, call `grabToImage` and magnify with `magick in.png -filter point -resize 400% out.png`. Smoothing hides the blur. `QT_SCALE_FACTOR=2` shows the 2x result.
+
+Software rendering has no shaders, so it cannot show effects that need them, such as `Kirigami.Icon` with `isMask: true`. Set the `Kirigami.Theme` colors on a parent item with `inherit: false`, or the card renders in whatever the test machine's theme is.

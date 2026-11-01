@@ -261,6 +261,13 @@ ProxmoxController::ProxmoxController(QObject *parent)
     connect(m_secretRetryTimer, &QTimer::timeout, this, &ProxmoxController::retrySecretResolution);
     connect(m_singleSecretStore, &SecretStore::walletOpened, this, [this]() {
         appendDebugLog(QStringLiteral("[ProxmoxController] wallet opened, retrying keyring reads"));
+        // An unlock is fresh news, so earlier backoff no longer applies. A read
+        // that fails just after unlock (KeePassXC can answer with an empty
+        // error while it loads the database) retries after 4 s, then backs off
+        // from 30 s, instead of waiting out the old backoff of up to ten minutes.
+        if (m_secretState == QStringLiteral("error")) {
+            m_secretRetryDelayMs = ProxmoxDataUtils::KeyringJustUnlocked;
+        }
         retrySecretResolution();
         if (!m_pbsRefreshError.isEmpty()) refreshPBS();
     });
@@ -1245,6 +1252,11 @@ void ProxmoxController::armSecretRetry() {
 void ProxmoxController::retrySecretResolution() {
     if (m_secretRetryTimer) m_secretRetryTimer->stop();
     if (m_secretState != QStringLiteral("error")) return;
+    // A refresh-time read can fail after resolution succeeded. Retire that
+    // refresh before resolving again so its late callbacks cannot overwrite
+    // recovery, and the UI can start a new fetch when we become ready.
+    cancelRefresh();
+    m_refreshSeq += 1;
     appendDebugLog(QStringLiteral("[ProxmoxController] retrying keyring read after error"));
     if (m_connectionMode == QStringLiteral("multiHost")) {
         startMultiSecretResolution();
@@ -1789,10 +1801,12 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
 
             const QString kind = request.value(QStringLiteral("kind")).toString();
             if (kind == ProxmoxConst::Kind::Fetch) {
+                setSecretState(QStringLiteral("error"));
                 dispatchSingleFetchWithSecret(QString());
                 return;
             }
             if (kind == ProxmoxConst::Kind::Children) {
+                setSecretState(QStringLiteral("error"));
                 dispatchSingleNodeChildrenWithSecret(
                     request.value(QStringLiteral("nodeNames")).toList(), QString());
                 return;
@@ -1967,11 +1981,13 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
         logKeyringError(QStringLiteral("reading an endpoint token secret failed"), message);
 
         if (kind == ProxmoxConst::Kind::Nodes) {
+            setSecretState(QStringLiteral("error"));
             dispatchMultiNodesWithSecret(sessionKey, endpointBySession(sessionKey), QString());
             return;
         }
 
         if (kind == ProxmoxConst::Kind::Children) {
+            setSecretState(QStringLiteral("error"));
             appendDebugLog(QStringLiteral("[ProxmoxController] multi child secret error session=%1 nodes=%2")
                 .arg(sessionKey,
                      QString::number(request.value(QStringLiteral("nodeNames")).toList().size())));

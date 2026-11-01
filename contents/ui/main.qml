@@ -1575,6 +1575,9 @@ PlasmoidItem {
         Layout.preferredWidth: 420
         Layout.preferredHeight: Math.min(root.calculatedHeight, 500)
         Layout.minimumWidth: 380
+        // Past this the guest rows spread their columns over empty space and the
+        // node card's meters stretch into long, thin bars.
+        Layout.maximumWidth: 520
         Layout.minimumHeight: 200
         Layout.maximumHeight: 600
 
@@ -2151,18 +2154,31 @@ PlasmoidItem {
                 onClicked: root.handleFooterClick()
 
                 RowLayout {
-                    anchors.fill: parent
+                    // The row has a divider above it and an 8 px margin below it
+                    // that it does not use, so centering inside the row leaves
+                    // everything 4 px above the middle of the footer. Moving down
+                    // by half the margin centers it between the divider and the
+                    // bottom edge. Half of 8 is whole, so the icons stay sharp.
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.verticalCenterOffset: fullRep.bottomMargin / 2
+                    height: parent.height
                     spacing: 4
 
+                    // 16 px is the size these icons are drawn for. The labels are
+                    // rounded up to whole pixels so the icon after each one
+                    // lands on a whole pixel too.
                     Kirigami.Icon {
                         source: "server-database"
-                        implicitWidth: 12
-                        implicitHeight: 12
+                        implicitWidth: 16
+                        implicitHeight: 16
                         opacity: 0.6
                     }
 
                     PlasmaComponents.Label {
                         text: root.displayedNodeList.length + (root.displayedNodeList.length === 1 ? " node" : " nodes")
+                        Layout.preferredWidth: Math.ceil(implicitWidth)
                         font.pixelSize: 10
                         opacity: 0.6
                     }
@@ -2170,14 +2186,15 @@ PlasmoidItem {
                     Item { implicitWidth: 8 }
 
                     Kirigami.Icon {
-                        source: "computer-symbolic"
-                        implicitWidth: 12
-                        implicitHeight: 12
+                        source: Qt.resolvedUrl("icons/vm-16.svg")
+                        implicitWidth: 16
+                        implicitHeight: 16
                         opacity: 0.6
                     }
 
                     PlasmaComponents.Label {
                         text: root.runningVMs + "/" + root.displayedVmData.length
+                        Layout.preferredWidth: Math.ceil(implicitWidth)
                         font.pixelSize: 10
                         opacity: 0.6
                     }
@@ -2185,9 +2202,9 @@ PlasmoidItem {
                     Item { implicitWidth: 8 }
 
                     Kirigami.Icon {
-                        source: "lxc"
-                        implicitWidth: 12
-                        implicitHeight: 12
+                        source: Qt.resolvedUrl("icons/lxc-16.svg")
+                        implicitWidth: 16
+                        implicitHeight: 16
                         opacity: 0.6
                     }
 

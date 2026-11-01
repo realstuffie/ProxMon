@@ -176,6 +176,13 @@ ColumnLayout {
     // (sort mode changed, or a filter was typed).
     onReorderEnabledChanged: if (!reorderEnabled) endDrag(false)
 
+    // The 16 px art for each kind of guest. A name that is not listed here is
+    // looked up in the icon theme instead.
+    readonly property var iconUrls: ({
+        "vm": Qt.resolvedUrl("../icons/vm-16.svg"),
+        "lxc": Qt.resolvedUrl("../icons/lxc-16.svg")
+    })
+
     readonly property int totalCount: guestsModel ? guestsModel.count : 0
     readonly property int runningCount: guestsModel ? guestsModel.runningCount : 0
     readonly property bool filtering: section.filterText !== ""
@@ -218,10 +225,12 @@ ColumnLayout {
         Layout.bottomMargin: 1
         spacing: 6
 
+        // The icons are drawn on a 16 x 16 grid and shown at exactly that size,
+        // which is what keeps them sharp. See docs/developer-notes.md.
         Kirigami.Icon {
-            source: section.iconName
-            implicitWidth: 13
-            implicitHeight: 13
+            source: section.iconUrls[section.iconName] ?? section.iconName
+            implicitWidth: 16
+            implicitHeight: 16
             opacity: 0.85
         }
 
@@ -231,10 +240,11 @@ ColumnLayout {
             font.pixelSize: 11
         }
 
+        // The running/total counts live on the node card and in the footer.
+        // Only a filter needs a count here: how many guests matched.
         PlasmaComponents.Label {
-            text: section.filtering
-                ? section.matchCount + " of " + section.totalCount
-                : section.runningCount + "/" + section.totalCount
+            visible: section.filtering
+            text: section.matchCount + " of " + section.totalCount
             font.pixelSize: 10
             font.family: "JetBrains Mono"
             opacity: 0.6

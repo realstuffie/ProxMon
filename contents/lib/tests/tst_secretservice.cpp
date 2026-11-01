@@ -19,8 +19,35 @@
 #include <QMap>
 #include <QProcess>
 #include <QSignalSpy>
+#include <QTcpServer>
 
+#include "proxmoxclient.h"
+#include "proxmoxconsts.h"
+#include "proxmoxcontroller.h"
 #include "secretstore.h"
+
+// The Secret Service wire format, with a plain session for this private bus.
+struct TestSecret {
+    QDBusObjectPath session;
+    QByteArray parameters;
+    QByteArray value;
+    QString contentType;
+};
+Q_DECLARE_METATYPE(TestSecret)
+
+QDBusArgument &operator<<(QDBusArgument &arg, const TestSecret &secret) {
+    arg.beginStructure();
+    arg << secret.session << secret.parameters << secret.value << secret.contentType;
+    arg.endStructure();
+    return arg;
+}
+
+const QDBusArgument &operator>>(const QDBusArgument &arg, TestSecret &secret) {
+    arg.beginStructure();
+    arg >> secret.session >> secret.parameters >> secret.value >> secret.contentType;
+    arg.endStructure();
+    return arg;
+}
 
 namespace {
 const QString Collection = QStringLiteral("/org/freedesktop/secrets/collection/default");
@@ -41,10 +68,34 @@ public:
     // Whether the default collection reports itself locked.
     bool locked = false;
     int searchCalls = 0;
+    bool serveSecret = false;
+    int secretReads = 0;
 
     QString introspect(const QString &) const override { return QString(); }
 
     bool handleMessage(const QDBusMessage &message, const QDBusConnection &connection) override {
+        if (message.interface() == QLatin1String("org.freedesktop.Secret.Service")
+            && message.member() == QLatin1String("OpenSession")) {
+            if (message.arguments().value(0).toString() != QLatin1String("plain")) {
+                return connection.send(message.createErrorReply(
+                    QDBusError::NotSupported, QStringLiteral("Use a plain test session")));
+            }
+            return connection.send(message.createReply({
+                QVariant::fromValue(QDBusVariant(QString())),
+                QVariant::fromValue(QDBusObjectPath(QStringLiteral("/org/freedesktop/secrets/session/test")))}));
+        }
+        if (message.interface() == QLatin1String("org.freedesktop.DBus.Properties")
+            && message.member() == QLatin1String("GetAll")) {
+            return connection.send(message.createReply(QVariantList{QVariantMap{}}));
+        }
+        if (message.interface() == QLatin1String("org.freedesktop.Secret.Service")
+            && message.member() == QLatin1String("GetSecrets")) {
+            ++secretReads;
+            const TestSecret secret{message.arguments().value(1).value<QDBusObjectPath>(),
+                                    {}, QByteArray("test-token"), QStringLiteral("text/plain")};
+            return connection.send(message.createReply({QVariant::fromValue(
+                QMap<QDBusObjectPath, TestSecret>{{QDBusObjectPath(Item1), secret}})}));
+        }
         if (message.interface() == QLatin1String("org.freedesktop.Secret.Service")
             && message.member() == QLatin1String("ReadAlias")) {
             QDBusMessage reply = message.createReply();
@@ -66,6 +117,11 @@ public:
             searchedServers << wanted.value(QStringLiteral("server"));
 
             QDBusMessage reply = message.createReply();
+            if (serveSecret) {
+                reply << QVariant::fromValue(QList<QDBusObjectPath>{QDBusObjectPath(Item1)})
+                      << QVariant::fromValue(QList<QDBusObjectPath>{});
+                return connection.send(reply);
+            }
             reply << QVariant::fromValue(QList<QDBusObjectPath>{QDBusObjectPath(Item1), QDBusObjectPath(Item2)})
                   << QVariant::fromValue(QList<QDBusObjectPath>{QDBusObjectPath(Locked3)});
             return connection.send(reply);
@@ -101,6 +157,8 @@ private slots:
     void lockedKeyringFailsAReadWithoutPrompting();
     void unlockWakesAWatcherButLockingDoesNot();
     void collectionChangedWakesAWatcherOnlyOnceUnlocked();
+    void refreshReadFailureRecoversAfterUnlock_data();
+    void refreshReadFailureRecoversAfterUnlock();
 
 private:
     QProcess m_bus;
@@ -124,6 +182,8 @@ void SecretServiceTest::initTestCase() {
     qputenv("DBUS_SESSION_BUS_ADDRESS", address);
 
     qDBusRegisterMetaType<QMap<QString, QString>>();
+    qDBusRegisterMetaType<TestSecret>();
+    qDBusRegisterMetaType<QMap<QDBusObjectPath, TestSecret>>();
     QDBusConnection bus = QDBusConnection::sessionBus();
     QVERIFY2(bus.isConnected(), "could not reach the private bus");
     QVERIFY(bus.registerVirtualObject(QStringLiteral("/org/freedesktop/secrets"), &m_service,
@@ -239,6 +299,100 @@ void SecretServiceTest::collectionChangedWakesAWatcherOnlyOnceUnlocked() {
     emitChanged();
     QVERIFY2(opened.wait(5000), "an unlock announced by CollectionChanged did not wake the watcher");
     QCOMPARE(opened.count(), 1);
+}
+
+void SecretServiceTest::refreshReadFailureRecoversAfterUnlock_data() {
+    QTest::addColumn<bool>("multiHost");
+    QTest::addColumn<bool>("children");
+    QTest::newRow("single-nodes") << false << false;
+    QTest::newRow("single-children") << false << true;
+    QTest::newRow("multi-nodes") << true << false;
+    QTest::newRow("multi-children") << true << true;
+}
+
+void SecretServiceTest::refreshReadFailureRecoversAfterUnlock() {
+    QFETCH(bool, multiHost);
+    QFETCH(bool, children);
+
+    // Accept connections without answering TLS. Reaching this server proves
+    // the recovered refresh obtained a token and dispatched an API request.
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    m_service.serveSecret = true;
+    m_service.locked = true;
+
+    ProxmoxController controller;
+    controller.setAutoRetry(false); // Keyring recovery must work independently.
+    if (multiHost) {
+        controller.setConnectionMode(QStringLiteral("multiHost"));
+        controller.setMultiHostsJson(QStringLiteral(
+            "[{\"host\":\"127.0.0.1\",\"port\":%1,\"tokenId\":\"test@pve!monitor\"}]")
+                .arg(server.serverPort()));
+    } else {
+        controller.setHost(QStringLiteral("127.0.0.1"));
+        controller.setPort(server.serverPort());
+        controller.setTokenId(QStringLiteral("test@pve!monitor"));
+    }
+    auto *client = controller.findChild<ProxmoxClient *>();
+    QVERIFY(client);
+
+    auto unlock = [this]() {
+        m_service.locked = false;
+        QDBusMessage signal = QDBusMessage::createSignal(
+            QStringLiteral("/org/freedesktop/secrets"),
+            QStringLiteral("org.freedesktop.Secret.Service"), QStringLiteral("CollectionChanged"));
+        signal << QVariant::fromValue(QDBusObjectPath(Collection));
+        QVERIFY(QDBusConnection::sessionBus().send(signal));
+    };
+
+    controller.resolveSecretsIfNeeded();
+    QTRY_COMPARE(controller.secretState(), QStringLiteral("error"));
+    unlock();
+    QTRY_COMPARE(controller.secretState(), QStringLiteral("ready"));
+
+    // The initial unlock/read worked, but the next scoped read fails. This
+    // used to leave secretState at ready and never arm the unlock retry.
+    m_service.locked = true;
+    const QString sessionKey = multiHost
+        ? controller.endpoints().first().toMap().value(QStringLiteral("sessionKey")).toString()
+        : QString();
+    // The initial unlock retires refresh 0, so a children reply belongs to 1.
+    const int failedSeq = children ? 1 : 2;
+    if (children) {
+        const QVariantMap nodes{{QStringLiteral("data"), QVariantList{
+            QVariantMap{{QStringLiteral("node"), QStringLiteral("pve")}}}}};
+        if (multiHost) emit client->replyFor(failedSeq, sessionKey, ProxmoxConst::Kind::Nodes, {}, nodes);
+        else emit client->reply(failedSeq, ProxmoxConst::Kind::Nodes, {}, nodes);
+    } else {
+        controller.fetchData();
+    }
+    QTRY_COMPARE(controller.secretState(), QStringLiteral("error"));
+    QTRY_VERIFY(!controller.loading() && !controller.isRefreshing());
+    if (!multiHost) QCOMPARE(controller.errorMessage(), QStringLiteral("credentials unavailable"));
+
+    QSignalSpy states(&controller, &ProxmoxController::secretStateChanged);
+    controller.fetchData(); // Background ticks must respect keyring backoff.
+    QTest::qWait(100);
+    QCOMPARE(states.count(), 0);
+
+    // Mirror main.qml: a successful resolution starts a fresh refresh.
+    connect(&controller, &ProxmoxController::secretStateChanged, &controller, [&controller]() {
+        if (controller.secretState() == QLatin1String("ready")
+            && !controller.loading() && !controller.isRefreshing()) controller.fetchData();
+    });
+    const int readsBefore = m_service.secretReads;
+    unlock();
+    QTRY_VERIFY(server.hasPendingConnections());
+    QCOMPARE(controller.secretState(), QStringLiteral("ready"));
+    QVERIFY(m_service.secretReads >= readsBefore + 2); // Resolution and fetch.
+    QVERIFY(controller.errorMessage().isEmpty());
+
+    // A callback from the failed refresh must not restore its old error.
+    if (multiHost) emit client->errorFor(failedSeq, sessionKey, ProxmoxConst::Kind::Nodes, {}, QStringLiteral("stale error"));
+    else emit client->error(failedSeq, ProxmoxConst::Kind::Nodes, {}, QStringLiteral("stale error"));
+    QVERIFY(controller.errorMessage().isEmpty());
+    controller.cancelRefresh();
+    m_service.serveSecret = false;
 }
 
 QTEST_MAIN(SecretServiceTest)
