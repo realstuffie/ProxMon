@@ -1018,6 +1018,7 @@ PlasmoidItem {
         var key = kind + ":" + nodeName + ":" + vmid + ":" + action
         if (armedActionKey === key && armedTimer.running) {
             armedActionKey = ""
+            armedLabel = ""
             armedTimer.stop()
             setActionBusy(nodeName, kind, vmid, true)
             controller.runAction("", kind, nodeName, vmid, action)
@@ -1035,6 +1036,7 @@ PlasmoidItem {
         var key = sessionKey + "::" + kind + ":" + nodeName + ":" + vmid + ":" + action
         if (armedActionKey === key && armedTimer.running) {
             armedActionKey = ""
+            armedLabel = ""
             armedTimer.stop()
             setActionBusy(nodeName, kind, vmid, true, sessionKey)
             controller.runAction(sessionKey, kind, nodeName, vmid, action)
