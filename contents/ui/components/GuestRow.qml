@@ -84,7 +84,7 @@ Rectangle {
     readonly property int vmid: guestModel ? guestModel.vmid : 0
     readonly property string displayName: guestModel ? guestModel.name : ""
 
-    // "UP 3d 4h" / "UP 2h 15m" / "UP 5m". Empty for a stopped guest or when
+    // "UP: 3d 4h" / "UP: 2h 15m" / "UP: 5m". Empty for a stopped guest or when
     // Proxmox reports no uptime.
     readonly property string uptimeText: {
         if (!root.isRunning || !guestModel) return ""
@@ -93,9 +93,9 @@ Rectangle {
         const d = Math.floor(up / 86400)
         const h = Math.floor((up % 86400) / 3600)
         const m = Math.floor((up % 3600) / 60)
-        if (d > 0) return "UP " + d + "d " + h + "h"
-        if (h > 0) return "UP " + h + "h " + m + "m"
-        return m > 0 ? "UP " + m + "m" : "UP <1m"
+        if (d > 0) return "UP: " + d + "d " + h + "h"
+        if (h > 0) return "UP: " + h + "h " + m + "m"
+        return m > 0 ? "UP: " + m + "m" : "UP: <1m"
     }
 
     // A VM that booted moments ago ignores shutdown until its guest OS is up,
