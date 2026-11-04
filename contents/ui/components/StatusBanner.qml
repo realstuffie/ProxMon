@@ -12,6 +12,7 @@ ColumnLayout {
     property bool refreshResolvingSecrets: false
     property bool loading: false
     property string errorMessage: ""
+    property string actionError: ""
     property bool partialFailure: false
     property string retryStatusText: ""
     property string armedLabel: ""
@@ -179,6 +180,17 @@ ColumnLayout {
             Layout.alignment: Qt.AlignHCenter
             onClicked: if (typeof root.onRetry === "function") root.onRetry()
         }
+    }
+
+    PlasmaComponents.Label {
+        text: root.actionError
+        visible: root.actionError !== "" && root.configured
+        color: Kirigami.Theme.negativeTextColor
+        wrapMode: Text.WordWrap
+        Layout.fillWidth: true
+        Layout.leftMargin: 10
+        Layout.rightMargin: 10
+        horizontalAlignment: Text.AlignHCenter
     }
 
     ColumnLayout {

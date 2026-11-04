@@ -304,6 +304,9 @@ PlasmoidItem {
     // Do NOT re-add a controller binding here: imperative writes (fetchData,
     // console/action errors, config changes) would silently kill it.
     property string errorMessage: ""
+    // Failed power action. Kept apart from errorMessage so a guest timeout
+    // doesn't hide the node list behind the connection-error view.
+    property string actionError: ""
     property string lastUpdate: controller ? controller.lastUpdate : ""
 
     property bool actionPermHintShown: false
@@ -380,6 +383,13 @@ PlasmoidItem {
             root.armedActionKey = ""
             root.armedLabel = ""
         }
+    }
+
+    Timer {
+        id: actionErrorTimer
+        interval: 8000
+        repeat: false
+        onTriggered: root.actionError = ""
     }
 
     // Avoid QQC2 Popup/Dialog in plasmoids
@@ -1328,7 +1338,8 @@ PlasmoidItem {
         }
         function onActionError(sessionKey, actionKind, node, vmid, action, message) {
             root.setActionBusy(node, actionKind, vmid, false, sessionKey)
-            root.errorMessage = message || ("Action failed: " + action)
+            root.actionError = message || ("Action failed: " + action)
+            actionErrorTimer.restart()
             configRefreshDebounce.restart()
         }
         function onStatsReady(sessionKey, node, vmid, data) {
@@ -1903,6 +1914,7 @@ PlasmoidItem {
             refreshResolvingSecrets: root.controller ? root.controller.refreshResolvingSecrets : false
             loading: root.loading
             errorMessage: root.errorMessage
+            actionError: root.actionError
             partialFailure: root.controller ? root.controller.partialFailure : false
             retryStatusText: root.retryStatusText
             armedLabel: root.armedLabel
