@@ -705,13 +705,13 @@ Rectangle {
                     color: root.uiCpuColor
                     visible: statsPanel.hasGraph
                 }
-                Text { text: "CPU"; font.pixelSize: 9; opacity: 0.7; visible: statsPanel.hasGraph }
+                Text { text: "CPU"; font.pixelSize: 9; color: Kirigami.Theme.textColor; opacity: 0.7; visible: statsPanel.hasGraph }
                 Rectangle {
                     Layout.preferredWidth: 10; Layout.preferredHeight: 3; radius: 1.5
                     color: root.uiMemColor
                     visible: statsPanel.hasGraph
                 }
-                Text { text: "Mem"; font.pixelSize: 9; opacity: 0.7; visible: statsPanel.hasGraph }
+                Text { text: "Mem"; font.pixelSize: 9; color: Kirigami.Theme.textColor; opacity: 0.7; visible: statsPanel.hasGraph }
             }
 
             Canvas {
