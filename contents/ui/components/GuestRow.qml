@@ -84,6 +84,32 @@ Rectangle {
     readonly property int vmid: guestModel ? guestModel.vmid : 0
     readonly property string displayName: guestModel ? guestModel.name : ""
 
+    // "up 3d 4h" / "up 2h 15m" / "up 5m". Empty for a stopped guest or when
+    // Proxmox reports no uptime.
+    readonly property string uptimeText: {
+        if (!root.isRunning || !guestModel) return ""
+        const up = Number(guestModel.uptime)
+        if (!isFinite(up) || up <= 0) return ""
+        const d = Math.floor(up / 86400)
+        const h = Math.floor((up % 86400) / 3600)
+        const m = Math.floor((up % 3600) / 60)
+        if (d > 0) return "up " + d + "d " + h + "h"
+        if (h > 0) return "up " + h + "h " + m + "m"
+        return m > 0 ? "up " + m + "m" : "up <1m"
+    }
+
+    // A VM that booted moments ago ignores shutdown until its guest OS is up,
+    // so Proxmox times the request out. Hold the button instead. Fails open:
+    // no reported uptime means no guard.
+    readonly property int bootGraceSeconds: 90
+    readonly property bool booting: {
+        if (root.kind !== "qemu" || !root.isRunning || !guestModel) return false
+        const raw = guestModel.uptime
+        if (raw === undefined || raw === null) return false
+        const up = Number(raw)
+        return isFinite(up) && up < root.bootGraceSeconds
+    }
+
     // Key prefix for this row's armed-confirmation state. Built from kind so
     // a VM and a container sharing a vmid can never arm each other.
     readonly property string actionKeyPrefix: root.kind + ":" + root.nodeName + ":" + root.vmid
@@ -495,8 +521,11 @@ Rectangle {
                                         icon.name: root.isArmedFor("shutdown")
                                             ? "dialog-ok" : "system-shutdown"
                                         visible: !root.busy
+                                        enabled: !root.booting
 
-                                        PlasmaComponents.ToolTip { text: "Shutdown" }
+                                        PlasmaComponents.ToolTip {
+                                            text: root.booting ? "Still booting, shutdown unavailable for a moment" : "Shutdown"
+                                        }
 
                                         onClicked: {
                                             root.activeAction = "shutdown"
@@ -654,6 +683,15 @@ Rectangle {
                         }
                         return "IP: " + (root.anonymizeIp ? root.anonymizeIp(ip) : ip)
                     }
+                    font.pixelSize: 10
+                    font.family: "JetBrains Mono"
+                    color: Kirigami.Theme.textColor
+                    opacity: 0.85
+                }
+
+                Text {
+                    text: root.uptimeText
+                    visible: root.uptimeText !== ""
                     font.pixelSize: 10
                     font.family: "JetBrains Mono"
                     color: Kirigami.Theme.textColor
