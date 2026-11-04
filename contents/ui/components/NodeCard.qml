@@ -54,7 +54,7 @@ Rectangle {
         if (!card.nodeModel || !card.isOnline) return ""
         const up = Number(card.nodeModel.uptime)
         if (!isFinite(up) || up <= 0) return ""
-        return "up " + Math.floor(up / 86400) + "d " + Math.floor((up % 86400) / 3600) + "h"
+        return Math.floor(up / 86400) + "d " + Math.floor((up % 86400) / 3600) + "h"
     }
     readonly property string vmText: card.vmsModel
     ? card.vmsModel.runningCount + "/" + card.vmsModel.count + " VMs" : ""
