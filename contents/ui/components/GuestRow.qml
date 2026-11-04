@@ -98,6 +98,18 @@ Rectangle {
         return m > 0 ? "up " + m + "m" : "up <1m"
     }
 
+    // A VM that booted moments ago ignores shutdown until its guest OS is up,
+    // so Proxmox times the request out. Hold the button instead. Fails open:
+    // no reported uptime means no guard.
+    readonly property int bootGraceSeconds: 90
+    readonly property bool booting: {
+        if (root.kind !== "qemu" || !root.isRunning || !guestModel) return false
+        const raw = guestModel.uptime
+        if (raw === undefined || raw === null) return false
+        const up = Number(raw)
+        return isFinite(up) && up < root.bootGraceSeconds
+    }
+
     // Key prefix for this row's armed-confirmation state. Built from kind so
     // a VM and a container sharing a vmid can never arm each other.
     readonly property string actionKeyPrefix: root.kind + ":" + root.nodeName + ":" + root.vmid
@@ -509,8 +521,11 @@ Rectangle {
                                         icon.name: root.isArmedFor("shutdown")
                                             ? "dialog-ok" : "system-shutdown"
                                         visible: !root.busy
+                                        enabled: !root.booting
 
-                                        PlasmaComponents.ToolTip { text: "Shutdown" }
+                                        PlasmaComponents.ToolTip {
+                                            text: root.booting ? "Still booting, shutdown unavailable for a moment" : "Shutdown"
+                                        }
 
                                         onClicked: {
                                             root.activeAction = "shutdown"
