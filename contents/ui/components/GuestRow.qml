@@ -269,7 +269,7 @@ Rectangle {
                         ? (root.anonymizeVmId ? root.anonymizeVmId(root.vmid, root.guestIndex) : root.vmid)
                         : ""
                     Layout.preferredWidth: Math.max(25, implicitWidth)
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     font.family: "JetBrains Mono"
                     opacity: root.isRunning ? 0.55 : 0.4
                 }
@@ -282,7 +282,10 @@ Rectangle {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     elide: Text.ElideRight
-                    font.pixelSize: 11
+                    font.pixelSize: 12
+                    // Puts the cap height on the row's centre line, with the
+                    // status dot, backup bar and buttons.
+                    topPadding: 2
                     verticalAlignment: Text.AlignVCenter
                     opacity: root.isRunning ? 1.0 : 0.65
 
@@ -296,9 +299,9 @@ Rectangle {
                 // never shift between running and stopped rows.
                 Item {
                     id: metrics
-                    Layout.preferredWidth: 62
-                    Layout.minimumWidth: 62
-                    Layout.maximumWidth: 62
+                    Layout.preferredWidth: 68
+                    Layout.minimumWidth: 68
+                    Layout.maximumWidth: 68
                     Layout.fillHeight: true
 
                     QQC2.ToolTip.visible: metricsHover.hovered && root.isRunning
@@ -313,9 +316,10 @@ Rectangle {
                         anchors.right: statDivider.left
                         anchors.rightMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
-                        width: 24
+                        anchors.verticalCenterOffset: 1
+                        width: 27
                         text: root.isRunning ? (root.cpuFraction * 100).toFixed(0) + "%" : "–"
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.family: "JetBrains Mono"
                         color: Kirigami.Theme.textColor
                         opacity: root.isRunning ? 0.85 : 0.35
@@ -337,10 +341,11 @@ Rectangle {
                         anchors.left: statDivider.right
                         anchors.leftMargin: 4
                         anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: 1
                         text: root.isRunning
                             ? (root.memBytes / root.bytesPerGiB).toFixed(1) + "G"
                             : "–"
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.family: "JetBrains Mono"
                         color: Kirigami.Theme.textColor
                         opacity: root.isRunning ? 0.85 : 0.35
@@ -359,9 +364,9 @@ Rectangle {
                     readonly property bool hasBackup: backupStatus !== BackupStatus.Unknown && backupStatus !== BackupStatus.Excluded
                     readonly property bool isExcluded: backupStatus === BackupStatus.Excluded
 
-                    Layout.preferredWidth: 46
-                    Layout.minimumWidth: 46
-                    Layout.maximumWidth: 46
+                    Layout.preferredWidth: 34
+                    Layout.minimumWidth: 34
+                    Layout.maximumWidth: 34
                     Layout.fillHeight: true
 
                     QQC2.ToolTip.visible: backupHover.hovered && backup.hasBackup
@@ -406,6 +411,7 @@ Rectangle {
                         anchors.leftMargin: 4
                         anchors.right: parent.right
                         anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: 1
                         verticalAlignment: Text.AlignVCenter
                         elide: Text.ElideRight
                         // Trimmed to the leading magnitude ("1d", "8h"); the
@@ -417,7 +423,7 @@ Rectangle {
                             const m = full.match(/^\s*(\d+\s*[a-zA-Z]+)/)
                             return m ? m[1].replace(/\s+/g, "") : full
                         }
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                         font.family: "JetBrains Mono"
                         opacity: backup.backupStatus === BackupStatus.Current ? 0.7 : 1.0
                         visible: backup.hasBackup
@@ -435,14 +441,14 @@ Rectangle {
                 // console button.
                 FocusScope {
                     id: actions
-                    readonly property int reserveSlots: root.powerActionsEnabled ? 2 : 0
-                    readonly property int reservePx: reserveSlots > 0
-                        ? reserveSlots * (root.uiActionButtonSize + 4) : 0
+                    // Exactly what the inner box lays out: two buttons and the
+                    // 4px between them.
+                    readonly property int reservePx: root.powerActionsEnabled
+                        ? 2 * root.uiActionButtonSize + 4 : 0
 
                     Layout.preferredWidth: reservePx
                     Layout.minimumWidth: reservePx
                     Layout.maximumWidth: reservePx
-                    Layout.leftMargin: 6
                     Layout.rightMargin: 1
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                     Layout.preferredHeight: 28
