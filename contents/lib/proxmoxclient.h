@@ -98,6 +98,21 @@ public:
                                       const QString &action,
                                       int seq);
 
+    // Resolve a VM's current display configuration before selecting serial
+    // termproxy or VNC. Other guest kinds retain their existing VNC path.
+    void requestGuestConsole(const QString &sessionKey,
+                             const QString &requestId,
+                             const QString &host,
+                             int port,
+                             const QString &tokenId,
+                             const QString &tokenSecret,
+                             bool ignoreSslErrors,
+                             const QByteArray &trustedCertPem,
+                             const QString &trustedCertPath,
+                             const QString &node,
+                             const QString &kind,
+                             int vmid);
+
     void requestVncProxy(const QString &sessionKey,
                                   const QString &requestId,
                                   const QString &host,
@@ -157,8 +172,8 @@ signals:
     // authHeader is the full "PVEAPIToken=USER@REALM!TOKENID=SECRET" string
     // we used to obtain the termproxy ticket - Proxmox requires the same
     // header on the subsequent vncwebsocket upgrade or it 401s.
-    void ttyProxyReady(const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int vmid, int port, const QString &ticket, const QString &user, const QByteArray &authHeader);
-    void ttyProxyError(const QString &sessionKey, const QString &requestId, const QString &node, int vmid, const QString &error);
+    void ttyProxyReady(const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int vmid, int port, const QString &ticket, const QString &user, const QByteArray &authHeader, const QString &kind);
+    void ttyProxyError(const QString &sessionKey, const QString &requestId, const QString &node, int vmid, const QString &error, const QString &kind);
     void nodeTermProxyReady(const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int port, const QString &ticket, const QString &user, const QByteArray &authHeader);
     void nodeTermProxyError(const QString &sessionKey, const QString &requestId, const QString &node, const QString &error);
     void vncProxyReady(const QString &sessionKey,
@@ -234,6 +249,15 @@ signals:
                            const QString &message);
 
 private:
+    void postVncProxy(QNetworkRequest request, const QString &sessionKey,
+                      const QString &requestId, const QString &host, int port,
+                      const QString &node, const QString &kind, int vmid,
+                      bool ignoreSslErrors);
+    void postTtyProxy(QNetworkRequest request, const QString &sessionKey,
+                      const QString &requestId, const QString &host,
+                      const QString &node, const QString &kind, int vmid,
+                      bool ignoreSslErrors, const QString &serial = QString());
+
     void requestFor(const QString &sessionKey,
                     const QString &host,
                     int port,

@@ -72,7 +72,7 @@ QHash<QString, QByteArray> m_pendingConsoleAuth
 QMap<QString, QByteArray>  m_pendingConsoleTicket
 ```
 
-When a proxy-ready signal arrives from `ProxmoxClient`, the controller stashes both credentials under that request ID and emits `consoleReady` / `lxcConsoleReady` without the credentials in the signal arguments. In the normal console flow, QML passes the non-secret request ID back to `deliverConsoleAuth` / `deliverConsoleTicket`, which push credentials directly into the C++ transport targets. Request IDs prevent simultaneous consoles on one endpoint from consuming each other's handoff state; they are not an authorization mechanism.
+When a proxy-ready signal arrives from `ProxmoxClient`, the controller stashes both credentials under that request ID and emits `consoleReady` / `terminalConsoleReady` without the credentials in the signal arguments. In the normal console flow, QML passes the non-secret request ID back to `deliverConsoleAuth` / `deliverConsoleTicket`, which push credentials directly into the C++ transport targets. Request IDs prevent simultaneous consoles on one endpoint from consuming each other's handoff state; they are not an authorization mechanism.
 
 Each map entry is consumed exactly once. `deliverConsoleTicket` accepts a primary and optional secondary target so both `VncWsProxy` and `VncClient` can be fed from a single atomic consume.
 
@@ -143,7 +143,15 @@ An earlier version implemented client-driven `SetDesktopSize` resize, hand-craft
 
 ### TLS trust on the console path
 
-The WSS handshake validates the server certificate against the same configured CA as the API path. The controller resolves the cert per session (controller-wide in single-host; shared vs per-endpoint in multi-host, already resolved in `readNextMultiSecret`) and forwards it on `consoleReady` / `lxcConsoleReady`; `VncWsProxy` and `LxcTerminal` append it to their `QSslConfiguration` before `open()`. `ignoreSsl` (`VerifyNone`) takes precedence when enabled. Certificate material is public, so passing it through these signals is compatible with the credential-isolation model. It is not delivered via the pending registry.
+The WSS handshake validates the server certificate against the same configured CA as the API path. The controller resolves the cert per session (controller-wide in single-host; shared vs per-endpoint in multi-host, already resolved in `readNextMultiSecret`) and forwards it on `consoleReady` / `terminalConsoleReady`; `VncWsProxy` and `LxcTerminal` append it to their `QSslConfiguration` before `open()`. `ignoreSsl` (`VerifyNone`) takes precedence when enabled. Certificate material is public, so passing it through these signals is compatible with the credential-isolation model. It is not delivered via the pending registry.
+
+### VM serial consoles
+
+`ProxmoxClient::requestGuestConsole()` reads the VM configuration with `current=1` when the user opens a VM console. A display of `serial0` through `serial3` selects `termproxy` and sends that interface in the `serial` form parameter. The configured interface must use `socket`. Other displays use the existing VNC path, even if the VM also has a serial port. Configuration errors stop the console request and report an error.
+
+Proxmox runs `qm terminal` behind the VM termproxy endpoint. `LxcTerminal` renders this session in the same window used for host and LXC terminals. It retains the guest kind to build the QEMU WebSocket path. The controller's `terminalConsoleReady` signal carries that kind through QML and reconnects. Terminal and VNC windows have separate registry keys.
+
+This connection needs a serial terminal in the guest. It does not use SSH or the QEMU Guest Agent and does not bypass guest login. ProxMon sends no wake newline to host or VM serial consoles because they may be at a login prompt.
 
 ## LXC terminal architecture
 

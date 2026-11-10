@@ -362,10 +362,10 @@ signals:
                    bool ignoreSsl,
                    const QString &trustedCertPem,
                    const QString &trustedCertPath);
-    // Separate signal for LXC: carries the auth `user` returned by termproxy
+    // Host, LXC and VM serial terminals carry the auth `user` from termproxy
     // so the LxcTerminal can complete the "user:ticket\n" handshake.
     // Auth header is delivered out-of-band via deliverConsoleAuth().
-    void lxcConsoleReady(const QString &sessionKey,
+    void terminalConsoleReady(const QString &sessionKey,
                          const QString &requestId,
                          const QString &host,
                          int apiPort,
@@ -376,7 +376,8 @@ signals:
                          const QString &user,
                          bool ignoreSsl,
                          const QString &trustedCertPem,
-                         const QString &trustedCertPath);
+                         const QString &trustedCertPath,
+                         const QString &kind);
     void consoleError(const QString &node,
                   const QString &kind,
                   int vmid,

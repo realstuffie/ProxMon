@@ -105,6 +105,17 @@ target_link_libraries(tst_consolecredentials PRIVATE
 
 add_test(NAME consolecredentials COMMAND tst_consolecredentials)
 
+qt_add_executable(tst_guestconsole tst_guestconsole.cpp)
+target_include_directories(tst_guestconsole PRIVATE ..)
+target_link_libraries(tst_guestconsole PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::Network Qt6::WebSockets Qt6::Widgets Qt6::Test
+)
+add_test(NAME guestconsole COMMAND tst_guestconsole)
+set_tests_properties(guestconsole PROPERTIES
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software"
+    TIMEOUT 60
+)
+
 qt_add_executable(tst_secretkeyderivation
     tst_secretkeyderivation.cpp
 )

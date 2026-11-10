@@ -152,7 +152,7 @@ void appendTrustedCertificates(QSslConfiguration &config,
                                const QString &trustedCertPath);
 
 // Build the Proxmox console WebSocket URL. Shared by the VNC bridge
-// (VncWsProxy) and the LXC/node terminal (LxcTerminal) so the two cannot
+// (VncWsProxy) and host/guest terminals (LxcTerminal) so the two cannot
 // drift apart.
 //
 // Transport encryption is not optional: the scheme is always wss. ignoreSsl

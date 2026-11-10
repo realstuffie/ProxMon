@@ -28,12 +28,24 @@ class ConsoleCredentialsTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void credentialsAreDeliveredOnce_data();
     void credentialsAreDeliveredOnce();
     void unconsumedCredentialsAreDiscarded();
     void unknownRequestDoesNothing();
 };
 
+void ConsoleCredentialsTest::credentialsAreDeliveredOnce_data() {
+    QTest::addColumn<QString>("kind");
+    QTest::addColumn<QString>("session");
+    QTest::newRow("host") << QStringLiteral("node") << QString();
+    QTest::newRow("lxc") << QStringLiteral("lxc") << QString();
+    QTest::newRow("serial-vm") << QStringLiteral("qemu") << QString();
+    QTest::newRow("multi-host-serial-vm") << QStringLiteral("qemu") << QStringLiteral("endpoint-b");
+}
+
 void ConsoleCredentialsTest::credentialsAreDeliveredOnce() {
+    QFETCH(QString, kind);
+    QFETCH(QString, session);
     ProxmoxController controller;
     ProxmoxClient *client = controller.findChild<ProxmoxClient *>();
     QVERIFY(client);
@@ -43,8 +55,9 @@ void ConsoleCredentialsTest::credentialsAreDeliveredOnce() {
     const QByteArray expectedTicket("PVE:console-ticket");
     CredentialReceiver first;
     CredentialReceiver secondary;
+    QSignalSpy ready(&controller, &ProxmoxController::terminalConsoleReady);
 
-    connect(&controller, &ProxmoxController::lxcConsoleReady, this,
+    connect(&controller, &ProxmoxController::terminalConsoleReady, this,
             [&controller, &first, &secondary, &requestId](const QString &,
                                                           const QString &readyRequestId,
                                                           const QString &,
@@ -60,7 +73,8 @@ void ConsoleCredentialsTest::credentialsAreDeliveredOnce() {
         controller.deliverConsoleTicket(readyRequestId, &first, &secondary);
     });
 
-    client->nodeTermProxyReady(QString(),
+    if (kind == QStringLiteral("node")) {
+        client->nodeTermProxyReady(session,
                                requestId,
                                QStringLiteral("pve.example"),
                                QStringLiteral("pve-a"),
@@ -68,6 +82,16 @@ void ConsoleCredentialsTest::credentialsAreDeliveredOnce() {
                                QString::fromUtf8(expectedTicket),
                                QStringLiteral("test@pam"),
                                expectedAuth);
+    } else {
+        client->ttyProxyReady(session, requestId, QStringLiteral("pve.example"),
+                              QStringLiteral("pve-a"), 100, 5900,
+                              QString::fromUtf8(expectedTicket), QStringLiteral("test@pam"),
+                              expectedAuth, kind);
+    }
+
+    QCOMPARE(ready.size(), 1);
+    QCOMPARE(ready.first()[0].toString(), session);
+    QCOMPARE(ready.first()[12].toString(), kind);
 
     QCOMPARE(first.authCalls, 1);
     QCOMPARE(first.authHeader, expectedAuth);

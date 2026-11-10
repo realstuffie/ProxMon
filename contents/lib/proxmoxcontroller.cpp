@@ -119,15 +119,16 @@ ProxmoxController::ProxmoxController(QObject *parent)
         m_pendingConsoleAuth[requestId] = authHeader;
         m_pendingConsoleTicket[requestId] = ticket.toUtf8();
         // vmid=0 is the sentinel for node-level console (Proxmox vmids start at 100)
-        emit lxcConsoleReady(sessionKey, requestId, host, apiPort, node, 0, node,
-                             proxyPort, user, ignoreSsl, certPem, certPath);
+        emit terminalConsoleReady(sessionKey, requestId, host, apiPort, node, 0, node,
+                                   proxyPort, user, ignoreSsl, certPem, certPath,
+                                   ProxmoxConst::Kind::Node);
         discardConsoleCredentials(requestId);
     });
     connect(m_api, &ProxmoxClient::nodeTermProxyError, this, [this](const QString &, const QString &requestId, const QString &node, const QString &message) {
         m_pendingConsoleNames.remove(requestId);
         emit consoleError(node, ProxmoxConst::Kind::Node, 0, message);
     });
-    connect(m_api, &ProxmoxClient::ttyProxyReady, this, [this](const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int vmid, int proxyPort, const QString &ticket, const QString &user, const QByteArray &authHeader) {
+    connect(m_api, &ProxmoxClient::ttyProxyReady, this, [this](const QString &sessionKey, const QString &requestId, const QString &host, const QString &node, int vmid, int proxyPort, const QString &ticket, const QString &user, const QByteArray &authHeader, const QString &kind) {
         // Resolve api port + ignoreSsl + vmName: for single-host fall back to
         // the controller-wide settings; for multi-host pull from the endpoint.
         int apiPort = m_port;
@@ -145,13 +146,13 @@ ProxmoxController::ProxmoxController(QObject *parent)
         discardConsoleCredentials(requestId);
         m_pendingConsoleAuth[requestId] = authHeader;
         m_pendingConsoleTicket[requestId] = ticket.toUtf8();
-        emit lxcConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName,
-                             proxyPort, user, ignoreSsl, certPem, certPath);
+        emit terminalConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName,
+                                   proxyPort, user, ignoreSsl, certPem, certPath, kind);
         discardConsoleCredentials(requestId);
     });
-    connect(m_api, &ProxmoxClient::ttyProxyError, this, [this](const QString &, const QString &requestId, const QString &node, int vmid, const QString &message) {
+    connect(m_api, &ProxmoxClient::ttyProxyError, this, [this](const QString &, const QString &requestId, const QString &node, int vmid, const QString &message, const QString &kind) {
         m_pendingConsoleNames.remove(requestId);
-        emit consoleError(node, ProxmoxConst::Kind::Lxc, vmid, message);
+        emit consoleError(node, kind, vmid, message);
     });
     connect(m_api, &ProxmoxClient::pbsSnapshotsReceived, this, [this](const QString &requesterKey, const QString &pbsHost, const QString &, const QList<PBSSnapshot> &snapshots) {
         for (const PBSSnapshot &snapshot : snapshots) {
@@ -1785,7 +1786,7 @@ void ProxmoxController::readSingleSecretFor(const QVariantMap &request) {
                                        m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
                                        node, vmid);
             } else {
-                m_api->requestVncProxy(QString(), requestId, m_host, m_port, m_tokenId, secret,
+                m_api->requestGuestConsole(QString(), requestId, m_host, m_port, m_tokenId, secret,
                                        m_ignoreSsl, m_trustedCertPem.toUtf8(), m_trustedCertPath,
                                        node, actionKind, vmid);
             }
@@ -1969,7 +1970,7 @@ void ProxmoxController::readMultiSecretFor(const QVariantMap &request) {
                 m_api->requestTtyProxy(sessionKey, requestId, epHost, epPort, epTokenId, secret,
                                        epIgnore, epCertPem, epCertPath, node, vmid);
             } else {
-                m_api->requestVncProxy(sessionKey, requestId, epHost, epPort, epTokenId, secret,
+                m_api->requestGuestConsole(sessionKey, requestId, epHost, epPort, epTokenId, secret,
                                        epIgnore, epCertPem, epCertPath, node, actionKind, vmid);
             }
         }

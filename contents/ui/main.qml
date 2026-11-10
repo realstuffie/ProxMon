@@ -150,7 +150,7 @@ PlasmoidItem {
         VncConsole {}
     }
     /*
-    LXC console is a C++-managed QMainWindow with QTermWidget inside;
+    Host, LXC and VM serial consoles use a C++-managed QMainWindow with QTermWidget;
     no QML wrapper. We instantiate the C++ object directly via this
     Component so we get a per-VM lifetime managed by QML's GC + the
     LxcTerminal::closed() signal.
@@ -1290,10 +1290,11 @@ PlasmoidItem {
                 controller.openConsole(win.sessionKey, win.kind, win.nodeName, win.vmid, win.vmName)
             })
         }
-        function onLxcConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl, trustedCertPem, trustedCertPath) {
-            var kind = vmid === 0 ? "node" : "lxc"
-            var key = root.consoleWindowKey(sessionKey, kind, node, vmid)
-            var label = vmid === 0 ? (vmName || node) : (vmName || ("lxc " + vmid))
+        function onTerminalConsoleReady(sessionKey, requestId, host, apiPort, node, vmid, vmName, proxyPort, user, ignoreSsl, trustedCertPem, trustedCertPath, kind) {
+            // Separate terminal and VNC windows even if the VM display was
+            // changed since a previous console was opened.
+            var key = root.consoleWindowKey(sessionKey, kind + "-terminal", node, vmid)
+            var label = vmid === 0 ? (vmName || node) : (vmName || (kind + " " + vmid))
             if (root.openConsoles[key]) {
                 // Deliver fresh auth header and ticket from C++ registry.
                 controller.deliverConsoleAuth(requestId, root.openConsoles[key])
@@ -1314,6 +1315,7 @@ PlasmoidItem {
             var capturedSession = sessionKey
             var capturedNode = node
             var capturedVmid = vmid
+            var capturedKind = kind
             var capturedLabel = label
             root.openConsoles[key] = term
             term.closed.connect(function() {
@@ -1321,17 +1323,13 @@ PlasmoidItem {
                 term.destroy()
             })
             term.requestReconnect.connect(function() {
-                if (capturedVmid === 0) {
-                    controller.openConsole(capturedSession, "node", capturedNode, 0, capturedLabel)
-                } else {
-                    controller.openConsole(capturedSession, "lxc", capturedNode, capturedVmid, capturedLabel)
-                }
+                controller.openConsole(capturedSession, capturedKind, capturedNode, capturedVmid, capturedLabel)
             })
             // Deliver auth header and ticket from C++ registry before open().
             controller.deliverConsoleAuth(requestId, term)
             controller.deliverConsoleTicket(requestId, term)
             term.windowPreset = Plasmoid.configuration.terminalSize || "medium"
-            term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl, trustedCertPem, trustedCertPath)
+            term.open(host, apiPort, node, vmid, label, proxyPort, user, ignoreSsl, trustedCertPem, trustedCertPath, kind)
         }
         function onConsoleError(node, kind, vmid, message) {
             root.errorMessage = "Console failed: " + message

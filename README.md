@@ -59,7 +59,7 @@
 | --- | --- |
 | **Real-time monitoring** | Node status (CPU, memory, uptime) with VM and LXC container tracking |
 | **VNC console** | GPU-accelerated in-widget VNC sessions with full keyboard, mouse, and scroll input |
-| **LXC terminal** | Native terminal emulator for containers with automatic resize |
+| **Terminal consoles** | Native terminal for Proxmox hosts and LXC containers with automatic resize, and for VMs with serial displays |
 | **PBS backup status** | Inline backup results per VM/CT with configurable warning and stale thresholds |
 | **Storage usage** | Per-node disk bars, the fullest store by default or the ones you name |
 | **Multi-host** | Monitor up to 5 Proxmox endpoints simultaneously |
@@ -112,6 +112,8 @@ Then restart Plasma with `kquitapp6 plasmashell && kstart plasmashell`, or log o
 | **Keyring** | Where token secrets are stored: KWallet by default, or [KeePassXC](https://github.com/realstuffie/ProxMon/wiki/Using-KeePassXC) |
 
 Every option is described in the [Configuration reference](https://github.com/realstuffie/ProxMon/wiki/Configuration-Reference).
+
+The console button follows each VM's current display setting. VMs with a `serial0` through `serial3` display open in the terminal window. Other VMs open in VNC. The selected serial port must use `socket`, and the guest must provide a terminal on that port. Existing cloud-init VMs with this setup need no guest agent or SSH connection. You may still need to log in at the guest's prompt. ProxMon reads the VM configuration when opening its console, which requires `VM.Audit` in addition to the existing `VM.Console` permission.
 
 ## Security
 

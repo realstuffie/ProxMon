@@ -1019,6 +1019,92 @@ void ProxmoxClient::requestStatsFor(const QString &sessionKey,
     }
 }
 
+void ProxmoxClient::requestGuestConsole(const QString &sessionKey,
+                                        const QString &requestId,
+                                        const QString &host,
+                                        int port,
+                                        const QString &tokenId,
+                                        const QString &tokenSecret,
+                                        bool ignoreSslErrors,
+                                        const QByteArray &trustedCertPem,
+                                        const QString &trustedCertPath,
+                                        const QString &node,
+                                        const QString &kind,
+                                        int vmid)
+{
+    if (kind != ProxmoxConst::Kind::Qemu) {
+        requestVncProxy(sessionKey, requestId, host, port, tokenId, tokenSecret,
+                        ignoreSslErrors, trustedCertPem, trustedCertPath, node, kind, vmid);
+        return;
+    }
+    if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
+        emit vncProxyError(sessionKey, requestId, node, kind, vmid, QStringLiteral("Not configured"));
+        return;
+    }
+
+    const QString basePath = QStringLiteral("/api2/json/nodes/%1/qemu/%2/").arg(node).arg(vmid);
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("current"), QStringLiteral("1"));
+    QNetworkRequest request = buildRequest(
+        host, port, QStringLiteral("/nodes/%1/qemu/%2/config").arg(node).arg(vmid),
+        tokenId, tokenSecret, trustedCertPem, trustedCertPath,
+        ProxmoxConst::Defaults::RequestTimeoutMs, query);
+    QNetworkReply *reply = m_nam.get(request);
+    m_interactiveInFlight.insert(reply);
+    if (ignoreSslErrors) {
+        connect(reply, &QNetworkReply::sslErrors, reply, [reply](const QList<QSslError> &) {
+            reply->ignoreSslErrors();
+        });
+    }
+    // Retain the scoped request/header, not a separate token-secret capture.
+    connect(reply, &QNetworkReply::finished, this,
+            [this, reply, request, sessionKey, requestId, host, port, node, kind,
+             vmid, ignoreSslErrors, basePath]() mutable {
+        const bool stillTracked = m_interactiveInFlight.remove(reply);
+        reply->deleteLater();
+        if (!stillTracked && reply->error() == QNetworkReply::OperationCanceledError) return;
+        const auto fail = [&](const QString &message) {
+            emit vncProxyError(sessionKey, requestId, node, kind, vmid,
+                               QStringLiteral("Cannot read VM console configuration: %1").arg(message));
+        };
+        if (reply->error() != QNetworkReply::NoError) {
+            fail(reply->errorString());
+            return;
+        }
+        QJsonParseError error;
+        const QJsonDocument document = QJsonDocument::fromJson(reply->readAll(), &error);
+        if (error.error != QJsonParseError::NoError || !document.isObject()
+            || !document.object().value(QStringLiteral("data")).isObject()) {
+            fail(QStringLiteral("Invalid config response"));
+            return;
+        }
+        const QJsonObject config = document.object().value(QStringLiteral("data")).toObject();
+        const QStringList displayOptions = config.value(QStringLiteral("vga")).toString().split(QLatin1Char(','));
+        QString display = displayOptions.first();
+        for (const QString &option : displayOptions) {
+            if (option.startsWith(QStringLiteral("type="))) display = option.mid(5);
+        }
+        const bool serial = display == QStringLiteral("serial0") || display == QStringLiteral("serial1")
+            || display == QStringLiteral("serial2") || display == QStringLiteral("serial3");
+        if (serial && config.value(display).toString() != QStringLiteral("socket")) {
+            fail(QStringLiteral("Serial display %1 needs a socket-backed serial port").arg(display));
+            return;
+        }
+
+        QUrl url = request.url();
+        url.setQuery(QString());
+        url.setPath(basePath + (serial ? QStringLiteral("termproxy") : QStringLiteral("vncproxy")));
+        request.setUrl(url);
+        if (serial) {
+            postTtyProxy(request, sessionKey, requestId, host, node, kind, vmid,
+                          ignoreSslErrors, display);
+        } else {
+            postVncProxy(request, sessionKey, requestId, host, port, node, kind, vmid,
+                          ignoreSslErrors);
+        }
+    });
+}
+
 void ProxmoxClient::requestVncProxy(const QString &sessionKey,
                                      const QString &requestId,
                                      const QString &host,
@@ -1041,6 +1127,14 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
 
     QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,trustedCertPem, trustedCertPath);
 
+    postVncProxy(req, sessionKey, requestId, host, port, node, kind, vmid, ignoreSslErrors);
+}
+
+void ProxmoxClient::postVncProxy(QNetworkRequest req, const QString &sessionKey,
+                                const QString &requestId, const QString &host, int port,
+                                const QString &node, const QString &kind, int vmid,
+                                bool ignoreSslErrors)
+{
     QByteArray body;
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
@@ -1053,10 +1147,7 @@ void ProxmoxClient::requestVncProxy(const QString &sessionKey,
         });
     }
 
-    // Build auth header now while tokenId/secret are in scope; the
-    // vncwebsocket WebSocket upgrade needs it (same pattern as ttyProxy).
-    const QByteArray authHeader = QByteArray("PVEAPIToken=") + tokenId.toUtf8()
-                                  + "=" + tokenSecret.toUtf8();
+    const QByteArray authHeader = req.rawHeader("Authorization");
 
     QObject::connect(r, &QNetworkReply::finished, this,
         [this, r, sessionKey, requestId, host, port, node, kind, vmid, authHeader, ignoreSslErrors]() {
@@ -1122,7 +1213,8 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
                                     int vmid)
 {
     if (host.isEmpty() || tokenId.isEmpty() || tokenSecret.isEmpty()) {
-        emit ttyProxyError(sessionKey, requestId, node, vmid, QStringLiteral("Not configured"));
+        emit ttyProxyError(sessionKey, requestId, node, vmid, QStringLiteral("Not configured"),
+                            ProxmoxConst::Kind::Lxc);
         return;
     }
 
@@ -1135,7 +1227,21 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
     QNetworkRequest req = buildRequest(host, port, path, tokenId, tokenSecret,
                                        trustedCertPem, trustedCertPath);
 
+    postTtyProxy(req, sessionKey, requestId, host, node, ProxmoxConst::Kind::Lxc,
+                  vmid, ignoreSslErrors);
+}
+
+void ProxmoxClient::postTtyProxy(QNetworkRequest req, const QString &sessionKey,
+                                const QString &requestId, const QString &host,
+                                const QString &node, const QString &kind, int vmid,
+                                bool ignoreSslErrors, const QString &serial)
+{
     QByteArray body;
+    if (!serial.isEmpty()) {
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("serial"), serial);
+        body = query.query(QUrl::FullyEncoded).toUtf8();
+    }
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
 
     QNetworkReply *r = m_nam.post(req, body);
@@ -1147,13 +1253,10 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
         });
     }
 
-    // Pre-build the auth header now while we still have tokenId+secret in
-    // scope; the vncwebsocket upgrade needs the same one.
-    const QByteArray authHeader = QByteArray("PVEAPIToken=") + tokenId.toUtf8()
-                                  + "=" + tokenSecret.toUtf8();
+    const QByteArray authHeader = req.rawHeader("Authorization");
 
     QObject::connect(r, &QNetworkReply::finished, this,
-        [this, r, sessionKey, requestId, host, node, vmid, authHeader]() {
+        [this, r, sessionKey, requestId, host, node, kind, vmid, authHeader]() {
             m_interactiveInFlight.remove(r);
 
             const QVariant httpAttr = r->attribute(QNetworkRequest::HttpStatusCodeAttribute);
@@ -1162,7 +1265,7 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
 
             auto fail = [&](const QString &msg) {
                 emit ttyProxyError(sessionKey, requestId, node, vmid,
-                                   QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus));
+                                   QStringLiteral("%1 (HTTP %2)").arg(msg).arg(httpStatus), kind);
                 r->deleteLater();
             };
 
@@ -1193,12 +1296,12 @@ void ProxmoxClient::requestTtyProxy(const QString &sessionKey,
             const QString ticket = data.value(QStringLiteral("ticket")).toString();
             const QString user  = data.value(QStringLiteral("user")).toString();
 
-            if (ticket.isEmpty() || ttyPort == 0) {
+            if (ticket.isEmpty() || ttyPort <= 0 || ttyPort > 65535 || user.isEmpty()) {
                 fail(QStringLiteral("Invalid termproxy response"));
                 return;
             }
 
-            emit ttyProxyReady(sessionKey, requestId, host, node, vmid, ttyPort, ticket, user, authHeader);
+            emit ttyProxyReady(sessionKey, requestId, host, node, vmid, ttyPort, ticket, user, authHeader, kind);
             r->deleteLater();
         });
 }

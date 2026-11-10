@@ -71,11 +71,13 @@ void LxcTerminal::open(const QString &host,
                        const QString &user,
                        bool ignoreSslErrors,
                        const QString &trustedCertPem,
-                       const QString &trustedCertPath)
+                       const QString &trustedCertPath,
+                       const QString &kind)
 {
     m_host       = host;
     m_apiPort    = apiPort;
     m_node       = node;
+    m_kind       = kind;
     m_vmid       = vmid;
     m_vmName     = vmName;
     m_proxyPort  = proxyPort;
@@ -237,9 +239,12 @@ void LxcTerminal::ensureWindow(const QString &vmName, const QString &nodeName)
 
 void LxcTerminal::destroyWindow()
 {
-    if (m_window) {
-        m_window->close();
-        m_window->deleteLater();
+    // close() emits windowClosed synchronously and its handler clears
+    // m_window. Keep a guarded local reference for the remaining cleanup.
+    const QPointer<QMainWindow> window = m_window;
+    if (window) {
+        window->close();
+        if (window) window->deleteLater();
         m_window.clear();
         m_term.clear();
     }
@@ -249,7 +254,7 @@ void LxcTerminal::openSocket()
 {
     if (m_host.isEmpty() || m_ticket.isEmpty() || m_user.isEmpty()) {
         clearCredentials();
-        emit errorOccurred(QStringLiteral("Missing host/ticket/user for LXC terminal"));
+        emit errorOccurred(QStringLiteral("Missing host/ticket/user for terminal"));
         setState(QStringLiteral("error"));
         return;
     }
@@ -271,7 +276,7 @@ void LxcTerminal::openSocket()
     // guard, the path shape and the ticket encoding stay in one place.
     const QUrl url = ProxmoxDataUtils::buildConsoleWebSocketUrl(
         m_host, m_apiPort, m_node,
-        m_vmid == 0 ? QString() : QStringLiteral("lxc"),
+        m_vmid == 0 ? QString() : m_kind,
         m_vmid, m_proxyPort, m_ticket);
 
     if (!url.isValid() || url.scheme().compare(QStringLiteral("wss"), Qt::CaseInsensitive) != 0) {
@@ -325,7 +330,7 @@ void LxcTerminal::openSocket()
             }
             clearCredentials();
             setState(QStringLiteral("error"));
-            emit errorOccurred(QStringLiteral("LXC terminal authentication timed out"));
+            emit errorOccurred(QStringLiteral("Terminal authentication timed out"));
         });
         m_authTimer->start();
 
@@ -348,7 +353,7 @@ void LxcTerminal::openSocket()
         if (m_phase == Phase::Authenticating) {
             m_phase = Phase::Errored;
             setState(QStringLiteral("error"));
-            emit errorOccurred(QStringLiteral("LXC terminal authentication failed"));
+            emit errorOccurred(QStringLiteral("Terminal authentication failed"));
             return;
         }
         setState(QStringLiteral("disconnected"));
@@ -368,7 +373,7 @@ void LxcTerminal::openSocket()
             clearCredentials();
             m_phase = Phase::Errored;
             setState(QStringLiteral("error"));
-            emit errorOccurred(msg.isEmpty() ? QStringLiteral("LXC terminal error") : msg);
+            emit errorOccurred(msg.isEmpty() ? QStringLiteral("Terminal error") : msg);
         });
 
     QObject::connect(m_ws, &QWebSocket::textMessageReceived, this,
@@ -427,7 +432,7 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
         stopAuthTimeout();
         m_phase = Phase::Errored;
         setState(QStringLiteral("error"));
-        emit errorOccurred(QStringLiteral("LXC terminal auth rejected: %1")
+        emit errorOccurred(QStringLiteral("Terminal auth rejected: %1")
                                .arg(QString::fromUtf8(result.rejected)));
         return;
 
@@ -450,9 +455,9 @@ void LxcTerminal::handleAuthLine(const QByteArray &line)
     QTimer::singleShot(120, this, [this]() { sendCurrentResize(); });
 
     m_postAuthBytes = 0;
-    // Skip the silent-getty wake CR for node consoles (vmid==0) - it
-    // would fire mid-login-prompt and prepend a spurious newline.
-    if (m_vmid != 0) {
+    // Only LXC consoles need the silent-getty wake CR. Hosts and VM serial
+    // consoles can be at a login prompt, where a newline changes the input.
+    if (m_vmid != 0 && m_kind == QStringLiteral("lxc")) {
         QTimer::singleShot(500, this, [this]() {
             const int threshold = 24;
             if (m_phase == Phase::Connected && m_ws && m_postAuthBytes < threshold) {

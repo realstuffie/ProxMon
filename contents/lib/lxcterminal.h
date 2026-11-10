@@ -10,7 +10,7 @@ class QMainWindow;
 class QTermWidget;
 class QTimer;
 
-// Protocol layer + window manager for Proxmox LXC console sessions.
+// Protocol layer + window manager for host, LXC and VM serial consoles.
 // Owns a QMainWindow+QTermWidget (QWidget can't embed in QML).
 // Credentials delivered via setAuthHeaderSecure / setTicketSecure.
 // See docs/ARCHITECTURE.md for protocol and design rationale.
@@ -43,7 +43,8 @@ public:
                           const QString &user,
                           bool ignoreSslErrors,
                           const QString &trustedCertPem,
-                          const QString &trustedCertPath);
+                          const QString &trustedCertPath,
+                          const QString &kind = QStringLiteral("lxc"));
 
     // Re-handshake against an existing window - used when the QML reconnect
     // timer fires and termproxy returns a fresh port pair.
@@ -108,6 +109,7 @@ protected:
     QString m_host;
     int     m_apiPort = 8006;
     QString m_node;
+    QString m_kind = QStringLiteral("lxc");
     int     m_vmid = 0;
     QString m_vmName;
     int        m_proxyPort = 0;
