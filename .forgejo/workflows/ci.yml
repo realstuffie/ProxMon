@@ -55,6 +55,8 @@ jobs:
   # image is built from .forgejo/images/Dockerfile.packaging and already holds
   # the tools and build dependencies, so the install step below is a safety net.
   package:
+    # Last step: only worth building once every check and every target OS passed.
+    needs: [shellcheck, style, system-qtkeychain, build]
     runs-on: ubuntu-26.04-packaging
     env:
       PKG_DIR: /tmp/proxmon-package
