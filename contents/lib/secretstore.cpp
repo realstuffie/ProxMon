@@ -14,8 +14,10 @@
 #include <QDBusPendingCall>
 #include <QDBusPendingCallWatcher>
 #include <QDBusReply>
+#include <QDBusServiceWatcher>
 #include <QDBusVariant>
 #include <QFile>
+#include <QLibrary>
 #include <QMap>
 
 using namespace QKeychain;
@@ -60,6 +62,22 @@ void noteJobStarted() {
     s_jobStarted = true;
 }
 
+// libsecret keeps one connection to the Secret Service for the whole process.
+// When the provider quits and comes back (KeePassXC closed and reopened), that
+// connection still points at the dead instance and every call fails until the
+// process restarts. Dropping it makes the next call connect afresh. QtKeychain
+// loads the same library, so this resets the connection its jobs use.
+void resetSecretServiceConnection() {
+    // No job yet means QtKeychain has not loaded libsecret, so nothing is cached.
+    if (!s_jobStarted) return;
+    QLibrary lib(QStringLiteral("secret-1"), 0);
+    if (!lib.load()) return;
+    using DisconnectFn = void (*)();
+    if (auto disconnectFn = reinterpret_cast<DisconnectFn>(lib.resolve("secret_service_disconnect"))) {
+        disconnectFn();
+    }
+}
+
 QString friendlyProviderName(const QString &comm) {
     const QString c = comm.toLower();
     if (c.contains(QStringLiteral("keepassxc"))) return QStringLiteral("KeePassXC");
@@ -73,7 +91,14 @@ QString friendlyProviderName(const QString &comm) {
 } // namespace
 
 SecretStore::SecretStore(QObject *parent)
-    : QObject(parent) {}
+    : QObject(parent) {
+    auto *ownerWatcher = new QDBusServiceWatcher(
+        QStringLiteral("org.freedesktop.secrets"), QDBusConnection::sessionBus(),
+        QDBusServiceWatcher::WatchForOwnerChange, this);
+    connect(ownerWatcher, &QDBusServiceWatcher::serviceOwnerChanged, this, []() {
+        if (SecretStore::usesSecretService()) resetSecretServiceConnection();
+    });
+}
 
 void SecretStore::setService(const QString &v) {
     if (m_service == v) return;

@@ -268,6 +268,16 @@ target_link_libraries(tst_secretservice PRIVATE
 add_test(NAME secretservice COMMAND tst_secretservice)
 set_tests_properties(secretservice PROPERTIES TIMEOUT 30)
 
+# Needs dbus-daemon: a fake Secret Service that quits and comes back, to check
+# that reads recover. Its own executable, since libsecret caches its connection
+# for the whole process.
+qt_add_executable(tst_secretservicerestart tst_secretservicerestart.cpp)
+target_include_directories(tst_secretservicerestart PRIVATE ..)
+target_link_libraries(tst_secretservicerestart PRIVATE
+    proxmoxclientplugin Qt6::Core Qt6::DBus Qt6::Test)
+add_test(NAME secretservicerestart COMMAND tst_secretservicerestart)
+set_tests_properties(secretservicerestart PROPERTIES TIMEOUT 30)
+
 qt_add_executable(tst_keyringselect tst_keyringselect.cpp)
 target_include_directories(tst_keyringselect PRIVATE ..)
 target_link_libraries(tst_keyringselect PRIVATE
