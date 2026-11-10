@@ -2,21 +2,20 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  shellcheck:
+  # The cheap checks in one job. The later steps use always() so one failure
+  # does not hide the others.
+  lint:
     runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v4
       - run: shellcheck install.sh uninstall.sh make-dist.sh check-and-rebuild.sh check-style.sh check-config-pages.sh
-
-  style:
-    runs-on: ubuntu-26.04
-    steps:
-      - uses: actions/checkout@v4
       # Tabs, trailing whitespace and indentation steps. The rules live in
       # .editorconfig and are explained in docs/developer-notes.md.
-      - run: bash check-style.sh
+      - if: always()
+        run: bash check-style.sh
       # Every settings page must declare every setting in main.xml.
-      - run: bash check-config-pages.sh
+      - if: always()
+        run: bash check-config-pages.sh
 
   # Distro packages link the system QtKeychain. Ubuntu 26.04 ships 0.15.0, which
   # cannot choose a backend, so this job covers the build where the KeePassXC
@@ -56,7 +55,7 @@ jobs:
   # the tools and build dependencies, so the install step below is a safety net.
   package:
     # Last step: only worth building once every check and every target OS passed.
-    needs: [shellcheck, style, system-qtkeychain, build]
+    needs: [lint, system-qtkeychain, build]
     runs-on: ubuntu-26.04-packaging
     env:
       PKG_DIR: /tmp/proxmon-package
