@@ -1,3 +1,9 @@
+proxmon (0.10.0-1~ppa1~resolute1) resolute; urgency=medium
+
+  * New upstream release.
+
+ -- Thomas Moore <moore.thomas123456789@gmail.com>  Tue, 10 Nov 2026 22:14:15 +1300
+
 proxmon (0.9.3-1~ppa1~resolute1) resolute; urgency=medium
 
   * New upstream release.

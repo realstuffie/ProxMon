@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## v0.10.0
+
+- feat(console): a VM whose display is `serial0` to `serial3` opens in the terminal window instead of VNC, so cloud-init VMs and other guests with a serial display get a working console. The serial port must use `socket`. Every other VM still opens in VNC, even if it also has a serial port. ProxMon reads the VM configuration to choose, and the README lists the extra permission this requires. Host and LXC terminals work as before.
+- fix(keyring): the widget recovers when KeePassXC is closed and reopened. libsecret kept one connection to the old KeePassXC for the whole Plasma session, so every read failed with `Error return with empty body` until Plasma restarted. ProxMon now drops that connection when the owner of `org.freedesktop.secrets` changes.
+- fix(keyring): a failed read right after an unlock is retried after 4 s, then at 30 s with a growing delay, instead of waiting out a backoff of up to ten minutes.
+- fix(ui): shutdown is held for the first 90 s after a VM starts. Sending it while the guest was still booting timed out with `VM quit/powerdown failed - got timeout`. The button is disabled and its tooltip says why.
+- fix(ui): a failed power action shows its error in the status banner for 8 s. It used to replace the panel with the connection error view, as if the host were unreachable.
+- fix(ui): the "Click again to confirm" label is cleared once the action is confirmed. It stayed behind on the connection error view.
+- feat(ui): the guest stats panel shows the guest's uptime.
+- fix(ui): the node card shows uptime as `3d 4h`, without the "up" prefix.
+- fix(ui): the CPU and memory legend labels in the stats panel follow the theme text color.
+- fix(ui): guest rows have tighter spacing and 1 px larger text, centered in the row.
+- build: the bundled QtKeychain submodule moves from a fork to upstream, because the change ProxMon needed was merged there.
+- ci: shellcheck and the style checks run in one `lint` job, and the `package` job runs last, after lint and every build.
+- test: a fake Secret Service that quits and comes back checks that keyring reads recover, and a fake VM console API checks serial console selection.
+
 ## v0.9.3
 
 - fix(ui): the footer's icons and text are centered between its divider and the bottom edge of the panel. They were centered in a row that has an 8 px margin below it, so they sat 4 px too high
